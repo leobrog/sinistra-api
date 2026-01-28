@@ -1,0 +1,39 @@
+{
+  "compilerOptions": {
+    // Environment setup & latest features
+    "lib": ["ESNext"],
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleDetection": "force",
+    "allowJs": true,
+
+    // Module handling
+    "verbatimModuleSyntax": true,
+    "rewriteRelativeImportExtensions": true,
+
+    // Build performance
+    "incremental": true,
+    "skipLibCheck": true,
+
+    // Type safety
+    "strict": true,
+    "exactOptionalPropertyTypes": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+
+    // Development
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+
+    // Effect Language Service
+    "plugins": [
+      {
+        "name": "@effect/language-service"
+      }
+    ]
+  }
+}

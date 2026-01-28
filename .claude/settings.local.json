@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(effect-solutions list:*)",
+      "Bash(bun add:*)",
+      "Bash(effect-solutions show:*)",
+      "Bash(bunx effect-language-service:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
