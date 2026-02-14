@@ -1,5 +1,14 @@
 import { Schema } from "effect"
-import { RateId, UserId } from "./ids.ts"
+import {
+  ActivityId,
+  CmdrId,
+  ColonyId,
+  EventId,
+  ObjectiveId,
+  ProtectedFactionId,
+  RateId,
+  UserId,
+} from "./ids.ts"
 
 export class NotFoundError extends Schema.TaggedError<NotFoundError>()(
   "NotFoundError",
@@ -95,6 +104,94 @@ export class InternalServerError extends Schema.TaggedError<InternalServerError>
   }
 ) {}
 
+// ============================================================================
+// Sinistra Domain Errors
+// ============================================================================
+
+// Entity Not Found Errors
+export class EventNotFoundError extends Schema.TaggedError<EventNotFoundError>()(
+  "EventNotFoundError",
+  {
+    id: EventId,
+  }
+) {}
+
+export class ActivityNotFoundError extends Schema.TaggedError<ActivityNotFoundError>()(
+  "ActivityNotFoundError",
+  {
+    id: ActivityId,
+  }
+) {}
+
+export class ObjectiveNotFoundError extends Schema.TaggedError<ObjectiveNotFoundError>()(
+  "ObjectiveNotFoundError",
+  {
+    id: ObjectiveId,
+  }
+) {}
+
+export class CmdrNotFoundError extends Schema.TaggedError<CmdrNotFoundError>()(
+  "CmdrNotFoundError",
+  {
+    id: CmdrId,
+  }
+) {}
+
+export class ColonyNotFoundError extends Schema.TaggedError<ColonyNotFoundError>()(
+  "ColonyNotFoundError",
+  {
+    id: ColonyId,
+  }
+) {}
+
+export class ProtectedFactionNotFoundError extends Schema.TaggedError<ProtectedFactionNotFoundError>()(
+  "ProtectedFactionNotFoundError",
+  {
+    id: ProtectedFactionId,
+  }
+) {}
+
+// External API Errors
+export class DiscordApiError extends Schema.TaggedError<DiscordApiError>()(
+  "DiscordApiError",
+  {
+    message: Schema.String,
+    statusCode: Schema.optionalWith(Schema.Int, { as: "Option" }),
+    response: Schema.optionalWith(Schema.String, { as: "Option" }),
+  }
+) {}
+
+export class InaraApiError extends Schema.TaggedError<InaraApiError>()(
+  "InaraApiError",
+  {
+    message: Schema.String,
+    statusCode: Schema.optionalWith(Schema.Int, { as: "Option" }),
+    response: Schema.optionalWith(Schema.String, { as: "Option" }),
+  }
+) {}
+
+export class EddnConnectionError extends Schema.TaggedError<EddnConnectionError>()(
+  "EddnConnectionError",
+  {
+    message: Schema.String,
+  }
+) {}
+
+// Already Exists Errors
+export class CmdrAlreadyExistsError extends Schema.TaggedError<CmdrAlreadyExistsError>()(
+  "CmdrAlreadyExistsError",
+  {
+    name: Schema.String,
+  }
+) {}
+
+export class ProtectedFactionAlreadyExistsError extends Schema.TaggedError<ProtectedFactionAlreadyExistsError>()(
+  "ProtectedFactionAlreadyExistsError",
+  {
+    name: Schema.String,
+  }
+) {}
+
 export const DomainError = Schema.Union(
   NotFoundError,
   ValidationError,
@@ -102,6 +199,17 @@ export const DomainError = Schema.Union(
   UserNotFoundError,
   UserAlreadyExistsError,
   ApiKeyNameAlreadyExistsError,
-  RateNotFoundError
+  RateNotFoundError,
+  EventNotFoundError,
+  ActivityNotFoundError,
+  ObjectiveNotFoundError,
+  CmdrNotFoundError,
+  ColonyNotFoundError,
+  ProtectedFactionNotFoundError,
+  DiscordApiError,
+  InaraApiError,
+  EddnConnectionError,
+  CmdrAlreadyExistsError,
+  ProtectedFactionAlreadyExistsError
 )
 export type DomainError = typeof DomainError.Type
