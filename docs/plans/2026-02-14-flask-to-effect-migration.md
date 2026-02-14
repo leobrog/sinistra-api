@@ -4,11 +4,13 @@
 
 **Goal:** Convert the entire Sinistra Flask Server backend from Flask + SQLAlchemy + SQLite to Bun + Effect-TS + Turso/LibSQL.
 
-**Progress:** Tasks 1-6 complete (6/48) | Phase 1: 6/13 tasks | Blocked: Need Bun installation
+**Progress:** Tasks 1-12b complete (12/48) | Phase 1: 13/13 tasks ✅ | Phase 2: 0/7 tasks
 
 **Architecture:** Single-tenant Bun server using Effect HttpApi for endpoints, Turso/LibSQL for persistence, Effect Fibers for background schedulers.
 
 **Tech Stack:** Bun, Effect-TS, Turso/LibSQL, jose (JWT), zeromq (EDDN), Discord REST API.
+
+**Environment:** Bun installed at `~/.bun/bin/bun` | Working in git worktree `.worktrees/sinistra-migrations`
 
 ---
 
@@ -39,35 +41,35 @@
 - Add: AppConfig with all env vars
 - Commit: "feat(lib): add config service"
 
-### Task 6-12: Database Migrations
+### ✅ Task 6-12b: Database Migrations [DONE]
 Create new migrations to replace Flask INTEGER-ID tables with UUID-based tables:
 
-**✅ Task 6 [DONE]**: `migrations/0004_create_events.sql`
+**✅ Task 6**: `migrations/0004_create_events.sql`
 - Tables: event, market_buy_event, market_sell_event, mission_completed_event, mission_completed_influence, faction_kill_bond_event, mission_failed_event, multi_sell_exploration_data_event, redeem_voucher_event, sell_exploration_data_event, commit_crime_event, synthetic_ground_cz, synthetic_cz
 - All use TEXT UUIDs instead of INTEGER
 
-**Task 7**: `migrations/0005_create_activities.sql`
+**✅ Task 7**: `migrations/0005_create_activities.sql`
 - Tables: activity, system, faction (for activity tracking)
 - Nested structure with foreign keys
 
-**Task 8**: `migrations/0006_create_objectives.sql`
+**✅ Task 8**: `migrations/0006_create_objectives.sql`
 - Tables: objective, objective_target, objective_target_settlement
 - Nested structure with foreign keys
 
-**Task 9**: `migrations/0007_create_cmdrs.sql`
+**✅ Task 9**: `migrations/0007_create_cmdrs.sql`
 - Table: cmdr
 
-**Task 10**: `migrations/0008_create_colonies.sql`
+**✅ Task 10**: `migrations/0008_create_colonies.sql`
 - Table: colony
 
-**Task 11**: `migrations/0009_create_protected_factions.sql`
+**✅ Task 11**: `migrations/0009_create_protected_factions.sql`
 - Table: protected_faction
 
-**Task 12**: `migrations/0010_create_eddn_tables.sql`
+**✅ Task 12**: `migrations/0010_create_eddn_tables.sql`
 - Tables: eddn_message, eddn_system_info, eddn_faction, eddn_conflict, eddn_powerplay
 - Note: Flask has separate db/bgs_data_eddn.db, we'll consolidate into single DB
 
-**Task 12b**: `migrations/0011_create_tick_state.sql`
+**✅ Task 12b**: `migrations/0011_create_tick_state.sql`
 - Table: tick_state
 
 Commit: "feat(db): add all Sinistra domain migrations"
