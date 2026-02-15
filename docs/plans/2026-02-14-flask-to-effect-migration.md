@@ -4,7 +4,7 @@
 
 **Goal:** Convert the entire Sinistra Flask Server backend from Flask + SQLAlchemy + SQLite to Bun + Effect-TS + Turso/LibSQL.
 
-**Progress:** Tasks 1-32 complete (32/47) | Phase 1: 13/13 tasks ✅ | Phase 2: 7/7 tasks ✅ | Phase 3: 3/3 tasks ✅ | Phase 4: 10/13 tasks ✅
+**Progress:** Tasks 1-35 complete (35/47) | Phase 1: 13/13 tasks ✅ | Phase 2: 7/7 tasks ✅ | Phase 3: 3/3 tasks ✅ | Phase 4: 13/13 tasks ✅
 
 **Architecture:** Single-tenant Bun server using Effect HttpApi for endpoints, Turso/LibSQL for persistence, Effect Fibers for background schedulers.
 
@@ -208,21 +208,24 @@ Commit: "feat(db): add all Sinistra domain migrations"
 - Note: Query aggregation logic marked as TODO for future implementation
 - Commit: "feat(api): add System, Auth, and Discord API endpoint groups"
 
-### Task 33-34: Remaining API Endpoint Groups
-Create for each remaining group:
-- `src/api/<group>/api.ts` - Endpoint definitions
-- `src/api/<group>/dtos.ts` - Request/response schemas
-- `src/api/<group>/handlers.ts` - Handler implementations
+### ✅ Task 33: Commanders API [DONE]
+- Files: `src/api/commanders/{api.ts,dtos.ts,handlers.ts}`
+- Endpoint: POST /api/sync/cmdrs
+- Logic: Sync commanders with Inara API or add from events only
+- Query param: `?inara=true` (default) or `?inara=false`
+- Extended EventRepository with `getDistinctCmdrNames()` method
+- Commit: "feat(api): add Commanders API"
 
-**Remaining Groups:**
-- commanders (POST /api/sync/cmdrs) - Task 33
-- discovery (GET /discovery) - Task 34
+### ✅ Task 34: Discovery API [DONE]
+- Files: `src/api/discovery/{api.ts,dtos.ts,handlers.ts}`
+- Endpoint: GET /discovery
+- Logic: Return server capabilities, available endpoints, and required headers
+- Commit: "feat(api): add Discovery API"
 
-Commit after each: "feat(api): add <group> API"
-
-### Task 35: Compose API
-- Files: `src/api/index.ts`, `src/api/handlers.ts`
-- Combine all API groups
+### ✅ Task 35: Compose API [DONE]
+- Files: `src/api/index.ts`, `src/main.ts`
+- Combined all 11 API groups (Events, Activities, Objectives, Summary, Colonies, ProtectedFactions, System, Auth, DiscordSummary, Commanders, Discovery)
+- Wired all handlers and repository dependencies in main.ts
 - Commit: "feat(api): compose all API groups"
 
 ---

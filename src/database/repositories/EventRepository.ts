@@ -413,6 +413,25 @@ export const EventRepositoryLive = Layer.effect(
 
           return events;
         }),
+
+      getDistinctCmdrNames: (limit) =>
+        Effect.gen(function* () {
+          const limitClause = limit ? `LIMIT ${limit}` : "";
+          const result = yield* Effect.tryPromise({
+            try: () =>
+              client.execute({
+                sql: `SELECT DISTINCT cmdr FROM event WHERE cmdr IS NOT NULL ORDER BY cmdr ${limitClause}`,
+                args: [],
+              }),
+            catch: (error) =>
+              new DatabaseError({
+                operation: "getDistinctCmdrNames.event",
+                error,
+              }),
+          });
+
+          return result.rows.map((row: any) => row.cmdr as string);
+        }),
     });
   })
 );

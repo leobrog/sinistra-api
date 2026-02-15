@@ -112,6 +112,7 @@ export class EventRepository extends Context.Tag('EventRepository')<
         findById(id: EventId): Effect.Effect<Option.Option<Event>, DatabaseError>
         findByTickId(tickId: string): Effect.Effect<Array<Event>, DatabaseError>
         findByDateRange(startDate: string, endDate: string): Effect.Effect<Array<Event>, DatabaseError>
+        getDistinctCmdrNames(limit?: number): Effect.Effect<Array<string>, DatabaseError>
     }
 >() {}
 
