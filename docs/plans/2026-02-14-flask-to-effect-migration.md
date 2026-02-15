@@ -4,7 +4,7 @@
 
 **Goal:** Convert the entire Sinistra Flask Server backend from Flask + SQLAlchemy + SQLite to Bun + Effect-TS + Turso/LibSQL.
 
-**Progress:** Tasks 1-19 complete (19/48) | Phase 1: 13/13 tasks ✅ | Phase 2: 7/7 tasks ✅
+**Progress:** Tasks 1-26 complete (26/48) | Phase 1: 13/13 tasks ✅ | Phase 2: 7/7 tasks ✅ | Phase 4: 4/14 tasks ✅
 
 **Architecture:** Single-tenant Bun server using Effect HttpApi for endpoints, Turso/LibSQL for persistence, Effect Fibers for background schedulers.
 
@@ -124,22 +124,37 @@ Commit: "feat(db): add all Sinistra domain migrations"
 
 ## Phase 4: API Layer
 
-### Task 23: API Key Middleware
+### ✅ Task 23: API Key Middleware [DONE]
 - File: `src/api/middleware/apikey.ts`
-- Logic: Validate apikey + apiversion headers
-- Commit: "feat(api): add API key auth middleware"
+- Logic: Validate apikey + apiversion headers using HttpApiMiddleware pattern
+- Commit: "feat(api): add Events API endpoint group" (included middleware refactor)
 
-### Task 24-35: API Endpoint Groups
-Create for each:
+### ✅ Task 24: Events API [DONE]
+- Files: `src/api/events/{api.ts,dtos.ts,handlers.ts}`
+- Endpoint: POST /events
+- Logic: Ingest Elite Dangerous journal events with sub-events
+- Commit: "feat(api): add Events API endpoint group"
+
+### ✅ Task 25: Activities API [DONE]
+- Files: `src/api/activities/{api.ts,dtos.ts,handlers.ts}`
+- Endpoints: PUT /activities, GET /api/activities
+- Logic: Upsert/query BGS activities with nested systems/factions, tick filtering
+- Commit: "feat(api): add Activities API endpoint group"
+
+### ✅ Task 26: Objectives API [DONE]
+- Files: `src/api/objectives/{api.ts,dtos.ts,handlers.ts}`
+- Endpoints: POST/GET/UPDATE/DELETE /objectives and /api/objectives
+- Logic: Full CRUD with nested targets/settlements, active filtering
+- Commit: "feat(api): add Objectives API endpoint group"
+
+### Task 27-35: Remaining API Endpoint Groups
+Create for each remaining group:
 - `src/api/<group>/api.ts` - Endpoint definitions
 - `src/api/<group>/dtos.ts` - Request/response schemas
 - `src/api/<group>/handlers.ts` - Handler implementations
 
-**Groups:**
-- events (POST /events)
-- activities (PUT /activities, GET /api/activities)
-- objectives (CRUD /objectives)
-- summary (GET /api/summary/:key with date filters)
+**Remaining Groups:**
+- summary (GET /api/summary/:key with date filters) - Task 27
 - colonies (CRUD /api/colonies)
 - protected-factions (CRUD /api/protected-faction)
 - system (GET /api/system-summary)
