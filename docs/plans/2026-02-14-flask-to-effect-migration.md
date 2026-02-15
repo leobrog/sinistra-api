@@ -4,7 +4,7 @@
 
 **Goal:** Convert the entire Sinistra Flask Server backend from Flask + SQLAlchemy + SQLite to Bun + Effect-TS + Turso/LibSQL.
 
-**Progress:** Tasks 1-12b complete (12/48) | Phase 1: 13/13 tasks ✅ | Phase 2: 0/7 tasks
+**Progress:** Tasks 1-19 complete (19/48) | Phase 1: 13/13 tasks ✅ | Phase 2: 7/7 tasks ✅
 
 **Architecture:** Single-tenant Bun server using Effect HttpApi for endpoints, Turso/LibSQL for persistence, Effect Fibers for background schedulers.
 
@@ -78,27 +78,27 @@ Commit: "feat(db): add all Sinistra domain migrations"
 
 ## Phase 2: Repository Implementations
 
-### Task 13: EventRepository
+### ✅ Task 13: EventRepository [DONE]
 - File: `src/database/repositories/EventRepository.ts`
 - Logic: createEvent with sub-events (MarketBuy, MissionCompleted, etc.)
-- Tests: EventRepository.test.ts
+- Tests: EventRepository.test.ts (7 tests, 23 assertions)
 - Commit: "feat(db): add EventRepository"
 
-### Task 14: ActivityRepository
-- File: `src/database/repositories/ActivityRepository.ts`  
+### ✅ Task 14: ActivityRepository [DONE]
+- File: `src/database/repositories/ActivityRepository.ts`
 - Logic: Upsert activity with nested systems/factions
-- Tests: ActivityRepository.test.ts
+- Tests: ActivityRepository.test.ts (8 tests)
 - Commit: "feat(db): add ActivityRepository"
 
-### Task 15: ObjectiveRepository
+### ✅ Task 15: ObjectiveRepository [DONE]
 - File: `src/database/repositories/ObjectiveRepository.ts`
 - Logic: CRUD with nested targets/settlements
-- Tests: ObjectiveRepository.test.ts
+- Tests: ObjectiveRepository.test.ts (8 tests)
 - Commit: "feat(db): add ObjectiveRepository"
 
-### Task 16-19: Simple CRUD Repositories
+### ✅ Task 16-19: Simple CRUD Repositories [DONE]
 - Files: CmdrRepository, ColonyRepository, ProtectedFactionRepository, TickRepository, EddnRepository
-- Tests: *.test.ts for each
+- Tests: *.test.ts for each (38 tests total across 5 repositories)
 - Commit: "feat(db): add remaining repositories"
 
 ---
