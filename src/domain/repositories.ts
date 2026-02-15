@@ -19,6 +19,7 @@ import type {
   ProtectedFaction,
   TickState,
   User,
+  FlaskUser,
   UserApiKey,
   EddnMessage,
   EddnSystemInfo,
@@ -62,6 +63,18 @@ export class UserRepository extends Context.Tag('UserRepository')<
         findById(id: UserId): Effect.Effect<Option.Option<User>, DatabaseError>
         findByEmail(email: Email): Effect.Effect<Option.Option<User>, DatabaseError>
         update(user: User): Effect.Effect<void, DatabaseError | UserNotFoundError>
+        delete(id: UserId): Effect.Effect<void, DatabaseError>
+    }
+>() {}
+
+export class FlaskUserRepository extends Context.Tag('FlaskUserRepository')<
+    FlaskUserRepository,
+    {
+        create(user: FlaskUser): Effect.Effect<void, DatabaseError | UserAlreadyExistsError>
+        findById(id: UserId): Effect.Effect<Option.Option<FlaskUser>, DatabaseError>
+        findByUsername(username: string): Effect.Effect<Option.Option<FlaskUser>, DatabaseError>
+        findByDiscordId(discordId: string): Effect.Effect<Option.Option<FlaskUser>, DatabaseError>
+        update(user: FlaskUser): Effect.Effect<void, DatabaseError | UserNotFoundError>
         delete(id: UserId): Effect.Effect<void, DatabaseError>
     }
 >() {}
@@ -185,5 +198,25 @@ export class EddnRepository extends Context.Tag('EddnRepository')<
         findFactionsInSystem(systemName: string): Effect.Effect<Array<EddnFaction>, DatabaseError>
         findConflictsInSystem(systemName: string): Effect.Effect<Array<EddnConflict>, DatabaseError>
         cleanupOldMessages(olderThan: Date): Effect.Effect<number, DatabaseError>
+        getAllSystemNames(): Effect.Effect<Array<string>, DatabaseError>
+        // System summary query methods
+        getSystemInfo(systemName: string): Effect.Effect<Option.Option<EddnSystemInfo>, DatabaseError>
+        getConflictsForSystem(systemName: string): Effect.Effect<Array<EddnConflict>, DatabaseError>
+        getFactionsForSystem(systemName: string): Effect.Effect<Array<EddnFaction>, DatabaseError>
+        getPowerplayForSystem(systemName: string): Effect.Effect<Array<EddnPowerplay>, DatabaseError>
+        findSystemsByNamePattern(pattern: string): Effect.Effect<Array<string>, DatabaseError>
+        findSystemsByFaction(factionName: string): Effect.Effect<Array<string>, DatabaseError>
+        findSystemsByControllingFaction(factionName: string): Effect.Effect<Array<string>, DatabaseError>
+        findSystemsByControllingPower(power: string): Effect.Effect<Array<string>, DatabaseError>
+        findSystemsByGovernment(government: string): Effect.Effect<Array<string>, DatabaseError>
+        findSystemsByStateAndGovernment(state: string, government: string): Effect.Effect<Array<string>, DatabaseError>
+        findSystemsByPower(power: string): Effect.Effect<Array<string>, DatabaseError>
+        findSystemsByState(state: string): Effect.Effect<Array<string>, DatabaseError>
+        findSystemsByRecoveringState(state: string): Effect.Effect<Array<string>, DatabaseError>
+        findSystemsByPendingState(state: string): Effect.Effect<Array<string>, DatabaseError>
+        findSystemsWithConflicts(): Effect.Effect<Array<string>, DatabaseError>
+        findSystemsByPopulation(populationFilter: string): Effect.Effect<Array<string>, DatabaseError>
+        findSystemsByPowerplayState(state: string): Effect.Effect<Array<string>, DatabaseError>
+        findSystemsWithConflictsForFaction(factionName: string): Effect.Effect<Array<string>, DatabaseError>
     }
 >() {}

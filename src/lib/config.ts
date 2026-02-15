@@ -38,6 +38,11 @@ export const FrontendUrl = Config.string("FRONTEND_URL").pipe(
   Config.withDefault("http://localhost:5000")
 )
 
+// Faction Config
+export const FactionName = Config.string("FACTION_NAME").pipe(
+  Config.withDefault("Communism Interstellar Union")
+)
+
 // JWT Config
 export const JwtSecret = Config.secret("JWT_SECRET")
 export const JwtExpiresIn = Config.string("JWT_EXPIRES_IN").pipe(
@@ -119,6 +124,9 @@ export class AppConfig {
       apiKey: string
       frontendUrl: string
     },
+    readonly faction: {
+      name: string
+    },
     readonly jwt: {
       secret: string
       expiresIn: string
@@ -178,6 +186,9 @@ export const AppConfigLive = Layer.effect(
       apiVersion: ApiVersion,
       apiKey: Config.string(ApiKey),
       frontendUrl: FrontendUrl,
+    }),
+    faction: Effect.all({
+      name: FactionName,
     }),
     jwt: Effect.all({
       secret: Config.string(JwtSecret),

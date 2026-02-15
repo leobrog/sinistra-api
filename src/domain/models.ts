@@ -62,6 +62,19 @@ export class User extends Schema.Class<User>("User")({
   updatedAt: Schema.Date,
 }) {}
 
+// FlaskUser (for backward compatibility with Flask dashboard auth)
+export class FlaskUser extends Schema.Class<FlaskUser>("FlaskUser")({
+  id: UserId,
+  username: Schema.String,
+  passwordHash: HashedPassword,
+  discordId: Schema.optionalWith(Schema.String, { as: "Option" }),
+  discordUsername: Schema.optionalWith(Schema.String, { as: "Option" }),
+  isAdmin: Schema.Boolean,
+  active: Schema.Boolean,
+  createdAt: Schema.Date,
+  updatedAt: Schema.Date,
+}) {}
+
 // ============================================================================
 // Sinistra Domain Models
 // ============================================================================

@@ -4,7 +4,7 @@
 
 **Goal:** Convert the entire Sinistra Flask Server backend from Flask + SQLAlchemy + SQLite to Bun + Effect-TS + Turso/LibSQL.
 
-**Progress:** Tasks 1-26 complete (26/48) | Phase 1: 13/13 tasks ✅ | Phase 2: 7/7 tasks ✅ | Phase 4: 4/14 tasks ✅
+**Progress:** Tasks 1-29 complete (29/47) | Phase 1: 13/13 tasks ✅ | Phase 2: 7/7 tasks ✅ | Phase 3: 3/3 tasks ✅ | Phase 4: 7/13 tasks ✅
 
 **Architecture:** Single-tenant Bun server using Effect HttpApi for endpoints, Turso/LibSQL for persistence, Effect Fibers for background schedulers.
 
@@ -105,19 +105,22 @@ Commit: "feat(db): add all Sinistra domain migrations"
 
 ## Phase 3: Service Layer
 
-### Task 20: Date Filter Service
+### ✅ Task 20: Date Filter Service [DONE]
 - File: `src/services/date-filters.ts`
 - Port: Flask's _date_filters.py logic (cw, lw, cm, ct, lt, etc.)
+- Tests: date-filters.test.ts
 - Commit: "feat(services): add date filter service"
 
-### Task 21: Discord Service
+### ✅ Task 21: Discord Service [DONE]
 - File: `src/services/discord.ts`
 - Methods: sendWebhook, getUserRoles, OAuth exchange
+- Tests: discord.test.ts
 - Commit: "feat(services): add Discord service"
 
-### Task 22: Inara Service
+### ✅ Task 22: Inara Service [DONE]
 - File: `src/services/inara.ts`
 - Methods: fetchCmdrProfile
+- Tests: inara.test.ts
 - Commit: "feat(services): add Inara service"
 
 ---
@@ -147,25 +150,54 @@ Commit: "feat(db): add all Sinistra domain migrations"
 - Logic: Full CRUD with nested targets/settlements, active filtering
 - Commit: "feat(api): add Objectives API endpoint group"
 
-### Task 27-35: Remaining API Endpoint Groups
+### ✅ Task 27: Summary API [DONE]
+- Files: `src/api/summary/{api.ts,dtos.ts,handlers.ts}`
+- Endpoints:
+  - GET /api/summary/:key (9 query types with date/tick filtering)
+  - GET /api/summary/top5/:key (top 5 results)
+  - GET /api/summary/leaderboard (comprehensive commander stats)
+  - GET /api/summary/recruits (recruit progression tracking)
+- Logic: Aggregated event statistics with date filters (ct, lt, cw, lw, cm, lm, 2m, y, cd, ld)
+- Note: Added FACTION_NAME to AppConfig for tenant-specific filtering
+- Commit: "feat(api): add Summary API endpoint group"
+
+### ✅ Task 28: Colonies API [DONE]
+- Files: `src/api/colonies/{api.ts,dtos.ts,handlers.ts}`
+- Endpoints: Full CRUD + search + priority management (8 endpoints)
+  - GET/POST /api/colonies
+  - GET/PUT/DELETE /api/colonies/:id
+  - GET /api/colonies/search (by cmdr, system, or address)
+  - GET /api/colonies/priority (ordered by priority level)
+  - POST /api/colonies/:id/priority (set priority)
+- Commit: "feat(api): add Colonies API endpoint group"
+
+### ✅ Task 29: Protected Factions API [DONE]
+- Files: `src/api/protected-factions/{api.ts,dtos.ts,handlers.ts}`
+- Endpoints: Full CRUD + EDDN system lookup (6 endpoints)
+  - GET/POST /api/protected-faction
+  - GET/PUT/DELETE /api/protected-faction/:id
+  - GET /api/protected-faction/systems (all EDDN system names)
+- Note: Requires EddnRepository.getAllSystemNames() implementation
+- Commit: "feat(api): add Protected Factions API endpoint group"
+
+### Task 30-35: Remaining API Endpoint Groups
 Create for each remaining group:
 - `src/api/<group>/api.ts` - Endpoint definitions
 - `src/api/<group>/dtos.ts` - Request/response schemas
 - `src/api/<group>/handlers.ts` - Handler implementations
 
+Do not skip ANYTHING currently existing in Flask, don't postpone work. If something takes longer than you can handle, ask the user to split the task into subtasks.
+
 **Remaining Groups:**
-- summary (GET /api/summary/:key with date filters) - Task 27
-- colonies (CRUD /api/colonies)
-- protected-factions (CRUD /api/protected-faction)
-- system (GET /api/system-summary)
-- auth (POST /api/login, Discord OAuth)
-- discord (POST /api/summary/discord/*)
-- commanders (POST /api/sync/cmdrs)
-- discovery (GET /discovery)
+- system (GET /api/system-summary) - Task 30
+- auth (POST /api/login, Discord OAuth) - Task 31
+- discord (POST /api/summary/discord/*) - Task 32
+- commanders (POST /api/sync/cmdrs) - Task 33
+- discovery (GET /discovery) - Task 34
 
 Commit after each: "feat(api): add <group> API"
 
-### Task 36: Compose API
+### Task 35: Compose API
 - Files: `src/api/index.ts`, `src/api/handlers.ts`
 - Combine all API groups
 - Commit: "feat(api): compose all API groups"
@@ -174,32 +206,32 @@ Commit after each: "feat(api): add <group> API"
 
 ## Phase 5: Background Schedulers
 
-### Task 37: EDDN Client Fiber
+### Task 36: EDDN Client Fiber
 - File: `src/schedulers/eddn-client.ts`
 - Logic: ZMQ consumer, upsert EDDN data, cleanup job
 - Commit: "feat(schedulers): add EDDN client"
 
-### Task 38: Tick Monitor Fiber
+### Task 37: Tick Monitor Fiber
 - File: `src/schedulers/tick-monitor.ts`
 - Logic: Poll tick, detect changes, notify Discord
 - Commit: "feat(schedulers): add tick monitor"
 
-### Task 39: Shoutout Scheduler Fiber
+### Task 38: Shoutout Scheduler Fiber
 - File: `src/schedulers/shoutout-scheduler.ts`
 - Logic: Run queries on tick change, send to Discord
 - Commit: "feat(schedulers): add shoutout scheduler"
 
-### Task 40: Conflict Scheduler Fiber
+### Task 39: Conflict Scheduler Fiber
 - File: `src/schedulers/conflict-scheduler.ts`
 - Logic: Monitor conflicts, send notifications
 - Commit: "feat(schedulers): add conflict scheduler"
 
-### Task 41: Inara Sync Scheduler Fiber
+### Task 40: Inara Sync Scheduler Fiber
 - File: `src/schedulers/inara-sync.ts`
 - Logic: Periodic cmdr sync with Inara API
 - Commit: "feat(schedulers): add Inara sync"
 
-### Task 42: Compose Schedulers
+### Task 41: Compose Schedulers
 - File: `src/schedulers/index.ts`
 - Fork all scheduler fibers
 - Commit: "feat(schedulers): compose all schedulers"
@@ -208,17 +240,17 @@ Commit after each: "feat(api): add <group> API"
 
 ## Phase 6: Server Composition
 
-### Task 43: Main Server
+### Task 42: Main Server
 - File: `src/main.ts`
 - Wire all layers together
 - Commit: "feat: compose full server"
 
-### Task 44: Static Dashboard Serving
+### Task 43: Static Dashboard Serving
 - File: `src/main.ts` or `src/api/static.ts`
 - Serve React SPA from ../dashboard/dist
 - Commit: "feat: add dashboard serving"
 
-### Task 45: Environment Config
+### Task 44: Environment Config
 - File: `.env.example`
 - Document all required env vars
 - Commit: "docs: add env example"
@@ -227,12 +259,12 @@ Commit after each: "feat(api): add <group> API"
 
 ## Phase 7: Testing & Verification
 
-### Task 46: Integration Tests
+### Task 45: Integration Tests
 - Files: `src/api/*/handlers.test.ts`
 - Test: Full API flows with in-memory DB
 - Commit: "test: add integration tests"
 
-### Task 47: Data Migration Script
+### Task 46: Data Migration Script
 - File: `scripts/migrate-from-flask.ts`
 - **Challenge**: Flask uses INTEGER auto-increment IDs, we use UUID TEXT IDs
 - **Strategy**:
@@ -251,7 +283,7 @@ Commit after each: "feat(api): add <group> API"
   - EDDN tables from separate DB (~5 tables)
 - Commit: "feat(scripts): add Flask data migration with ID conversion"
 
-### Task 48: Full Verification
+### Task 47: Full Verification
 - Run: typecheck, test, build, manual verification
 - Commit: "chore: verify full system"
 

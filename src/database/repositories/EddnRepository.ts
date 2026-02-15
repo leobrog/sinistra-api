@@ -271,6 +271,368 @@ export const EddnRepositoryLive = Layer.effect(
 
                 return result.rowsAffected
             }),
+
+            getAllSystemNames: () => Effect.gen(function* () {
+                const result = yield* Effect.tryPromise({
+                    try: () => client.execute({
+                        sql: "SELECT DISTINCT system_name FROM eddn_system_info ORDER BY system_name",
+                        args: []
+                    }),
+                    catch: (error) => new DatabaseError({
+                        operation: 'getAllSystemNames.eddn', error
+                    })
+                })
+
+                return result.rows.map((row) => row.system_name as string)
+            }),
+
+            // System summary query methods
+            getSystemInfo: (systemName) => Effect.gen(function* () {
+                const result = yield* Effect.tryPromise({
+                    try: () => client.execute({
+                        sql: "SELECT * FROM eddn_system_info WHERE system_name = ? COLLATE NOCASE ORDER BY updated_at DESC LIMIT 1",
+                        args: [systemName]
+                    }),
+                    catch: (error) => new DatabaseError({
+                        operation: 'getSystemInfo.eddn', error
+                    })
+                })
+
+                const row = result.rows[0]
+                if (!row) return Option.none()
+
+                const systemInfo = yield* decodeEddnSystemInfo(mapRowToEddnSystemInfo(row)).pipe(
+                    Effect.mapError((error) => new DatabaseError({
+                        operation: 'decode.eddnSystemInfo', error
+                    }))
+                )
+
+                return Option.some(systemInfo)
+            }),
+
+            getConflictsForSystem: (systemName) => Effect.gen(function* () {
+                const result = yield* Effect.tryPromise({
+                    try: () => client.execute({
+                        sql: "SELECT * FROM eddn_conflict WHERE system_name = ? COLLATE NOCASE ORDER BY updated_at DESC",
+                        args: [systemName]
+                    }),
+                    catch: (error) => new DatabaseError({
+                        operation: 'getConflictsForSystem.eddn', error
+                    })
+                })
+
+                const rawConflicts = result.rows.map(mapRowToEddnConflict)
+                const conflicts = yield* Effect.forEach(rawConflicts, (raw) =>
+                    decodeEddnConflict(raw).pipe(
+                        Effect.mapError((error) => new DatabaseError({
+                            operation: 'decode.eddnConflict', error
+                        }))
+                    )
+                )
+
+                return conflicts
+            }),
+
+            getFactionsForSystem: (systemName) => Effect.gen(function* () {
+                const result = yield* Effect.tryPromise({
+                    try: () => client.execute({
+                        sql: "SELECT * FROM eddn_faction WHERE system_name = ? COLLATE NOCASE ORDER BY updated_at DESC",
+                        args: [systemName]
+                    }),
+                    catch: (error) => new DatabaseError({
+                        operation: 'getFactionsForSystem.eddn', error
+                    })
+                })
+
+                const rawFactions = result.rows.map(mapRowToEddnFaction)
+                const factions = yield* Effect.forEach(rawFactions, (raw) =>
+                    decodeEddnFaction(raw).pipe(
+                        Effect.mapError((error) => new DatabaseError({
+                            operation: 'decode.eddnFaction', error
+                        }))
+                    )
+                )
+
+                return factions
+            }),
+
+            getPowerplayForSystem: (systemName) => Effect.gen(function* () {
+                const result = yield* Effect.tryPromise({
+                    try: () => client.execute({
+                        sql: "SELECT * FROM eddn_powerplay WHERE system_name = ? COLLATE NOCASE ORDER BY updated_at DESC",
+                        args: [systemName]
+                    }),
+                    catch: (error) => new DatabaseError({
+                        operation: 'getPowerplayForSystem.eddn', error
+                    })
+                })
+
+                const rawPowerplays = result.rows.map(mapRowToEddnPowerplay)
+                const powerplays = yield* Effect.forEach(rawPowerplays, (raw) =>
+                    decodeEddnPowerplay(raw).pipe(
+                        Effect.mapError((error) => new DatabaseError({
+                            operation: 'decode.eddnPowerplay', error
+                        }))
+                    )
+                )
+
+                return powerplays
+            }),
+
+            findSystemsByNamePattern: (pattern) => Effect.gen(function* () {
+                const result = yield* Effect.tryPromise({
+                    try: () => client.execute({
+                        sql: "SELECT DISTINCT system_name FROM eddn_system_info WHERE system_name LIKE ? COLLATE NOCASE",
+                        args: [`%${pattern}%`]
+                    }),
+                    catch: (error) => new DatabaseError({
+                        operation: 'findSystemsByNamePattern.eddn', error
+                    })
+                })
+
+                return result.rows.map((row) => row.system_name as string)
+            }),
+
+            findSystemsByFaction: (factionName) => Effect.gen(function* () {
+                const result = yield* Effect.tryPromise({
+                    try: () => client.execute({
+                        sql: "SELECT DISTINCT system_name FROM eddn_faction WHERE name = ? COLLATE NOCASE",
+                        args: [factionName]
+                    }),
+                    catch: (error) => new DatabaseError({
+                        operation: 'findSystemsByFaction.eddn', error
+                    })
+                })
+
+                return result.rows.map((row) => row.system_name as string)
+            }),
+
+            findSystemsByControllingFaction: (factionName) => Effect.gen(function* () {
+                const result = yield* Effect.tryPromise({
+                    try: () => client.execute({
+                        sql: "SELECT DISTINCT system_name FROM eddn_system_info WHERE controlling_faction = ? COLLATE NOCASE",
+                        args: [factionName]
+                    }),
+                    catch: (error) => new DatabaseError({
+                        operation: 'findSystemsByControllingFaction.eddn', error
+                    })
+                })
+
+                return result.rows.map((row) => row.system_name as string)
+            }),
+
+            findSystemsByControllingPower: (power) => Effect.gen(function* () {
+                const result = yield* Effect.tryPromise({
+                    try: () => client.execute({
+                        sql: "SELECT DISTINCT system_name FROM eddn_system_info WHERE controlling_power = ? COLLATE NOCASE",
+                        args: [power]
+                    }),
+                    catch: (error) => new DatabaseError({
+                        operation: 'findSystemsByControllingPower.eddn', error
+                    })
+                })
+
+                return result.rows.map((row) => row.system_name as string)
+            }),
+
+            findSystemsByGovernment: (government) => Effect.gen(function* () {
+                const result = yield* Effect.tryPromise({
+                    try: () => client.execute({
+                        sql: "SELECT DISTINCT system_name FROM eddn_faction WHERE government = ? COLLATE NOCASE",
+                        args: [government]
+                    }),
+                    catch: (error) => new DatabaseError({
+                        operation: 'findSystemsByGovernment.eddn', error
+                    })
+                })
+
+                return result.rows.map((row) => row.system_name as string)
+            }),
+
+            findSystemsByStateAndGovernment: (state, government) => Effect.gen(function* () {
+                const resultState = yield* Effect.tryPromise({
+                    try: () => client.execute({
+                        sql: "SELECT DISTINCT system_name FROM eddn_faction WHERE government = ? COLLATE NOCASE AND state = ? COLLATE NOCASE",
+                        args: [government, state]
+                    }),
+                    catch: (error) => new DatabaseError({
+                        operation: 'findSystemsByStateAndGovernment.state.eddn', error
+                    })
+                })
+
+                const resultActive = yield* Effect.tryPromise({
+                    try: () => client.execute({
+                        sql: "SELECT DISTINCT system_name FROM eddn_faction WHERE government = ? COLLATE NOCASE AND active_states LIKE ?",
+                        args: [government, `%${state}%`]
+                    }),
+                    catch: (error) => new DatabaseError({
+                        operation: 'findSystemsByStateAndGovernment.active.eddn', error
+                    })
+                })
+
+                const systems1 = resultState.rows.map((row) => row.system_name as string)
+                const systems2 = resultActive.rows.map((row) => row.system_name as string)
+
+                return Array.from(new Set([...systems1, ...systems2]))
+            }),
+
+            findSystemsByPower: (power) => Effect.gen(function* () {
+                const resultSi = yield* Effect.tryPromise({
+                    try: () => client.execute({
+                        sql: "SELECT DISTINCT system_name FROM eddn_system_info WHERE controlling_power = ? COLLATE NOCASE",
+                        args: [power]
+                    }),
+                    catch: (error) => new DatabaseError({
+                        operation: 'findSystemsByPower.systemInfo.eddn', error
+                    })
+                })
+
+                const resultPp = yield* Effect.tryPromise({
+                    try: () => client.execute({
+                        sql: `SELECT DISTINCT system_name FROM eddn_powerplay WHERE json_extract(power, '$[0]') = ? COLLATE NOCASE OR power LIKE ?`,
+                        args: [power, `%${power}%`]
+                    }),
+                    catch: (error) => new DatabaseError({
+                        operation: 'findSystemsByPower.powerplay.eddn', error
+                    })
+                })
+
+                const systems1 = resultSi.rows.map((row) => row.system_name as string)
+                const systems2 = resultPp.rows.map((row) => row.system_name as string)
+
+                return Array.from(new Set([...systems1, ...systems2]))
+            }),
+
+            findSystemsByState: (state) => Effect.gen(function* () {
+                const resultState = yield* Effect.tryPromise({
+                    try: () => client.execute({
+                        sql: "SELECT DISTINCT system_name FROM eddn_faction WHERE state = ? COLLATE NOCASE",
+                        args: [state]
+                    }),
+                    catch: (error) => new DatabaseError({
+                        operation: 'findSystemsByState.state.eddn', error
+                    })
+                })
+
+                const resultActive = yield* Effect.tryPromise({
+                    try: () => client.execute({
+                        sql: "SELECT DISTINCT system_name FROM eddn_faction WHERE active_states LIKE ?",
+                        args: [`%${state}%`]
+                    }),
+                    catch: (error) => new DatabaseError({
+                        operation: 'findSystemsByState.active.eddn', error
+                    })
+                })
+
+                const systems1 = resultState.rows.map((row) => row.system_name as string)
+                const systems2 = resultActive.rows.map((row) => row.system_name as string)
+
+                return Array.from(new Set([...systems1, ...systems2]))
+            }),
+
+            findSystemsByRecoveringState: (state) => Effect.gen(function* () {
+                const result = yield* Effect.tryPromise({
+                    try: () => client.execute({
+                        sql: "SELECT DISTINCT system_name FROM eddn_faction WHERE recovering_states LIKE ?",
+                        args: [`%${state}%`]
+                    }),
+                    catch: (error) => new DatabaseError({
+                        operation: 'findSystemsByRecoveringState.eddn', error
+                    })
+                })
+
+                return result.rows.map((row) => row.system_name as string)
+            }),
+
+            findSystemsByPendingState: (state) => Effect.gen(function* () {
+                const result = yield* Effect.tryPromise({
+                    try: () => client.execute({
+                        sql: "SELECT DISTINCT system_name FROM eddn_faction WHERE pending_states LIKE ?",
+                        args: [`%${state}%`]
+                    }),
+                    catch: (error) => new DatabaseError({
+                        operation: 'findSystemsByPendingState.eddn', error
+                    })
+                })
+
+                return result.rows.map((row) => row.system_name as string)
+            }),
+
+            findSystemsWithConflicts: () => Effect.gen(function* () {
+                const result = yield* Effect.tryPromise({
+                    try: () => client.execute({
+                        sql: "SELECT DISTINCT system_name FROM eddn_conflict",
+                        args: []
+                    }),
+                    catch: (error) => new DatabaseError({
+                        operation: 'findSystemsWithConflicts.eddn', error
+                    })
+                })
+
+                return result.rows.map((row) => row.system_name as string)
+            }),
+
+            findSystemsByPopulation: (populationFilter) => Effect.gen(function* () {
+                let sql: string
+                let args: Array<number>
+
+                if (populationFilter.startsWith("<")) {
+                    const popVal = parseInt(populationFilter.slice(1), 10)
+                    sql = "SELECT DISTINCT system_name FROM eddn_system_info WHERE population < ?"
+                    args = [popVal]
+                } else if (populationFilter.startsWith(">")) {
+                    const popVal = parseInt(populationFilter.slice(1), 10)
+                    sql = "SELECT DISTINCT system_name FROM eddn_system_info WHERE population > ?"
+                    args = [popVal]
+                } else if (populationFilter.includes("-")) {
+                    const [minStr, maxStr] = populationFilter.split("-")
+                    const popMin = parseInt(minStr, 10)
+                    const popMax = parseInt(maxStr, 10)
+                    sql = "SELECT DISTINCT system_name FROM eddn_system_info WHERE population >= ? AND population <= ?"
+                    args = [popMin, popMax]
+                } else {
+                    const popVal = parseInt(populationFilter, 10)
+                    sql = "SELECT DISTINCT system_name FROM eddn_system_info WHERE population = ?"
+                    args = [popVal]
+                }
+
+                const result = yield* Effect.tryPromise({
+                    try: () => client.execute({ sql, args }),
+                    catch: (error) => new DatabaseError({
+                        operation: 'findSystemsByPopulation.eddn', error
+                    })
+                })
+
+                return result.rows.map((row) => row.system_name as string)
+            }),
+
+            findSystemsByPowerplayState: (state) => Effect.gen(function* () {
+                const result = yield* Effect.tryPromise({
+                    try: () => client.execute({
+                        sql: "SELECT DISTINCT system_name FROM eddn_powerplay WHERE powerplay_state = ? COLLATE NOCASE",
+                        args: [state]
+                    }),
+                    catch: (error) => new DatabaseError({
+                        operation: 'findSystemsByPowerplayState.eddn', error
+                    })
+                })
+
+                return result.rows.map((row) => row.system_name as string)
+            }),
+
+            findSystemsWithConflictsForFaction: (factionName) => Effect.gen(function* () {
+                const result = yield* Effect.tryPromise({
+                    try: () => client.execute({
+                        sql: "SELECT DISTINCT system_name FROM eddn_conflict WHERE faction1 = ? COLLATE NOCASE OR faction2 = ? COLLATE NOCASE",
+                        args: [factionName, factionName]
+                    }),
+                    catch: (error) => new DatabaseError({
+                        operation: 'findSystemsWithConflictsForFaction.eddn', error
+                    })
+                })
+
+                return result.rows.map((row) => row.system_name as string)
+            }),
         })
     })
 )
