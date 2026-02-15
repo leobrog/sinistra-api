@@ -1,4 +1,4 @@
-import { Config, Effect, Layer } from "effect"
+import { Config, Effect, Layer, Option } from "effect"
 
 // Database Config
 export const DatabaseUrl = Config.string("DATABASE_URL").pipe(
@@ -32,6 +32,8 @@ export const ApiVersion = Config.string("API_VERSION").pipe(
   Config.withDefault("2.0.0")
 )
 
+export const ApiKey = Config.secret("API_KEY")
+
 export const FrontendUrl = Config.string("FRONTEND_URL").pipe(
   Config.withDefault("http://localhost:5000")
 )
@@ -54,21 +56,13 @@ export const DiscordBotToken = Config.secret("DISCORD_BOT_TOKEN")
 export const DiscordServerId = Config.string("DISCORD_SERVER_ID")
 
 // Discord Webhook URLs
-export const DiscordBgsWebhook = Config.string("DISCORD_BGS_WEBHOOK").pipe(
-  Config.optional
-)
+export const DiscordBgsWebhook = Config.option(Config.string("DISCORD_BGS_WEBHOOK"))
 
-export const DiscordShoutoutWebhook = Config.string(
-  "DISCORD_SHOUTOUT_WEBHOOK"
-).pipe(Config.optional)
+export const DiscordShoutoutWebhook = Config.option(Config.string("DISCORD_SHOUTOUT_WEBHOOK"))
 
-export const DiscordConflictWebhook = Config.string(
-  "DISCORD_CONFLICT_WEBHOOK"
-).pipe(Config.optional)
+export const DiscordConflictWebhook = Config.option(Config.string("DISCORD_CONFLICT_WEBHOOK"))
 
-export const DiscordDebugWebhook = Config.string("DISCORD_DEBUG_WEBHOOK").pipe(
-  Config.optional
-)
+export const DiscordDebugWebhook = Config.option(Config.string("DISCORD_DEBUG_WEBHOOK"))
 
 // Inara API Config
 export const InaraApiKey = Config.secret("INARA_API_KEY")
@@ -122,6 +116,7 @@ export class AppConfig {
       description: string
       url: string
       apiVersion: string
+      apiKey: string
       frontendUrl: string
     },
     readonly jwt: {
@@ -139,10 +134,10 @@ export class AppConfig {
         serverId: string
       }
       webhooks: {
-        bgs?: string
-        shoutout?: string
-        conflict?: string
-        debug?: string
+        bgs: Option.Option<string>
+        shoutout: Option.Option<string>
+        conflict: Option.Option<string>
+        debug: Option.Option<string>
       }
     },
     readonly inara: {
@@ -181,6 +176,7 @@ export const AppConfigLive = Layer.effect(
       description: ServerDescription,
       url: ServerUrl,
       apiVersion: ApiVersion,
+      apiKey: Config.string(ApiKey),
       frontendUrl: FrontendUrl,
     }),
     jwt: Effect.all({
