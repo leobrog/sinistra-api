@@ -4,8 +4,10 @@ import { Layer, Effect } from "effect"
 import { Api } from "./api/index.ts"
 import { EventsApiLive } from "./api/events/handlers.ts"
 import { ActivitiesApiLive } from "./api/activities/handlers.ts"
+import { ObjectivesApiLive } from "./api/objectives/handlers.ts"
 import { EventRepositoryLive } from "./database/repositories/EventRepository.ts"
 import { ActivityRepositoryLive } from "./database/repositories/ActivityRepository.ts"
+import { ObjectiveRepositoryLive } from "./database/repositories/ObjectiveRepository.ts"
 import { ApiKeyAuthLive } from "./api/middleware/apikey.ts"
 import { TursoClientLive } from "./database/client.ts"
 import { AppConfigLive } from "./lib/config.ts"
@@ -14,9 +16,11 @@ import { AppConfigLive } from "./lib/config.ts"
 const ApiLive = HttpApiBuilder.api(Api).pipe(
   Layer.provide(EventsApiLive),
   Layer.provide(ActivitiesApiLive),
+  Layer.provide(ObjectivesApiLive),
   Layer.provide(ApiKeyAuthLive),
   Layer.provide(EventRepositoryLive),
   Layer.provide(ActivityRepositoryLive),
+  Layer.provide(ObjectiveRepositoryLive),
   Layer.provide(TursoClientLive),
   Layer.provide(AppConfigLive)
 )
