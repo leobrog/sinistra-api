@@ -5,8 +5,27 @@
  * Supports period strings: cw, lw, cm, lm, 2m, y, cd, ld, ct, lt
  */
 
-import { Effect } from "effect"
-import { LibsqlClient } from "@libsql/client"
+import { Effect, Schema } from "effect"
+import type { Client } from "@libsql/client"
+
+/**
+ * Schema for valid date filter period strings
+ */
+export const DateFilterPeriodSchema = Schema.Literal(
+  "cw",  // Current week
+  "lw",  // Last week
+  "cm",  // Current month
+  "lm",  // Last month
+  "2m",  // Last 2 months
+  "y",   // Current year
+  "cd",  // Current day
+  "ld",  // Last day
+  "ct",  // Current tick
+  "lt",  // Last tick
+  "all" // All time
+)
+
+export type DateFilterPeriod = typeof DateFilterPeriodSchema.Type
 
 /**
  * Date filter result containing the filter criteria and human-readable label
@@ -159,7 +178,7 @@ const buildDateBasedFilter = (period: string): DateFilter | null => {
 /**
  * Get current tick ID from database
  */
-const getCurrentTickId = (db: LibsqlClient) =>
+const getCurrentTickId = (db: Client) =>
   Effect.tryPromise({
     try: async () => {
       const result = await db.execute(
@@ -173,7 +192,7 @@ const getCurrentTickId = (db: LibsqlClient) =>
 /**
  * Get last tick ID (second most recent) from database
  */
-const getLastTickId = (db: LibsqlClient) =>
+const getLastTickId = (db: Client) =>
   Effect.tryPromise({
     try: async () => {
       const result = await db.execute(
@@ -193,7 +212,7 @@ const getLastTickId = (db: LibsqlClient) =>
  */
 const buildTickBasedFilter = (
   period: string,
-  db: LibsqlClient
+  db: Client
 ): Effect.Effect<DateFilter, Error> => {
   if (period === "ct") {
     // Current tick
@@ -254,7 +273,7 @@ const buildTickBasedFilter = (
  */
 export const buildDateFilter = (
   period: string,
-  db?: LibsqlClient
+  db?: Client
 ): Effect.Effect<DateFilter, Error> => {
   // Handle "all" period (no filter)
   if (period === "all") {

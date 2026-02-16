@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "bun:test"
 import { Effect } from "effect"
 import { createClient, type Client as LibsqlClient } from "@libsql/client"
-import { buildDateFilter, type DateFilter } from "./date-filters"
+import { buildDateFilter, type DateFilter } from "./date-filters.js"
 
 describe("DateFilterService", () => {
   let db: LibsqlClient
@@ -23,7 +23,7 @@ describe("DateFilterService", () => {
 
   describe("date-based filters", () => {
     it("should build current week filter (cw)", async () => {
-      const result = await Effect.runPromise(buildDateFilter("cw"))
+      const result: DateFilter = await Effect.runPromise(buildDateFilter("cw"))
 
       expect(result.type).toBe("date")
       expect(result.startDate).toBeDefined()
@@ -32,7 +32,7 @@ describe("DateFilterService", () => {
     })
 
     it("should build last week filter (lw)", async () => {
-      const result = await Effect.runPromise(buildDateFilter("lw"))
+      const result: DateFilter = await Effect.runPromise(buildDateFilter("lw"))
 
       expect(result.type).toBe("date")
       expect(result.startDate).toBeDefined()
@@ -41,7 +41,7 @@ describe("DateFilterService", () => {
     })
 
     it("should build current month filter (cm)", async () => {
-      const result = await Effect.runPromise(buildDateFilter("cm"))
+      const result: DateFilter = await Effect.runPromise(buildDateFilter("cm"))
 
       expect(result.type).toBe("date")
       expect(result.startDate).toBeDefined()
@@ -50,7 +50,7 @@ describe("DateFilterService", () => {
     })
 
     it("should build last month filter (lm)", async () => {
-      const result = await Effect.runPromise(buildDateFilter("lm"))
+      const result: DateFilter = await Effect.runPromise(buildDateFilter("lm"))
 
       expect(result.type).toBe("date")
       expect(result.startDate).toBeDefined()
@@ -59,7 +59,7 @@ describe("DateFilterService", () => {
     })
 
     it("should build last 2 months filter (2m)", async () => {
-      const result = await Effect.runPromise(buildDateFilter("2m"))
+      const result: DateFilter = await Effect.runPromise(buildDateFilter("2m"))
 
       expect(result.type).toBe("date")
       expect(result.startDate).toBeDefined()
@@ -68,7 +68,7 @@ describe("DateFilterService", () => {
     })
 
     it("should build current year filter (y)", async () => {
-      const result = await Effect.runPromise(buildDateFilter("y"))
+      const result: DateFilter = await Effect.runPromise(buildDateFilter("y"))
 
       expect(result.type).toBe("date")
       expect(result.startDate).toBeDefined()
@@ -77,7 +77,7 @@ describe("DateFilterService", () => {
     })
 
     it("should build current day filter (cd)", async () => {
-      const result = await Effect.runPromise(buildDateFilter("cd"))
+      const result: DateFilter = await Effect.runPromise(buildDateFilter("cd"))
 
       expect(result.type).toBe("date")
       expect(result.startDate).toBeDefined()
@@ -86,7 +86,7 @@ describe("DateFilterService", () => {
     })
 
     it("should build last day filter (ld)", async () => {
-      const result = await Effect.runPromise(buildDateFilter("ld"))
+      const result: DateFilter = await Effect.runPromise(buildDateFilter("ld"))
 
       expect(result.type).toBe("date")
       expect(result.startDate).toBeDefined()
@@ -95,7 +95,7 @@ describe("DateFilterService", () => {
     })
 
     it("should build all time filter (all)", async () => {
-      const result = await Effect.runPromise(buildDateFilter("all"))
+      const result: DateFilter = await Effect.runPromise(buildDateFilter("all"))
 
       expect(result.type).toBe("date")
       expect(result.label).toBe("All Time")
@@ -116,7 +116,7 @@ describe("DateFilterService", () => {
         args: ["2", "2026-02-15T09:00:00Z", "tick-122"],
       })
 
-      const result = await Effect.runPromise(buildDateFilter("ct", db))
+      const result: DateFilter = await Effect.runPromise(buildDateFilter("ct", db))
 
       expect(result.type).toBe("tick")
       expect(result.tickId).toBe("tick-123")
@@ -134,7 +134,7 @@ describe("DateFilterService", () => {
         args: ["2", "2026-02-15T09:00:00Z", "tick-122"],
       })
 
-      const result = await Effect.runPromise(buildDateFilter("lt", db))
+      const result: DateFilter = await Effect.runPromise(buildDateFilter("lt", db))
 
       expect(result.type).toBe("tick")
       expect(result.tickId).toBe("tick-122")
@@ -148,7 +148,7 @@ describe("DateFilterService", () => {
         args: ["1", "2026-02-15T10:00:00Z", "tick-123"],
       })
 
-      const result = await Effect.runPromise(buildDateFilter("lt", db))
+      const result: DateFilter = await Effect.runPromise(buildDateFilter("lt", db))
 
       expect(result.type).toBe("tick")
       expect(result.tickId).toBe("tick-123")
@@ -156,7 +156,7 @@ describe("DateFilterService", () => {
     })
 
     it("should handle no tick data (ct)", async () => {
-      const result = await Effect.runPromise(buildDateFilter("ct", db))
+      const result: DateFilter = await Effect.runPromise(buildDateFilter("ct", db))
 
       expect(result.type).toBe("tick")
       expect(result.tickId).toBeUndefined()
@@ -164,7 +164,7 @@ describe("DateFilterService", () => {
     })
 
     it("should handle no tick data (lt)", async () => {
-      const result = await Effect.runPromise(buildDateFilter("lt", db))
+      const result: DateFilter = await Effect.runPromise(buildDateFilter("lt", db))
 
       expect(result.type).toBe("tick")
       expect(result.tickId).toBeUndefined()
