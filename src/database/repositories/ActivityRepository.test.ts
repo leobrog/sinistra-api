@@ -130,12 +130,12 @@ describe("ActivityRepository", () => {
           expect(Option.getOrNull(retrieved.cmdr)).toBe("TestCommander");
           expect(retrieved.systems.length).toBe(1);
 
-          const retrievedSystem = retrieved.systems[0];
+          const retrievedSystem = retrieved.systems[0]!;
           expect(retrievedSystem.name).toBe("Sol");
           expect(retrievedSystem.address).toBe(BigInt(10477373803));
           expect(retrievedSystem.factions.length).toBe(1);
 
-          const retrievedFaction = retrievedSystem.factions[0];
+          const retrievedFaction = retrievedSystem.factions[0]!;
           expect(retrievedFaction.name).toBe("Federation Navy");
           expect(retrievedFaction.state).toBe("Boom");
           expect(Option.getOrNull(retrievedFaction.bvs)).toBe(100);
@@ -235,7 +235,7 @@ describe("ActivityRepository", () => {
         expect(Option.isSome(result)).toBe(true);
         if (Option.isSome(result)) {
           expect(result.value.systems.length).toBe(1);
-          expect(result.value.systems[0].name).toBe("System One");
+          expect(result.value.systems[0]!.name).toBe("System One");
         }
 
         // Update with new data
@@ -248,8 +248,8 @@ describe("ActivityRepository", () => {
           expect(result.value.tickid).toBe("tick_201");
           expect(Option.getOrNull(result.value.cmdr)).toBe("Commander2");
           expect(result.value.systems.length).toBe(1);
-          expect(result.value.systems[0].name).toBe("System Two");
-          expect(result.value.systems[0].factions[0].name).toBe(
+          expect(result.value.systems[0]!.name).toBe("System Two");
+          expect(result.value.systems[0]!.factions[0]!.name).toBe(
             "Updated Faction"
           );
         }
@@ -355,7 +355,7 @@ describe("ActivityRepository", () => {
           "2024-01-17T00:00:00Z"
         );
         expect(results.length).toBe(1);
-        expect(results[0].id).toBe(act2.id);
+        expect(results[0]!.id).toBe(act2.id);
       })
     );
   });
@@ -399,8 +399,8 @@ describe("ActivityRepository", () => {
 
         const results = yield* repo.findByCmdr(cmdr);
         expect(results.length).toBe(2);
-        expect(results[0].id).toBe(act1.id);
-        expect(results[1].id).toBe(act2.id);
+        expect(results[0]!.id).toBe(act1.id);
+        expect(results[1]!.id).toBe(act2.id);
       })
     );
   });

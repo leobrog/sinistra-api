@@ -1,21 +1,7 @@
 import { Effect, Layer, Option, Schema } from "effect";
 import { TursoClient } from "../client.ts";
 import { EventRepository } from "../../domain/repositories.ts";
-import {
-  Event,
-  MarketBuyEvent,
-  MarketSellEvent,
-  MissionCompletedEvent,
-  MissionCompletedInfluence,
-  FactionKillBondEvent,
-  MissionFailedEvent,
-  MultiSellExplorationDataEvent,
-  RedeemVoucherEvent,
-  SellExplorationDataEvent,
-  CommitCrimeEvent,
-  SyntheticGroundCZ,
-  SyntheticCZ,
-} from "../../domain/models.ts";
+import { Event } from "../../domain/models.ts";
 import { DatabaseError } from "../../domain/errors.ts";
 
 // Helper to map DB row to Event domain model

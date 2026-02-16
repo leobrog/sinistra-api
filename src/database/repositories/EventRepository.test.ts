@@ -9,14 +9,12 @@ import {
   MarketBuyEventId,
   MarketSellEventId,
   MissionCompletedEventId,
-  FactionKillBondEventId,
 } from "../../domain/ids.ts";
 import {
   Event,
   MarketBuyEvent,
   MarketSellEvent,
   MissionCompletedEvent,
-  FactionKillBondEvent,
 } from "../../domain/models.ts";
 
 // Helper to provide a fresh Test Layer for each test
@@ -318,8 +316,8 @@ describe("EventRepository", () => {
 
         const results = yield* repo.findByTickId(tickId);
         expect(results.length).toBe(2);
-        expect(results[0].id).toBe(event1.id);
-        expect(results[1].id).toBe(event2.id);
+        expect(results[0]!.id).toBe(event1.id);
+        expect(results[1]!.id).toBe(event2.id);
       })
     );
   });
@@ -375,7 +373,7 @@ describe("EventRepository", () => {
           "2024-01-17T00:00:00Z"
         );
         expect(results.length).toBe(1);
-        expect(results[0].id).toBe(event2.id);
+        expect(results[0]!.id).toBe(event2.id);
       })
     );
   });

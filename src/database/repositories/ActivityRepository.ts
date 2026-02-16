@@ -1,8 +1,9 @@
 import { Effect, Layer, Option, Schema } from "effect";
 import { TursoClient } from "../client.ts";
 import { ActivityRepository } from "../../domain/repositories.ts";
-import { Activity, System, Faction } from "../../domain/models.ts";
+import { Activity } from "../../domain/models.ts";
 import { DatabaseError } from "../../domain/errors.ts";
+import { ActivityId } from "../../domain/ids.ts";
 
 // Helper to map DB row to Activity domain model
 const mapRowToActivity = (row: any): unknown => ({
@@ -47,10 +48,8 @@ export const ActivityRepositoryLive = Layer.effect(
   Effect.gen(function* () {
     const client = yield* TursoClient;
     const decodeActivity = Schema.decodeUnknown(Activity);
-    const decodeSystem = Schema.decodeUnknown(System);
-    const decodeFaction = Schema.decodeUnknown(Faction);
 
-    return ActivityRepository.of({
+    const repo = ActivityRepository.of({
       upsert: (activity) =>
         Effect.gen(function* () {
           // Upsert main activity (INSERT OR REPLACE)
@@ -179,7 +178,7 @@ export const ActivityRepositoryLive = Layer.effect(
               try: () =>
                 client.execute({
                   sql: "SELECT * FROM faction WHERE system_id = ?",
-                  args: [systemRow.id],
+                  args: [systemRow.id as string],
                 }),
               catch: (error) =>
                 new DatabaseError({
@@ -192,12 +191,12 @@ export const ActivityRepositoryLive = Layer.effect(
             const factionsData = factionsResult.rows.map(mapRowToFaction);
 
             // Build raw system data with factions
-            const systemData = { ...mapRowToSystem(systemRow), factions: factionsData };
+            const systemData = Object.assign({}, mapRowToSystem(systemRow), { factions: factionsData });
             systemsData.push(systemData);
           }
 
           // Decode everything together
-          const activityData = { ...mapRowToActivity(activityRow), systems: systemsData };
+          const activityData = Object.assign({}, mapRowToActivity(activityRow), { systems: systemsData });
           const activity = yield* decodeActivity(activityData).pipe(
             Effect.mapError(
               (error) =>
@@ -224,16 +223,8 @@ export const ActivityRepositoryLive = Layer.effect(
           if (!activityRow) return Option.none();
 
           // Reuse findById to get full nested structure
-          const activityId = activityRow.id as string;
-          return yield* Effect.succeed(activityId).pipe(
-            Effect.flatMap((id) =>
-              Effect.gen(function* () {
-                return yield* ActivityRepository.pipe(
-                  Effect.flatMap((repo) => repo.findById(id))
-                );
-              })
-            )
-          );
+          const activityId = activityRow.id as ActivityId;
+          return yield* repo.findById(activityId);
         }),
 
       findByDateRange: (startDate, endDate) =>
@@ -252,10 +243,9 @@ export const ActivityRepositoryLive = Layer.effect(
           });
 
           const activities: Activity[] = [];
-          const repo = yield* ActivityRepository;
 
           for (const row of activityResult.rows) {
-            const maybeActivity = yield* repo.findById(row.id as string);
+            const maybeActivity = yield* repo.findById(row.id as ActivityId);
             if (Option.isSome(maybeActivity)) {
               activities.push(maybeActivity.value);
             }
@@ -277,10 +267,9 @@ export const ActivityRepositoryLive = Layer.effect(
           });
 
           const activities: Activity[] = [];
-          const repo = yield* ActivityRepository;
 
           for (const row of activityResult.rows) {
-            const maybeActivity = yield* repo.findById(row.id as string);
+            const maybeActivity = yield* repo.findById(row.id as ActivityId);
             if (Option.isSome(maybeActivity)) {
               activities.push(maybeActivity.value);
             }
@@ -289,5 +278,7 @@ export const ActivityRepositoryLive = Layer.effect(
           return activities;
         }),
     });
+    
+    return repo;
   })
 );
