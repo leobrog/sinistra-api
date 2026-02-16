@@ -314,7 +314,26 @@ Fix all errors present in a single file. Save down here the main changes that pr
 - Use `Object.assign({}, mapRow(row), { nested: [...] })` instead of spread for unknown types
 - In tests, use `!` after array access when we've verified the length
 
-**Remaining Work:** 402 errors remaining (from initial 447) 
+### ✅ Remaining Repositories Fixed (CmdrRepository, ColonyRepository, ProtectedFactionRepository, EddnRepository) - 17 errors → 0 errors
+
+**Key Changes:**
+1. **Import paths**: Fixed `.js` extension in imports
+   - `CmdrRepository.js` instead of `CmdrRepository`
+   
+2. **EddnRepository.ts fixes**:
+   - Removed unused imports: `mapRowToEddnMessage`, `decodeEddnMessage`, `EddnMessage`
+   - Fixed `populationFilter.split("-")` destructuring with non-null assertions: `parseInt(minStr!, 10)`
+   - Changed `import type { EddnRepository }` to regular import in system/handlers.ts
+   
+3. **Test file fixes**:
+   - Added model imports: `Colony`, `ProtectedFaction`
+   - Added type annotations to result variables: `const result: Colony[] = yield*`
+   - Cast IDs to string in map: `result.map(c => c.id as string)`
+   - Added non-null assertions: `result[0]!.property`
+
+**Tests**: All 25 tests passing (Colony: 7, ProtectedFaction: 8, Eddn: 10)
+
+**Remaining Work:** 330 errors remaining (from initial 347) 
 
 ### ✅ Date Filters Service Fixed (src/services/date-filters.ts) - 55 errors → 0 errors
 
