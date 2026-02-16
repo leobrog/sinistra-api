@@ -136,12 +136,12 @@ describe("ObjectiveRepository", () => {
           expect(Option.getOrNull(retrieved.priority)).toBe(1);
           expect(retrieved.targets.length).toBe(1);
 
-          const retrievedTarget = retrieved.targets[0];
+          const retrievedTarget = retrieved.targets[0]!;
           expect(Option.getOrNull(retrievedTarget.type)).toBe("GroundCZ");
           expect(Option.getOrNull(retrievedTarget.system)).toBe("Sol");
           expect(retrievedTarget.settlements.length).toBe(1);
 
-          const retrievedSettlement = retrievedTarget.settlements[0];
+          const retrievedSettlement = retrievedTarget.settlements[0]!;
           expect(Option.getOrNull(retrievedSettlement.name)).toBe(
             "Settlement Alpha"
           );
@@ -219,8 +219,8 @@ describe("ObjectiveRepository", () => {
         const results = yield* repo.findAll();
         expect(results.length).toBe(2);
         // Should be ordered by priority DESC
-        expect(results[0].id).toBe(obj1.id);
-        expect(results[1].id).toBe(obj2.id);
+        expect(results[0]!.id).toBe(obj1.id);
+        expect(results[1]!.id).toBe(obj2.id);
       })
     );
   });
@@ -374,7 +374,7 @@ describe("ObjectiveRepository", () => {
         if (Option.isSome(result)) {
           expect(Option.getOrNull(result.value.title)).toBe("Original Title");
           expect(result.value.targets.length).toBe(1);
-          expect(result.value.targets[0].id).toBe(targetId);
+          expect(result.value.targets[0]!.id).toBe(targetId);
         }
 
         // Update
@@ -387,8 +387,8 @@ describe("ObjectiveRepository", () => {
           expect(Option.getOrNull(result.value.title)).toBe("Updated Title");
           expect(Option.getOrNull(result.value.priority)).toBe(10);
           expect(result.value.targets.length).toBe(1);
-          expect(result.value.targets[0].id).toBe(newTargetId);
-          expect(Option.getOrNull(result.value.targets[0].type)).toBe(
+          expect(result.value.targets[0]!.id).toBe(newTargetId);
+          expect(Option.getOrNull(result.value.targets[0]!.type)).toBe(
             "Updated Type"
           );
         }

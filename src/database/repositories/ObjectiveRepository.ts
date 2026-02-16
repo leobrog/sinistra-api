@@ -1,8 +1,9 @@
 import { Effect, Layer, Option, Schema } from "effect";
 import { TursoClient } from "../client.ts";
 import { ObjectiveRepository } from "../../domain/repositories.ts";
-import { Objective, ObjectiveTarget, ObjectiveTargetSettlement } from "../../domain/models.ts";
+import { Objective } from "../../domain/models.ts";
 import { DatabaseError, ObjectiveNotFoundError } from "../../domain/errors.ts";
+import { ObjectiveId } from "../../domain/ids.ts";
 
 // Helper to map DB row to Objective domain model
 const mapRowToObjective = (row: any): unknown => ({
@@ -49,7 +50,7 @@ export const ObjectiveRepositoryLive = Layer.effect(
     const client = yield* TursoClient;
     const decodeObjective = Schema.decodeUnknown(Objective);
 
-    return ObjectiveRepository.of({
+    const repo = ObjectiveRepository.of({
       create: (objective) =>
         Effect.gen(function* () {
           // Insert main objective
@@ -170,7 +171,7 @@ export const ObjectiveRepositoryLive = Layer.effect(
               try: () =>
                 client.execute({
                   sql: "SELECT * FROM objective_target_settlement WHERE target_id = ?",
-                  args: [targetRow.id],
+                  args: [targetRow.id as string],
                 }),
               catch: (error) =>
                 new DatabaseError({
@@ -185,18 +186,16 @@ export const ObjectiveRepositoryLive = Layer.effect(
             );
 
             // Build raw target data with settlements
-            const targetData = {
-              ...mapRowToObjectiveTarget(targetRow),
+            const targetData = Object.assign({}, mapRowToObjectiveTarget(targetRow), {
               settlements: settlementsData,
-            };
+            });
             targetsData.push(targetData);
           }
 
           // Decode everything together
-          const objectiveData = {
-            ...mapRowToObjective(objectiveRow),
+          const objectiveData = Object.assign({}, mapRowToObjective(objectiveRow), {
             targets: targetsData,
-          };
+          });
           const objective = yield* decodeObjective(objectiveData).pipe(
             Effect.mapError(
               (error) =>
@@ -220,10 +219,9 @@ export const ObjectiveRepositoryLive = Layer.effect(
           });
 
           const objectives: Objective[] = [];
-          const repo = yield* ObjectiveRepository;
 
           for (const row of objectivesResult.rows) {
-            const maybeObjective = yield* repo.findById(row.id as string);
+            const maybeObjective = yield* repo.findById(row.id as ObjectiveId);
             if (Option.isSome(maybeObjective)) {
               objectives.push(maybeObjective.value);
             }
@@ -249,10 +247,9 @@ export const ObjectiveRepositoryLive = Layer.effect(
           });
 
           const objectives: Objective[] = [];
-          const repo = yield* ObjectiveRepository;
 
           for (const row of objectivesResult.rows) {
-            const maybeObjective = yield* repo.findById(row.id as string);
+            const maybeObjective = yield* repo.findById(row.id as ObjectiveId);
             if (Option.isSome(maybeObjective)) {
               objectives.push(maybeObjective.value);
             }
@@ -374,5 +371,7 @@ export const ObjectiveRepositoryLive = Layer.effect(
             new DatabaseError({ operation: "delete.objective", error }),
         }).pipe(Effect.asVoid),
     });
+    
+    return repo;
   })
 );
