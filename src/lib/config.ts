@@ -1,4 +1,4 @@
-import { Config, Effect, Layer, Option } from "effect"
+import { Config, Context, Effect, Layer, Option, Secret } from "effect"
 
 // Database Config
 export const DatabaseUrl = Config.string("DATABASE_URL").pipe(
@@ -107,66 +107,67 @@ export const EnableSchedulers = Config.boolean("ENABLE_SCHEDULERS").pipe(
 )
 
 // Composite Config
-export class AppConfig {
-  constructor(
+export class AppConfig extends Context.Tag("AppConfig")<
+  AppConfig,
+  {
     readonly database: {
-      url: string
-      eddnUrl: string
-    },
-    readonly server: {
-      port: number
-      host: string
-      nodeEnv: string
-      name: string
-      description: string
-      url: string
-      apiVersion: string
-      apiKey: string
-      frontendUrl: string
-    },
-    readonly faction: {
-      name: string
-    },
-    readonly jwt: {
-      secret: string
-      expiresIn: string
-    },
-    readonly discord: {
-      oauth: {
-        clientId: string
-        clientSecret: string
-        redirectUri: string
-      }
-      bot: {
-        token: string
-        serverId: string
-      }
-      webhooks: {
-        bgs: Option.Option<string>
-        shoutout: Option.Option<string>
-        conflict: Option.Option<string>
-        debug: Option.Option<string>
-      }
-    },
-    readonly inara: {
-      apiKey: string
-      appName: string
-      apiUrl: string
-    },
-    readonly eddn: {
-      zmqUrl: string
-      cleanupIntervalMs: number
-      messageRetentionMs: number
-    },
-    readonly tick: {
-      pollIntervalMs: number
-      apiUrl: string
-    },
-    readonly schedulers: {
-      enabled: boolean
+      readonly url: string
+      readonly eddnUrl: string
     }
-  ) {}
-}
+    readonly server: {
+      readonly port: number
+      readonly host: string
+      readonly nodeEnv: string
+      readonly name: string
+      readonly description: string
+      readonly url: string
+      readonly apiVersion: string
+      readonly apiKey: string
+      readonly frontendUrl: string
+    }
+    readonly faction: {
+      readonly name: string
+    }
+    readonly jwt: {
+      readonly secret: string
+      readonly expiresIn: string
+    }
+    readonly discord: {
+      readonly oauth: {
+        readonly clientId: string
+        readonly clientSecret: string
+        readonly redirectUri: string
+      }
+      readonly bot: {
+        readonly token: string
+        readonly serverId: string
+      }
+      readonly webhooks: {
+        readonly bgs: Option.Option<string>
+        readonly shoutout: Option.Option<string>
+        readonly conflict: Option.Option<string>
+        readonly debug: Option.Option<string>
+      }
+    }
+    readonly inara: {
+      readonly apiKey: string
+      readonly appName: string
+      readonly apiUrl: string
+    }
+    readonly eddn: {
+      readonly zmqUrl: string
+      readonly cleanupIntervalMs: number
+      readonly messageRetentionMs: number
+    }
+    readonly tick: {
+      readonly pollIntervalMs: number
+      readonly apiUrl: string
+    }
+    readonly schedulers: {
+      readonly enabled: boolean
+    }
+  }
+>() {}
 
 // Config Layer
 export const AppConfigLive = Layer.effect(
@@ -184,24 +185,24 @@ export const AppConfigLive = Layer.effect(
       description: ServerDescription,
       url: ServerUrl,
       apiVersion: ApiVersion,
-      apiKey: Config.string(ApiKey),
+      apiKey: ApiKey.pipe(Config.map(Secret.value)),
       frontendUrl: FrontendUrl,
     }),
     faction: Effect.all({
       name: FactionName,
     }),
     jwt: Effect.all({
-      secret: Config.string(JwtSecret),
+      secret: JwtSecret.pipe(Config.map(Secret.value)),
       expiresIn: JwtExpiresIn,
     }),
     discord: Effect.all({
       oauth: Effect.all({
         clientId: DiscordClientId,
-        clientSecret: Config.string(DiscordClientSecret),
+        clientSecret: DiscordClientSecret.pipe(Config.map(Secret.value)),
         redirectUri: DiscordRedirectUri,
       }),
       bot: Effect.all({
-        token: Config.string(DiscordBotToken),
+        token: DiscordBotToken.pipe(Config.map(Secret.value)),
         serverId: DiscordServerId,
       }),
       webhooks: Effect.all({
@@ -212,7 +213,7 @@ export const AppConfigLive = Layer.effect(
       }),
     }),
     inara: Effect.all({
-      apiKey: Config.string(InaraApiKey),
+      apiKey: InaraApiKey.pipe(Config.map(Secret.value)),
       appName: InaraAppName,
       apiUrl: InaraApiUrl,
     }),
@@ -228,5 +229,5 @@ export const AppConfigLive = Layer.effect(
     schedulers: Effect.all({
       enabled: EnableSchedulers,
     }),
-  }).pipe(Effect.map((config) => new AppConfig(...Object.values(config))))
+  })
 )

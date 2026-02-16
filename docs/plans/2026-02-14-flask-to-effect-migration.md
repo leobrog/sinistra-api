@@ -230,6 +230,65 @@ Commit: "feat(db): add all Sinistra domain migrations"
 
 ---
 
+## Phase 4b: Code core review
+
+We had an incremental number of errors in the commits, starting from here
+
+Commit	Task	Description	Errors
+c820638	Tasks 1-3	Domain layer	0 ✅
+88f006a	Task 4	Repository interfaces	2 (unused exports)
+244abdb	Task 5	Config service	11 ❌
+53f73f0	Tasks 6-12	Migrations	11
+d9dde12	Task 13	EventRepository	29
+9c061ca	Task 14	ActivityRepository	57
+95a688f	Task 15	ObjectiveRepository	79
+ba12140	Task 20	Date filters	133
+28370a4	Tasks 16-19	Remaining repos	225
+e082dca	Progress update	-	225
+b931c77	Task 24	Events API	399
+...	...	More APIs	600+
+
+Proceed systematically in fixing them. Start by looking at the errors generated chronologically, i.e. starto from Config service, then EventRepository, and so on.
+Use bun typecheck.
+Write tests for files which are missing one.
+
+Fix all errors present in a single file. Save down here the main changes that probably need to be applied to multiple files or have repercussions to other files, so that future instances of the llm can easily apply them.
+
+### ✅ Config Service Fixed (src/lib/config.ts) - 11 errors → 0 errors
+
+**Key Changes:**
+1. **Import Secret module**: Added `Secret` to Effect imports
+   ```ts
+   import { Config, Context, Effect, Layer, Option, Secret } from "effect"
+   ```
+
+2. **Convert AppConfig to Context.Tag**: Changed from a regular class to a service tag
+   ```ts
+   export class AppConfig extends Context.Tag("AppConfig")<
+     AppConfig,
+     { /* config shape */ }
+   >() {}
+   ```
+
+3. **Unwrap Config.secret properly**: Use `Config.map(Secret.value)` instead of `Config.string()`
+   ```ts
+   // Before: Config.string(JwtSecret) ❌
+   // After:  JwtSecret.pipe(Config.map(Secret.value)) ✅
+   ```
+
+4. **Remove constructor spread**: Layer.effect provides the config object directly
+   ```ts
+   // Before: Effect.map((config) => new AppConfig(...Object.values(config))) ❌
+   // After:  Effect.all({ /* config */ }) ✅
+   ```
+
+**Pattern to Apply Everywhere:**
+- All service classes should extend `Context.Tag("ServiceName")<ServiceName, ShapeType>()`
+- All `Config.secret()` values must be unwrapped with `Config.map(Secret.value)`
+- Layer.effect expects Tag as first argument, Effect as second (no constructor calls) 
+
+---
+
 ## Phase 5: Background Schedulers
 
 ### Task 36: EDDN Client Fiber
