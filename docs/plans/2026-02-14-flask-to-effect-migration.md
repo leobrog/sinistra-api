@@ -238,10 +238,10 @@ Commit	Task	Description	Errors
 c820638	Tasks 1-3	Domain layer	0 ✅
 88f006a	Task 4	Repository interfaces	2 (unused exports)
 244abdb	Task 5	Config service	11 ❌
-53f73f0	Tasks 6-12	Migrations	11
-d9dde12	Task 13	EventRepository	29
-9c061ca	Task 14	ActivityRepository	57
-95a688f	Task 15	ObjectiveRepository	79
+53f73f0	Tasks 6-12	Migrations	11 DONE
+d9dde12	Task 13	EventRepository	29 DONE
+9c061ca	Task 14	ActivityRepository	57 DONE
+95a688f	Task 15	ObjectiveRepository	79 DONE
 ba12140	Task 20	Date filters	133
 28370a4	Tasks 16-19	Remaining repos	225
 e082dca	Progress update	-	225
@@ -315,6 +315,42 @@ Fix all errors present in a single file. Save down here the main changes that pr
 - In tests, use `!` after array access when we've verified the length
 
 **Remaining Work:** 402 errors remaining (from initial 447) 
+
+### ✅ Date Filters Service Fixed (src/services/date-filters.ts) - 55 errors → 0 errors
+
+**Key Changes:**
+1. **Added DateFilterPeriodSchema export**: Created Schema.Literal for all valid period strings
+   ```ts
+   export const DateFilterPeriodSchema = Schema.Literal(
+     "cw", "lw", "cm", "lm", "2m", "y", "cd", "ld", "ct", "lt", "all"
+   )
+   export type DateFilterPeriod = typeof DateFilterPeriodSchema.Type
+   ```
+
+2. **Fixed LibsqlClient import**: Changed from non-existent `LibsqlClient` to `Client`
+   ```ts
+   // Before: import { LibsqlClient } from "@libsql/client" ❌
+   // After:  import type { Client } from "@libsql/client" ✅
+   ```
+
+3. **Fixed test file imports**: Changed to .js extension for ES module compatibility
+   ```ts
+   // Before: import { buildDateFilter } from "./date-filters" ❌
+   // After:  import { buildDateFilter } from "./date-filters.js" ✅
+   ```
+
+4. **Added type annotations in tests**: Annotated all test results to avoid 'unknown' type errors
+   ```ts
+   const result: DateFilter = await Effect.runPromise(buildDateFilter("cw"))
+   ```
+
+**Pattern to Apply Everywhere:**
+- All @libsql/client imports should use `type { Client }` not `LibsqlClient`
+- All relative imports in test files must use `.js` extensions
+- All Effect.runPromise results in tests should be type-annotated
+- Export Schema types for all domain constants/literals that need validation
+
+**Remaining Work:** 347 errors remaining (from 402) 
 
 ---
 
