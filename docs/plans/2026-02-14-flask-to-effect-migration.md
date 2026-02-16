@@ -285,7 +285,36 @@ Fix all errors present in a single file. Save down here the main changes that pr
 **Pattern to Apply Everywhere:**
 - All service classes should extend `Context.Tag("ServiceName")<ServiceName, ShapeType>()`
 - All `Config.secret()` values must be unwrapped with `Config.map(Secret.value)`
-- Layer.effect expects Tag as first argument, Effect as second (no constructor calls) 
+- Layer.effect expects Tag as first argument, Effect as second (no constructor calls)
+
+### ✅ EventRepository Fixed (src/database/repositories/EventRepository.test.ts) - 3 errors → 0 errors
+
+
+**Pattern to Apply:**
+- Use `!` assertion after array access in tests where we've verified length: `array[0]!.property`
+
+### ✅ ActivityRepository Fixed (src/database/repositories/ActivityRepository.ts + test) - 25 errors → 0 errors
+
+### ✅ ObjectiveRepository Fixed (src/database/repositories/ObjectiveRepository.ts + test) - 20 errors → 0 errors
+
+**Applied same patterns as ActivityRepository:**
+- Removed unused imports (`ObjectiveTarget`, `ObjectiveTargetSettlement`)
+- Added `ObjectiveId` import
+- Changed to `const repo = ObjectiveRepository.of({...})` pattern with `return repo`
+- Fixed spread types with `Object.assign({}, mapRow(row), { nested: [...] })`
+- Cast `row.id` to `ObjectiveId` branded type
+- Cast `targetRow.id as string` for LibSQL execute call
+- Removed circular `yield* ObjectiveRepository` dependencies
+- Added non-null assertions in test file for array/property access
+
+**Pattern to Apply Everywhere:**
+- All Repository Live implementations should follow the "local repo variable" pattern
+- Always cast `row.id` to the appropriate branded ID type (ActivityId, EventId, etc.)
+- Always cast row properties to remove `| undefined` when passing to `client.execute()`
+- Use `Object.assign({}, mapRow(row), { nested: [...] })` instead of spread for unknown types
+- In tests, use `!` after array access when we've verified the length
+
+**Remaining Work:** 402 errors remaining (from initial 447) 
 
 ---
 
