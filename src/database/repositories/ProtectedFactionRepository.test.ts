@@ -5,6 +5,7 @@ import { ProtectedFactionRepositoryLive } from "./ProtectedFactionRepository.ts"
 import { TursoClient } from "../client.ts"
 import { createClient } from "@libsql/client"
 import { ProtectedFactionId } from "../../domain/ids.ts"
+import { ProtectedFaction } from "../../domain/models.ts"
 
 // Helper to provide a fresh Test Layer for each test
 const ClientLayer = Layer.effect(
@@ -155,8 +156,8 @@ describe("ProtectedFactionRepository", () => {
         yield* repo.create(faction2)
         yield* repo.create(faction3)
 
-        const result = yield* repo.findProtected()
-        const ids = result.map(f => f.id)
+        const result: ProtectedFaction[] = yield* repo.findProtected()
+        const ids = result.map(f => f.id as string)
         expect(ids).toContain("faction_prot_1")
         expect(ids).toContain("faction_prot_2")
         expect(ids).not.toContain("faction_unprot")

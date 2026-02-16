@@ -1,10 +1,9 @@
 import { Effect, Layer, Option, Schema } from "effect";
 import { TursoClient } from "../client.ts";
 import { EddnRepository } from "../../domain/repositories.ts";
-import { EddnMessage, EddnSystemInfo, EddnFaction, EddnConflict, EddnPowerplay } from "../../domain/models.ts";
+import { EddnSystemInfo, EddnFaction, EddnConflict, EddnPowerplay } from "../../domain/models.ts";
 import { DatabaseError } from "../../domain/errors.ts";
 import {
-    mapRowToEddnMessage,
     mapRowToEddnSystemInfo,
     mapRowToEddnFaction,
     mapRowToEddnConflict,
@@ -15,7 +14,6 @@ export const EddnRepositoryLive = Layer.effect(
     EddnRepository,
     Effect.gen(function* () {
         const client = yield* TursoClient
-        const decodeEddnMessage = Schema.decodeUnknown(EddnMessage)
         const decodeEddnSystemInfo = Schema.decodeUnknown(EddnSystemInfo)
         const decodeEddnFaction = Schema.decodeUnknown(EddnFaction)
         const decodeEddnConflict = Schema.decodeUnknown(EddnConflict)
@@ -586,8 +584,8 @@ export const EddnRepositoryLive = Layer.effect(
                     args = [popVal]
                 } else if (populationFilter.includes("-")) {
                     const [minStr, maxStr] = populationFilter.split("-")
-                    const popMin = parseInt(minStr, 10)
-                    const popMax = parseInt(maxStr, 10)
+                    const popMin = parseInt(minStr!, 10)
+                    const popMax = parseInt(maxStr!, 10)
                     sql = "SELECT DISTINCT system_name FROM eddn_system_info WHERE population >= ? AND population <= ?"
                     args = [popMin, popMax]
                 } else {

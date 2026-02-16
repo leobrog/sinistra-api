@@ -5,6 +5,7 @@ import { ColonyRepositoryLive } from "./ColonyRepository.ts"
 import { TursoClient } from "../client.ts"
 import { createClient } from "@libsql/client"
 import { ColonyId } from "../../domain/ids.ts"
+import { Colony } from "../../domain/models.ts"
 
 // Helper to provide a fresh Test Layer for each test
 const ClientLayer = Layer.effect(
@@ -91,10 +92,10 @@ describe("ColonyRepository", () => {
         yield* repo.create(colony1)
         yield* repo.create(colony2)
 
-        const result = yield* repo.findAll()
+        const result: Colony[] = yield* repo.findAll()
         expect(result.length).toBeGreaterThanOrEqual(2)
         // Should be ordered by priority DESC
-        const ids = result.map(c => c.id)
+        const ids = result.map(c => c.id as string)
         expect(ids).toContain("colony_all_1")
         expect(ids).toContain("colony_all_2")
       })
@@ -133,9 +134,9 @@ describe("ColonyRepository", () => {
         yield* repo.create(colony2)
         yield* repo.create(colony3)
 
-        const result = yield* repo.findByCmdr("CMDR Specific")
+        const result: Colony[] = yield* repo.findByCmdr("CMDR Specific")
         expect(result.length).toBe(2)
-        const ids = result.map(c => c.id)
+        const ids = result.map(c => c.id as string)
         expect(ids).toContain("colony_cmdr_1")
         expect(ids).toContain("colony_cmdr_2")
         expect(ids).not.toContain("colony_cmdr_3")
@@ -166,9 +167,9 @@ describe("ColonyRepository", () => {
         yield* repo.create(colony1)
         yield* repo.create(colony2)
 
-        const result = yield* repo.findBySystem("Common System")
+        const result: Colony[] = yield* repo.findBySystem("Common System")
         expect(result.length).toBe(2)
-        const ids = result.map(c => c.id)
+        const ids = result.map(c => c.id as string)
         expect(ids).toContain("colony_sys_1")
         expect(ids).toContain("colony_sys_2")
       })
@@ -198,8 +199,8 @@ describe("ColonyRepository", () => {
         yield* repo.create(colony1)
         yield* repo.create(colony2)
 
-        const result = yield* repo.findPriority()
-        const ids = result.map(c => c.id)
+        const result: Colony[] = yield* repo.findPriority()
+        const ids = result.map(c => c.id as string)
         expect(ids).toContain("colony_pri_1")
         expect(ids).not.toContain("colony_pri_2") // priority 0 should be excluded
       })

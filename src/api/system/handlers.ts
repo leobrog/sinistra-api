@@ -1,6 +1,6 @@
 import { Effect, Option } from "effect"
 import { HttpApiSchema } from "effect"
-import type { EddnRepository } from "../../domain/repositories"
+import { EddnRepository } from "../../domain/repositories"
 import type { SystemSummaryQuery } from "./dtos"
 import {
   SystemDetailResponse,

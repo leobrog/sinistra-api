@@ -273,8 +273,8 @@ describe("EddnRepository", () => {
 
         const result = yield* repo.findConflictsInSystem("Conflict System")
         expect(result.length).toBe(1)
-        expect(Option.getOrNull(result[0].faction1)).toBe("Red Faction")
-        expect(Option.getOrNull(result[0].wonDays1)).toBe(2)
+        expect(Option.getOrNull(result[0]!.faction1)).toBe("Red Faction")
+        expect(Option.getOrNull(result[0]!.wonDays1)).toBe(2)
       })
     )
   })
