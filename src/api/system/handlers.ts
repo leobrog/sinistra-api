@@ -1,16 +1,18 @@
 import { Effect, Option } from "effect"
-import { HttpApiSchema } from "effect"
-import { EddnRepository } from "../../domain/repositories"
-import type { SystemSummaryQuery } from "./dtos"
+import { HttpApiBuilder } from "@effect/platform"
+import { Api } from "../index.js"
+import { EddnRepository } from "../../domain/repositories.js"
+import type { SystemSummaryQuery } from "./dtos.js"
 import {
   SystemDetailResponse,
   SystemListResponse,
   SystemSearchErrorResponse,
-  EddnSystemInfo,
-  EddnFaction,
-  EddnConflict,
-  EddnPowerplay,
-} from "./dtos"
+  EddnSystemInfo as EddnSystemInfoDTO,
+  EddnConflict as EddnConflictDTO,
+  EddnFaction as EddnFactionDTO,
+  EddnPowerplay as EddnPowerplayDTO,
+} from "./dtos.js"
+import type * as DomainModels from "../../domain/models.js"
 
 const MAX_SYSTEMS = 400
 
@@ -18,6 +20,81 @@ const MAX_SYSTEMS = 400
 const isTruthy = (value: string | undefined): boolean => {
   if (!value) return false
   return ["1", "true", "yes"].includes(value.toLowerCase())
+}
+
+// Map domain models to DTOs
+const mapSystemInfo = (domain: DomainModels.EddnSystemInfo): EddnSystemInfoDTO => {
+  return new EddnSystemInfoDTO({
+    id: domain.id as unknown as number, // Cast branded UUID to number for DTO
+    system_name: domain.systemName,
+    system_address: undefined, // Not in domain model
+    controlling_faction: Option.getOrUndefined(domain.controllingFaction),
+    controlling_power: Option.getOrUndefined(domain.controllingPower),
+    population: Option.getOrUndefined(domain.population),
+    allegiance: Option.getOrUndefined(domain.allegiance),
+    government: Option.getOrUndefined(domain.government),
+    security: Option.getOrUndefined(domain.security),
+    economy: undefined, // Not in domain model
+    second_economy: undefined, // Not in domain model
+    timestamp: domain.updatedAt.toISOString(),
+  })
+}
+
+const mapConflict = (domain: DomainModels.EddnConflict): EddnConflictDTO => {
+  return new EddnConflictDTO({
+    id: domain.id as unknown as number,
+    system_name: domain.systemName,
+    war_type: Option.getOrUndefined(domain.warType),
+    status: Option.getOrUndefined(domain.status),
+    faction1: Option.getOrUndefined(domain.faction1),
+    faction1_stake: Option.getOrUndefined(domain.stake1),
+    faction1_days_won: Option.getOrUndefined(domain.wonDays1),
+    faction2: Option.getOrUndefined(domain.faction2),
+    faction2_stake: Option.getOrUndefined(domain.stake2),
+    faction2_days_won: Option.getOrUndefined(domain.wonDays2),
+    timestamp: domain.updatedAt.toISOString(),
+  })
+}
+
+const mapFaction = (domain: DomainModels.EddnFaction): EddnFactionDTO => {
+  // Convert JSON fields to strings
+  const stringifyJson = (opt: Option.Option<unknown>): string | undefined => {
+    if (Option.isNone(opt)) return undefined
+    const val = opt.value
+    return typeof val === "string" ? val : JSON.stringify(val)
+  }
+
+  return new EddnFactionDTO({
+    id: domain.id as unknown as number,
+    system_name: domain.systemName,
+    name: domain.name,
+    allegiance: Option.getOrUndefined(domain.allegiance),
+    government: Option.getOrUndefined(domain.government),
+    influence: Option.getOrUndefined(domain.influence),
+    state: Option.getOrUndefined(domain.state),
+    happiness: undefined, // Not in domain model
+    active_states: stringifyJson(domain.activeStates),
+    pending_states: stringifyJson(domain.pendingStates),
+    recovering_states: stringifyJson(domain.recoveringStates),
+    timestamp: domain.updatedAt.toISOString(),
+  })
+}
+
+const mapPowerplay = (domain: DomainModels.EddnPowerplay): EddnPowerplayDTO => {
+  // Convert power JSON field to string
+  const stringifyJson = (opt: Option.Option<unknown>): string | undefined => {
+    if (Option.isNone(opt)) return undefined
+    const val = opt.value
+    return typeof val === "string" ? val : JSON.stringify(val)
+  }
+
+  return new EddnPowerplayDTO({
+    id: domain.id as unknown as number,
+    system_name: domain.systemName,
+    power: stringifyJson(domain.power),
+    powerplay_state: Option.getOrUndefined(domain.powerplayState),
+    timestamp: domain.updatedAt.toISOString(),
+  })
 }
 
 export const handleGetSystemSummary = (
@@ -44,14 +121,13 @@ export const handleGetSystemSummary = (
       query.powerplay_state ||
       query.cf_in_conflict
 
-    // If no filters and no path system name, return error
+    // If no filters and no path system name, return error response
     if (!hasFilters && Option.isNone(systemName)) {
-      return yield* Effect.fail(
-        HttpApiSchema.HttpApiDecodeError.make({
-          status: 400,
-          error: "Please provide at least one search filter (system name, faction, state, etc.)",
-        })
-      )
+      return new SystemSearchErrorResponse({
+        error: "Please provide at least one search filter (system name, faction, state, etc.)",
+        count: 0,
+        systems: [],
+      })
     }
 
     // If filters provided or no path system name, return filtered list
@@ -92,7 +168,8 @@ export const handleGetSystemSummary = (
       if (query.state_government) {
         const parts = query.state_government.split(":")
         if (parts.length === 2) {
-          const [stateVal, govVal] = parts
+          const stateVal = parts[0]!
+          const govVal = parts[1]!
           const matches = yield* eddnRepo.findSystemsByStateAndGovernment(stateVal, govVal)
           systems = systems === null ? new Set(matches) : new Set([...systems].filter((s) => matches.includes(s)))
         }
@@ -143,12 +220,11 @@ export const handleGetSystemSummary = (
       // CF in conflict (requires controlling_faction to be set)
       if (isTruthy(query.cf_in_conflict)) {
         if (!query.controlling_faction) {
-          return yield* Effect.fail(
-            HttpApiSchema.HttpApiDecodeError.make({
-              status: 400,
-              error: "For cf_in_conflict, controlling_faction must be specified.",
-            })
-          )
+          return new SystemSearchErrorResponse({
+            error: "For cf_in_conflict, controlling_faction must be specified.",
+            count: 0,
+            systems: [],
+          })
         }
         const cfSystems = yield* eddnRepo.findSystemsByControllingFaction(query.controlling_faction)
         const conflictSystems = yield* eddnRepo.findSystemsWithConflictsForFaction(query.controlling_faction)
@@ -156,14 +232,13 @@ export const handleGetSystemSummary = (
         systems = systems === null ? new Set(cfInConflictSystems) : new Set([...systems].filter((s) => cfInConflictSystems.includes(s)))
       }
 
-      // If still no systems found, return error
+      // If still no systems found, return error response
       if (systems === null || systems.size === 0) {
-        return yield* Effect.fail(
-          HttpApiSchema.HttpApiDecodeError.make({
-            status: 400,
-            error: "Please provide at least one search filter (system name, faction, state, etc.)",
-          })
-        )
+        return new SystemSearchErrorResponse({
+          error: "No systems found matching the provided filters.",
+          count: 0,
+          systems: [],
+        })
       }
 
       // If too many systems, return error with limited list
@@ -190,10 +265,10 @@ export const handleGetSystemSummary = (
 
             return Option.some(
               new SystemDetailResponse({
-                system_info: Option.getOrThrow(systemInfo),
-                conflicts,
-                factions,
-                powerplays,
+                system_info: mapSystemInfo(Option.getOrThrow(systemInfo)),
+                conflicts: conflicts.map(mapConflict) as readonly EddnConflictDTO[],
+                factions: factions.map(mapFaction) as readonly EddnFactionDTO[],
+                powerplays: powerplays.map(mapPowerplay) as readonly EddnPowerplayDTO[],
               })
             )
           })
@@ -204,7 +279,7 @@ export const handleGetSystemSummary = (
       const validSystems = systemDetails.filter(Option.isSome).map(Option.getOrThrow)
 
       return new SystemListResponse({
-        systems: validSystems,
+        systems: validSystems as readonly SystemDetailResponse[],
         count: validSystems.length,
       })
     }
@@ -214,12 +289,11 @@ export const handleGetSystemSummary = (
     const systemInfo = yield* eddnRepo.getSystemInfo(sysName)
 
     if (Option.isNone(systemInfo)) {
-      return yield* Effect.fail(
-        HttpApiSchema.HttpApiDecodeError.make({
-          status: 404,
-          error: `System '${sysName}' not found`,
-        })
-      )
+      return new SystemSearchErrorResponse({
+        error: `System '${sysName}' not found`,
+        count: 0,
+        systems: [],
+      })
     }
 
     const conflicts = yield* eddnRepo.getConflictsForSystem(sysName)
@@ -227,9 +301,30 @@ export const handleGetSystemSummary = (
     const powerplays = yield* eddnRepo.getPowerplayForSystem(sysName)
 
     return new SystemDetailResponse({
-      system_info: Option.getOrThrow(systemInfo),
-      conflicts,
-      factions,
-      powerplays,
+      system_info: mapSystemInfo(Option.getOrThrow(systemInfo)),
+      conflicts: conflicts.map(mapConflict) as readonly EddnConflictDTO[],
+      factions: factions.map(mapFaction) as readonly EddnFactionDTO[],
+      powerplays: powerplays.map(mapPowerplay) as readonly EddnPowerplayDTO[],
     })
   })
+
+// Handler wrappers for HTTP API endpoints
+export const getSystemSummaryHandler = HttpApiBuilder.handler(
+  Api,
+  "system",
+  "getSystemSummary",
+  ({ path, urlParams }) => handleGetSystemSummary(Option.some(path.systemName), urlParams)
+)
+
+export const getSystemSummaryNoParamHandler = HttpApiBuilder.handler(
+  Api,
+  "system",
+  "getSystemSummaryNoParam",
+  ({ urlParams }) => handleGetSystemSummary(Option.none(), urlParams)
+)
+
+export const SystemApiLive = HttpApiBuilder.group(Api, "system", (handlers) =>
+  handlers
+    .handle("getSystemSummary", getSystemSummaryHandler)
+    .handle("getSystemSummaryNoParam", getSystemSummaryNoParamHandler)
+)

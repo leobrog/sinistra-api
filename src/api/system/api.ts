@@ -6,6 +6,8 @@ import {
   SystemListResponse,
   SystemSearchErrorResponse,
 } from "./dtos.js"
+import { ApiKeyAuth, ApiKeyError } from "../middleware/apikey.js"
+import { DatabaseError } from "../../domain/errors.js"
 
 // Union type for response (can be single system, list, or error)
 const SystemSummaryResponse = Schema.Union(SystemDetailResponse, SystemListResponse, SystemSearchErrorResponse)
@@ -14,8 +16,11 @@ export const SystemApi = HttpApiGroup.make("system")
   .add(
     HttpApiEndpoint.get("getSystemSummary", "/:systemName")
       .addSuccess(SystemSummaryResponse)
-      .setPath(Schema.Struct({ systemName: Schema.optionalWith(Schema.String, { nullable: true }) }))
+      .addError(ApiKeyError, { status: 401 })
+      .addError(DatabaseError, { status: 500 })
+      .setPath(Schema.Struct({ systemName: Schema.String })) // Path params cannot be nullable
       .setUrlParams(SystemSummaryQuery)
+      .middleware(ApiKeyAuth)
       .annotate(OpenApi.Title, "Get System Summary")
       .annotate(
         OpenApi.Description,
@@ -43,9 +48,11 @@ Returns up to 400 systems. Use filters to narrow results.`
   .add(
     HttpApiEndpoint.get("getSystemSummaryNoParam", "/")
       .addSuccess(SystemSummaryResponse)
+      .addError(ApiKeyError, { status: 401 })
+      .addError(DatabaseError, { status: 500 })
       .setUrlParams(SystemSummaryQuery)
+      .middleware(ApiKeyAuth)
       .annotate(OpenApi.Title, "Search Systems")
       .annotate(OpenApi.Description, "Search systems using query parameters. Same as getSystemSummary but without path parameter.")
   )
   .prefix("/api/system-summary")
-  .annotateEndpoints(OpenApi.Security, "apiKey")
