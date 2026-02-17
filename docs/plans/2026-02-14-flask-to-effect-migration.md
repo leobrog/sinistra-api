@@ -268,7 +268,7 @@ Commit: "feat(db): add all Sinistra domain migrations"
 - File: `src/api/events/handlers.test.ts`
 - Commit: "test(api): add Events API integration test"
 
-### Task 37: Activities API Integration Test
+### ✅ Task 37: Activities API Integration Test
 - **Flask**: `PUT /activities` (upsert), `GET /api/activities` (query with date filters)
 - **Dashboard**: BGS activity tracking with tick-based filtering
 - **Test**: Upsert nested activities, query by tick/date filters, verify system/faction relationships
@@ -379,32 +379,32 @@ describe("Events API Integration", () => {
 
 ## Phase 5: Background Schedulers
 
-### Task 36: EDDN Client Fiber
+### Task EDDN Client Fiber
 - File: `src/schedulers/eddn-client.ts`
 - Logic: ZMQ consumer, upsert EDDN data, cleanup job
 - Commit: "feat(schedulers): add EDDN client"
 
-### Task 37: Tick Monitor Fiber
+### Task Tick Monitor Fiber
 - File: `src/schedulers/tick-monitor.ts`
 - Logic: Poll tick, detect changes, notify Discord
 - Commit: "feat(schedulers): add tick monitor"
 
-### Task 38: Shoutout Scheduler Fiber
+### Task Shoutout Scheduler Fiber
 - File: `src/schedulers/shoutout-scheduler.ts`
 - Logic: Run queries on tick change, send to Discord
 - Commit: "feat(schedulers): add shoutout scheduler"
 
-### Task 39: Conflict Scheduler Fiber
+### Task Conflict Scheduler Fiber
 - File: `src/schedulers/conflict-scheduler.ts`
 - Logic: Monitor conflicts, send notifications
 - Commit: "feat(schedulers): add conflict scheduler"
 
-### Task 40: Inara Sync Scheduler Fiber
+### Task Inara Sync Scheduler Fiber
 - File: `src/schedulers/inara-sync.ts`
 - Logic: Periodic cmdr sync with Inara API
 - Commit: "feat(schedulers): add Inara sync"
 
-### Task 41: Compose Schedulers
+### Task Compose Schedulers
 - File: `src/schedulers/index.ts`
 - Fork all scheduler fibers
 - Commit: "feat(schedulers): compose all schedulers"
@@ -413,17 +413,17 @@ describe("Events API Integration", () => {
 
 ## Phase 6: Server Composition
 
-### Task 42: Main Server
+### Task Main Server
 - File: `src/main.ts`
 - Wire all layers together
 - Commit: "feat: compose full server"
 
-### Task 43: Static Dashboard Serving
+### Task Static Dashboard Serving
 - File: `src/main.ts` or `src/api/static.ts`
 - Serve React SPA from ../dashboard/dist
 - Commit: "feat: add dashboard serving"
 
-### Task 44: Environment Config
+### Task Environment Config
 - File: `.env.example`
 - Document all required env vars
 - Commit: "docs: add env example"
@@ -432,12 +432,12 @@ describe("Events API Integration", () => {
 
 ## Phase 7: Testing & Verification
 
-### Task 45: Integration Tests
+### Task Integration Tests
 - Files: `src/api/*/handlers.test.ts`
 - Test: Full API flows with in-memory DB
 - Commit: "test: add integration tests"
 
-### Task 46: Data Migration Script
+### Task Data Migration Script
 - File: `scripts/migrate-from-flask.ts`
 - **Challenge**: Flask uses INTEGER auto-increment IDs, we use UUID TEXT IDs
 - **Strategy**:
@@ -456,7 +456,7 @@ describe("Events API Integration", () => {
   - EDDN tables from separate DB (~5 tables)
 - Commit: "feat(scripts): add Flask data migration with ID conversion"
 
-### Task 47: Full Verification
+### Task Full Verification
 - Run: typecheck, test, build, manual verification
 - Commit: "chore: verify full system"
 
