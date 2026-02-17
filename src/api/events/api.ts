@@ -1,7 +1,7 @@
 import { HttpApiGroup, HttpApiEndpoint } from "@effect/platform"
-import { PostEventsRequest, PostEventsResponse } from "./dtos.ts"
-import { DatabaseError } from "../../domain/errors.ts"
-import { ApiKeyAuth, ApiKeyError } from "../middleware/apikey.ts"
+import { PostEventsRequest, PostEventsResponse } from "./dtos.js"
+import { DatabaseError } from "../../domain/errors.js"
+import { ApiKeyAuth, ApiKeyError } from "../middleware/apikey.js"
 
 /**
  * Events API Group

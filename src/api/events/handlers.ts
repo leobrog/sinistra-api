@@ -1,8 +1,9 @@
-import { Effect, Option, Array as EffectArray } from "effect"
+import { Effect, Option } from "effect"
 import { HttpApiBuilder } from "@effect/platform"
-import { EventsApi } from "./api.ts"
-import { EventRepository } from "../../domain/repositories.ts"
-import { EventData } from "./dtos.ts"
+import { v4 as uuid } from "uuid"
+import { EventsApi } from "./api.js"
+import { EventRepository } from "../../domain/repositories.js"
+import type { EventData } from "./dtos.js"
 import {
   Event,
   MarketBuyEvent,
@@ -17,8 +18,8 @@ import {
   CommitCrimeEvent,
   SyntheticCZ,
   SyntheticGroundCZ,
-} from "../../domain/models.ts"
-import {
+} from "../../domain/models.js"
+import type {
   EventId,
   MarketBuyEventId,
   MarketSellEventId,
@@ -32,7 +33,7 @@ import {
   CommitCrimeEventId,
   SyntheticCZId,
   SyntheticGroundCZId,
-} from "../../domain/ids.ts"
+} from "../../domain/ids.js"
 
 /**
  * Extract CZ type from event data (for Synthetic CZ events)
@@ -48,7 +49,7 @@ const extractCzType = (data: EventData): Option.Option<string> => {
  * Convert EventData DTO to domain Event entity
  */
 const eventDataToEvent = (data: EventData): Event => {
-  const eventId = EventId.make()
+  const eventId = uuid() as EventId
 
   return new Event({
     id: eventId,
@@ -87,7 +88,7 @@ const createSubEvents = (
       return {
         marketBuy: [
           new MarketBuyEvent({
-            id: MarketBuyEventId.make(),
+            id: uuid() as MarketBuyEventId,
             eventId,
             stock: Option.fromNullable(data.Stock),
             stockBracket: Option.fromNullable(data.StockBracket),
@@ -101,7 +102,7 @@ const createSubEvents = (
       return {
         marketSell: [
           new MarketSellEvent({
-            id: MarketSellEventId.make(),
+            id: uuid() as MarketSellEventId,
             eventId,
             demand: Option.fromNullable(data.Demand),
             demandBracket: Option.fromNullable(data.DemandBracket),
@@ -114,7 +115,7 @@ const createSubEvents = (
 
     case "MissionCompleted": {
       const missionEvent = new MissionCompletedEvent({
-        id: MissionCompletedEventId.make(),
+        id: uuid() as MissionCompletedEventId,
         eventId,
         awardingFaction: Option.fromNullable(data.Faction),
         missionName: Option.fromNullable(data.Name),
@@ -136,8 +137,8 @@ const createSubEvents = (
         for (const infl of influenceEntries) {
           influences.push(
             new MissionCompletedInfluence({
-              id: MissionCompletedInfluenceId.make(),
-              missionId: eventId,
+              id: uuid() as MissionCompletedInfluenceId,
+              missionId: missionEvent.id,
               system: Option.fromNullable(infl.SystemAddress),
               influence: Option.fromNullable(infl.Influence),
               trend: Option.fromNullable(infl.Trend),
@@ -160,7 +161,7 @@ const createSubEvents = (
       return {
         factionKillBond: [
           new FactionKillBondEvent({
-            id: FactionKillBondEventId.make(),
+            id: uuid() as FactionKillBondEventId,
             eventId,
             killerShip: Option.fromNullable(data.KillerShip),
             awardingFaction: Option.fromNullable(data.AwardingFaction),
@@ -174,7 +175,7 @@ const createSubEvents = (
       return {
         missionFailed: [
           new MissionFailedEvent({
-            id: MissionFailedEventId.make(),
+            id: uuid() as MissionFailedEventId,
             eventId,
             missionName: Option.fromNullable(data.Name),
             awardingFaction: Option.fromNullable(data.AwardingFaction),
@@ -187,7 +188,7 @@ const createSubEvents = (
       return {
         multiSellExplorationData: [
           new MultiSellExplorationDataEvent({
-            id: MultiSellExplorationDataEventId.make(),
+            id: uuid() as MultiSellExplorationDataEventId,
             eventId,
             totalEarnings: Option.fromNullable(data.TotalEarnings),
           }),
@@ -204,7 +205,7 @@ const createSubEvents = (
           const facObj = fac as any
           vouchers.push(
             new RedeemVoucherEvent({
-              id: RedeemVoucherEventId.make(),
+              id: uuid() as RedeemVoucherEventId,
               eventId,
               amount: Option.fromNullable(facObj.Amount),
               faction: Option.fromNullable(facObj.Faction),
@@ -216,7 +217,7 @@ const createSubEvents = (
         // Fallback for events without Factions array
         vouchers.push(
           new RedeemVoucherEvent({
-            id: RedeemVoucherEventId.make(),
+            id: uuid() as RedeemVoucherEventId,
             eventId,
             amount: Option.fromNullable(data.Amount),
             faction: Option.fromNullable(data.Faction),
@@ -232,7 +233,7 @@ const createSubEvents = (
       return {
         sellExplorationData: [
           new SellExplorationDataEvent({
-            id: SellExplorationDataEventId.make(),
+            id: uuid() as SellExplorationDataEventId,
             eventId,
             earnings: Option.fromNullable(data.TotalEarnings),
           }),
@@ -243,7 +244,7 @@ const createSubEvents = (
       return {
         commitCrime: [
           new CommitCrimeEvent({
-            id: CommitCrimeEventId.make(),
+            id: uuid() as CommitCrimeEventId,
             eventId,
             crimeType: Option.fromNullable(data.CrimeType),
             faction: Option.fromNullable(data.Faction),
@@ -261,7 +262,7 @@ const createSubEvents = (
       return {
         syntheticCZ: [
           new SyntheticCZ({
-            id: SyntheticCZId.make(),
+            id: uuid() as SyntheticCZId,
             eventId,
             czType,
             faction: Option.fromNullable(faction),
@@ -279,7 +280,7 @@ const createSubEvents = (
       return {
         syntheticGroundCZ: [
           new SyntheticGroundCZ({
-            id: SyntheticGroundCZId.make(),
+            id: uuid() as SyntheticGroundCZId,
             eventId,
             czType,
             settlement: Option.fromNullable(data.settlement),

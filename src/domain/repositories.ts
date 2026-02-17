@@ -99,7 +99,7 @@ export class EventRepository extends Context.Tag('EventRepository')<
         createEvent(event: Event, subEvents?: {
             marketBuy?: MarketBuyEvent[]
             marketSell?: MarketSellEvent[]
-            missionCompleted?: MissionCompletedEvent[]
+            missionCompleted?: { event: MissionCompletedEvent; influences: MissionCompletedInfluence[] }[]
             missionFailed?: MissionFailedEvent[]
             multiSellExplorationData?: MultiSellExplorationDataEvent[]
             redeemVoucher?: RedeemVoucherEvent[]

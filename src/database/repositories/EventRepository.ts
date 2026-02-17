@@ -106,7 +106,7 @@ export const EventRepositoryLive = Layer.effect(
           }
 
           if (subEvents?.missionCompleted) {
-            for (const mission of subEvents.missionCompleted) {
+            for (const { event: mission, influences } of subEvents.missionCompleted) {
               yield* Effect.tryPromise({
                 try: () =>
                   client.execute({
@@ -126,6 +126,34 @@ export const EventRepositoryLive = Layer.effect(
                     error,
                   }),
               });
+
+              // Insert mission influences
+              for (const influence of influences) {
+                yield* Effect.tryPromise({
+                  try: () =>
+                    client.execute({
+                      sql: `INSERT INTO mission_completed_influence (id, mission_id, system, influence, trend, faction_name, reputation, reputation_trend, effect, effect_trend)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                      args: [
+                        influence.id,
+                        influence.missionId,
+                        Option.getOrNull(influence.system),
+                        Option.getOrNull(influence.influence),
+                        Option.getOrNull(influence.trend),
+                        Option.getOrNull(influence.factionName),
+                        Option.getOrNull(influence.reputation),
+                        Option.getOrNull(influence.reputationTrend),
+                        Option.getOrNull(influence.effect),
+                        Option.getOrNull(influence.effectTrend),
+                      ],
+                    }),
+                  catch: (error) =>
+                    new DatabaseError({
+                      operation: "create.missionCompletedInfluence",
+                      error,
+                    }),
+                });
+              }
             }
           }
 

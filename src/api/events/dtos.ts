@@ -60,7 +60,6 @@ export const EventDataSchema = Schema.Struct({
   // CommitCrime
   CrimeType: Schema.optional(Schema.String),
   Victim: Schema.optional(Schema.String),
-  VictimFaction: Schema.optional(Schema.String),
   Bounty: Schema.optional(Schema.Int),
 
   // SyntheticCZ / SyntheticGroundCZ
