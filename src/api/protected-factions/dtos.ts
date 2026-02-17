@@ -8,7 +8,7 @@ export const CreateProtectedFactionRequest = Schema.Struct({
   name: Schema.String,
   webhook_url: Schema.optional(Schema.String),
   description: Schema.optional(Schema.String),
-  protected: Schema.optional(Schema.Boolean).pipe(Schema.withDefault(() => true)),
+  protected: Schema.optional(Schema.Boolean), // Default to true in handler logic
 });
 
 export type CreateProtectedFactionRequest = typeof CreateProtectedFactionRequest.Type;
