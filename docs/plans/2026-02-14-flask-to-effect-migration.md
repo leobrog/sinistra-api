@@ -331,43 +331,61 @@ Commit: "feat(db): add all Sinistra domain migrations"
 - File: `src/api/commanders/handlers.test.ts`
 - Commit: "test(api): add Commanders API integration test"
 
-**Testing Pattern:**
+**Testing Pattern (Established in Task 37 - see [handlers.test.ts](src/api/activities/handlers.test.ts:1-843)):**
 ```ts
-import { describe, test, expect } from "bun:test"
-import { Effect, Layer } from "effect"
-import { Api } from "../index.js"
-import { HttpApiBuilder } from "@effect/platform"
-import { InMemoryDatabase } from "../../test/helpers.js"
+import { describe, it, expect } from "bun:test"
+import { Context, Effect, Layer, Option } from "effect"
+import { createClient } from "@libsql/client"
+import { TursoClient } from "../../database/client.js"
+import { XxxRepository } from "../../domain/repositories.js"
+import { XxxRepositoryLive } from "../../database/repositories/XxxRepository.js"
+import { AppConfig } from "../../lib/config.js"
 
-describe("Events API Integration", () => {
-  test("POST /events - MarketBuy event creates sub-event", () =>
+const AppConfigTag = Context.GenericTag<AppConfig>("AppConfig")
+
+describe("Xxx API Integration", () => {
+  const testConfig = new AppConfig(/* full config with all fields */)
+
+  const ClientLayer = Layer.effect(
+    TursoClient,
     Effect.gen(function* () {
-      const client = yield* createTestClient()
-
-      // Simulate dashboard request
-      const response = yield* client.events.createEvent({
-        body: {
-          cmdrName: "TestCmdr",
-          eventType: "MarketBuy",
-          timestamp: "2026-02-17T12:00:00Z",
-          data: { /* event payload */ }
-        }
-      })
-
-      expect(response.status).toBe(201)
-      expect(response.body.id).toBeDefined()
-
-      // Verify sub-event created
-      const events = yield* EventRepository.findByCmdr("TestCmdr")
-      expect(events.length).toBe(1)
-      expect(events[0]!.marketBuyEvent).toBeDefined()
-    }).pipe(
-      Effect.provide(Layer.mergeAll(InMemoryDatabase, /* all services */)),
-      Effect.runPromise
-    )
+      const client = createClient({ url: "file::memory:" }) // NO intMode!
+      yield* Effect.tryPromise(() => client.executeMultiple(`/* schema */`))
+      return client
+    })
   )
+
+  const TestConfigLayer = Layer.succeed(AppConfigTag, testConfig)
+  const TestLayer = XxxRepositoryLive.pipe(
+    Layer.provide(ClientLayer),
+    Layer.provide(TestConfigLayer)
+  )
+  const FullLayer = Layer.merge(TestLayer, ClientLayer).pipe(
+    Layer.provide(TestConfigLayer)
+  )
+
+  const runTest = (effect: Effect.Effect<any, any, any>): Promise<any> =>
+    Effect.runPromise(Effect.provide(effect as any, FullLayer))
+
+  it("should test endpoint behavior", async () => {
+    await runTest(Effect.gen(function* () {
+      const repo = yield* XxxRepository
+      const client = yield* TursoClient // Available via FullLayer
+      // Test logic here
+    }))
+  })
 })
 ```
+
+**Key Learnings from Task 37:**
+
+1. **Research Flask first**: Read `~/Documents/personal/VALKFlaskServer/routes/<name>.py` for exact behavior
+2. **Check scheduler usage**: Read `fac_shoutout_scheduler.py` to see real query patterns
+3. **Dashboard may not use all endpoints**: Some APIs are scheduler-only (verify in dashboard/src)
+4. **Client config**: Use `createClient({ url: "file::memory:" })` - NO `intMode: "bigint"` (causes decode errors)
+5. **Layer pattern**: `FullLayer` merges `TestLayer` + `ClientLayer` so tests can `yield* TursoClient`
+6. **Test realistic data**: Mirror Flask's actual usage patterns, not just schema validation
+7. **Use Option properly**: Fields are `Option.some(value)` not raw values in domain models
 
 **Success Criteria:**
 - All 11 API endpoint groups have integration tests
