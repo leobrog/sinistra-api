@@ -62,25 +62,25 @@ export interface InaraCommanderProfile {
 }
 
 /**
- * Inara API request payload
+ * Inara API request payload (unused - kept for reference)
  */
-const InaraRequest = Schema.Struct({
-  header: Schema.Struct({
-    appName: Schema.String,
-    appVersion: Schema.String,
-    isDeveloped: Schema.Boolean,
-    APIkey: Schema.String,
-  }),
-  events: Schema.Array(
-    Schema.Struct({
-      eventName: Schema.String,
-      eventTimestamp: Schema.String,
-      eventData: Schema.Struct({
-        searchName: Schema.String,
-      }),
-    })
-  ),
-})
+// const InaraRequest = Schema.Struct({
+//   header: Schema.Struct({
+//     appName: Schema.String,
+//     appVersion: Schema.String,
+//     isDeveloped: Schema.Boolean,
+//     APIkey: Schema.String,
+//   }),
+//   events: Schema.Array(
+//     Schema.Struct({
+//       eventName: Schema.String,
+//       eventTimestamp: Schema.String,
+//       eventData: Schema.Struct({
+//         searchName: Schema.String,
+//       }),
+//     })
+//   ),
+// })
 
 /**
  * Inara API response
@@ -154,7 +154,14 @@ export const fetchCmdrProfile = (
 
     // Check HTTP status
     if (!response.ok) {
-      const text = yield* Effect.tryPromise(() => response.text())
+      const text = yield* Effect.tryPromise({
+        try: () => response.text(),
+        catch: (_error) =>
+          new InaraApiError({
+            message: "Failed to read error response",
+          }),
+      }).pipe(Effect.catchAll(() => Effect.succeed("Unknown error")))
+
       return yield* Effect.fail(
         new InaraApiError({
           message: `Inara API HTTP error for Cmdr '${cmdrName}'`,
@@ -173,7 +180,13 @@ export const fetchCmdrProfile = (
         }),
     })
 
-    const inaraResponse = yield* Schema.decodeUnknown(InaraResponse)(jsonData)
+    const inaraResponse = yield* Schema.decodeUnknown(InaraResponse)(jsonData).pipe(
+      Effect.mapError((error) =>
+        new InaraApiError({
+          message: `Failed to decode Inara response: ${error}`,
+        })
+      )
+    )
 
     // Check API-level status
     const status = inaraResponse.header.eventStatus

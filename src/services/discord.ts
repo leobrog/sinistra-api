@@ -169,7 +169,13 @@ export const getUserRoles = (
 
     // Handle other errors
     if (!memberResponse.ok) {
-      const text = yield* Effect.tryPromise(() => memberResponse.text())
+      const text = yield* Effect.tryPromise({
+        try: () => memberResponse.text(),
+        catch: (error) =>
+          new DiscordApiError({
+            message: `Failed to read error response: ${error}`,
+          }),
+      })
       return yield* Effect.fail(
         new DiscordApiError({
           message: "Failed to fetch guild member",
@@ -212,7 +218,13 @@ export const getUserRoles = (
     })
 
     if (!rolesResponse.ok) {
-      const text = yield* Effect.tryPromise(() => rolesResponse.text())
+      const text = yield* Effect.tryPromise({
+        try: () => rolesResponse.text(),
+        catch: (error) =>
+          new DiscordApiError({
+            message: `Failed to read error response: ${error}`,
+          }),
+      })
       return yield* Effect.fail(
         new DiscordApiError({
           message: "Failed to fetch guild roles",
@@ -238,7 +250,15 @@ export const getUserRoles = (
     const userRoleNames = userRoleIds.map((roleId) => roleLookup.get(roleId) ?? roleId)
 
     return userRoleNames
-  })
+  }).pipe(
+    Effect.catchTag("ParseError", (error) =>
+      Effect.fail(
+        new DiscordApiError({
+          message: `Failed to decode Discord API response: ${error.message}`,
+        })
+      )
+    )
+  )
 
 /**
  * Exchange OAuth authorization code for access token and user data
@@ -282,7 +302,13 @@ export const exchangeOAuthCode = (
     })
 
     if (!tokenResponse.ok) {
-      const text = yield* Effect.tryPromise(() => tokenResponse.text())
+      const text = yield* Effect.tryPromise({
+        try: () => tokenResponse.text(),
+        catch: (error) =>
+          new DiscordOAuthError({
+            message: `Failed to read error response: ${error}`,
+          }),
+      })
       return yield* Effect.fail(
         new DiscordOAuthError({
           message: "Token exchange failed",
@@ -318,7 +344,13 @@ export const exchangeOAuthCode = (
     })
 
     if (!userResponse.ok) {
-      const text = yield* Effect.tryPromise(() => userResponse.text())
+      const text = yield* Effect.tryPromise({
+        try: () => userResponse.text(),
+        catch: (error) =>
+          new DiscordOAuthError({
+            message: `Failed to read error response: ${error}`,
+          }),
+      })
       return yield* Effect.fail(
         new DiscordOAuthError({
           message: "User fetch failed",
@@ -338,7 +370,15 @@ export const exchangeOAuthCode = (
 
     const user = yield* Schema.decodeUnknown(DiscordUser)(userData)
     return user
-  })
+  }).pipe(
+    Effect.catchTag("ParseError", (error) =>
+      Effect.fail(
+        new DiscordOAuthError({
+          message: `Failed to decode Discord API response: ${error.message}`,
+        })
+      )
+    )
+  )
 
 /**
  * Build Discord OAuth authorization URL

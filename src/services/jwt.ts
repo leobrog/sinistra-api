@@ -1,6 +1,6 @@
-import { Effect, Context, Layer } from "effect"
+import { Effect, Context, Layer, Schema } from "effect"
 import { SignJWT, jwtVerify } from "jose"
-import { AppConfig } from "../lib/config"
+import { AppConfig } from "../lib/config.js"
 
 export interface JwtPayload {
   userId: string
@@ -9,10 +9,9 @@ export interface JwtPayload {
   tenantName?: string
 }
 
-export class JwtError {
-  readonly _tag = "JwtError"
-  constructor(readonly message: string, readonly cause?: unknown) {}
-}
+export class JwtError extends Schema.TaggedError<JwtError>()("JwtError", {
+  message: Schema.String,
+}) {}
 
 export class JwtService extends Context.Tag("JwtService")<
   JwtService,
@@ -47,7 +46,7 @@ export const JwtServiceLive = Layer.effect(
 
             return token
           },
-          catch: (error) => new JwtError("Failed to sign JWT", error),
+          catch: (_error) => new JwtError({ message: "Failed to sign JWT" }),
         }),
 
       verify: (token) =>
@@ -57,14 +56,20 @@ export const JwtServiceLive = Layer.effect(
               algorithms: ["HS256"],
             })
 
-            return {
+            const result: JwtPayload = {
               userId: payload.userId as string,
               username: payload.username as string,
               isAdmin: payload.isAdmin as boolean,
-              tenantName: payload.tenantName as string | undefined,
             }
+
+            // Only add tenantName if it exists
+            if (payload.tenantName !== undefined) {
+              result.tenantName = payload.tenantName as string
+            }
+
+            return result
           },
-          catch: (error) => new JwtError("Failed to verify JWT", error),
+          catch: (_error) => new JwtError({ message: "Failed to verify JWT" }),
         }),
     })
   })
