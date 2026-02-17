@@ -8,7 +8,7 @@ export const CreateColonyRequest = Schema.Struct({
   cmdr: Schema.optional(Schema.String),
   starsystem: Schema.String, // Required
   ravenurl: Schema.optional(Schema.String),
-  priority: Schema.optional(Schema.Int).pipe(Schema.withDefault(() => 0)),
+  priority: Schema.optional(Schema.Int), // Default to 0 in handler logic
 });
 
 export type CreateColonyRequest = typeof CreateColonyRequest.Type;

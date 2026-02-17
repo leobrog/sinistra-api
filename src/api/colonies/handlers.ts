@@ -5,12 +5,7 @@ import { Api } from "../index.js";
 import { ColonyRepository } from "../../domain/repositories.js";
 import { Colony } from "../../domain/models.js";
 import type { ColonyId } from "../../domain/ids.js";
-import {
-  CreateColonyRequest,
-  UpdateColonyRequest,
-  SetPriorityRequest,
-  SearchColoniesQuery,
-} from "./dtos.js";
+// DTO types imported but used via Schema validation in handlers
 import { ColonyNotFoundError } from "../../domain/errors.js";
 
 /**
@@ -122,18 +117,19 @@ export const deleteColony = HttpApiBuilder.handler(Api, "colonies", "deleteColon
 /**
  * Handler for GET /api/colonies/search - Search colonies
  */
-export const searchColonies = HttpApiBuilder.handler(Api, "colonies", "searchColonies", ({ query }) =>
+export const searchColonies = HttpApiBuilder.handler(Api, "colonies", "searchColonies", ({ urlParams }) =>
   Effect.gen(function* () {
     const colonyRepo = yield* ColonyRepository;
 
     // If we have search params, filter; otherwise return all
     let colonies: Colony[];
 
-    if (query.cmdr) {
-      colonies = yield* colonyRepo.findByCmdr(query.cmdr);
-    } else if (query.starsystem) {
-      colonies = yield* colonyRepo.findBySystem(query.starsystem);
+    if (urlParams.cmdr) {
+      colonies = yield* colonyRepo.findByCmdr(urlParams.cmdr);
+    } else if (urlParams.starsystem) {
+      colonies = yield* colonyRepo.findBySystem(urlParams.starsystem);
     } else {
+      // TODO: Add findBySystemAddress support if needed
       colonies = yield* colonyRepo.findAll();
     }
 
@@ -155,45 +151,48 @@ export const getPriorityColonies = HttpApiBuilder.handler(Api, "colonies", "getP
 /**
  * Handler for POST /api/colonies/:id/priority - Set colony priority
  */
-export const setColonyPriority = HttpApiBuilder.handle(
+export const setColonyPriority = HttpApiBuilder.handler(
   Api,
+  "colonies",
   "setColonyPriority",
   ({ path, payload }) =>
     Effect.gen(function* () {
       const colonyRepo = yield* ColonyRepository;
       const colonyOption = yield* colonyRepo.findById(path.id);
 
-      return yield* Effect.gen(function* () {
-        const existing = yield* Effect.fromOption(() => new ColonyNotFoundError({ id: path.id }))(colonyOption);
+      if (Option.isNone(colonyOption)) {
+        return yield* Effect.fail(new ColonyNotFoundError({ id: path.id }));
+      }
 
-        const updated = new Colony({
-          ...existing,
-          priority: payload.priority,
-        });
+      const existing = colonyOption.value;
 
-        yield* colonyRepo.update(updated);
-
-        return {
-          status: "Colony priority updated successfully",
-          id: updated.id,
-          starsystem: Option.getOrNull(updated.starsystem),
-          priority: updated.priority,
-        };
+      const updated = new Colony({
+        ...existing,
+        priority: payload.priority,
       });
+
+      yield* colonyRepo.update(updated);
+
+      return {
+        status: "Colony priority updated successfully",
+        id: updated.id,
+        starsystem: Option.getOrNull(updated.starsystem),
+        priority: updated.priority,
+      };
     })
 );
 
-export const ColoniesHandlers = HttpApiBuilder.group(
+export const ColoniesApiLive = HttpApiBuilder.group(
   Api,
   "colonies",
   (handlers) =>
     handlers
-      .pipe(getAllColonies)
-      .pipe(createColony)
-      .pipe(getColonyById)
-      .pipe(updateColony)
-      .pipe(deleteColony)
-      .pipe(searchColonies)
-      .pipe(getPriorityColonies)
-      .pipe(setColonyPriority)
+      .handle("getAllColonies", getAllColonies)
+      .handle("createColony", createColony)
+      .handle("getColonyById", getColonyById)
+      .handle("updateColony", updateColony)
+      .handle("deleteColony", deleteColony)
+      .handle("searchColonies", searchColonies)
+      .handle("getPriorityColonies", getPriorityColonies)
+      .handle("setColonyPriority", setColonyPriority)
 );
