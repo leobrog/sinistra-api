@@ -1,6 +1,6 @@
 import { Schema } from "effect"
-import { Objective, ObjectiveTarget, ObjectiveTargetSettlement } from "../../domain/models.ts"
-import { ObjectiveId } from "../../domain/ids.ts"
+import { Objective } from "../../domain/models.js"
+import { ObjectiveId } from "../../domain/ids.js"
 
 /**
  * DTOs for Objectives API
