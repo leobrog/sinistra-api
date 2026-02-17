@@ -4,7 +4,16 @@
       "Bash(effect-solutions list:*)",
       "Bash(bun add:*)",
       "Bash(effect-solutions show:*)",
-      "Bash(bunx effect-language-service:*)"
+      "Bash(bunx effect-language-service:*)",
+      "Bash(bun typecheck:*)",
+      "Bash(~/.bun/bin/bun typecheck:*)",
+      "Bash(grep:*)",
+      "Bash(bun run typecheck:*)",
+      "Bash(~/.bun/bin/bun run typecheck:*)",
+      "Bash(src/api/system/handlers.ts:*)",
+      "Bash(src/api/discord-summary/handlers.ts:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ],
     "deny": [],
     "ask": []
