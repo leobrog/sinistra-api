@@ -7,6 +7,7 @@ import type {
   MarketBuyEvent,
   MarketSellEvent,
   MissionCompletedEvent,
+  MissionCompletedInfluence,
   MissionFailedEvent,
   MultiSellExplorationDataEvent,
   RedeemVoucherEvent,
@@ -41,13 +42,11 @@ import type {
   UserId,
 } from "./ids.ts";
 import type {
-  ActivityNotFoundError,
   ApiKeyNameAlreadyExistsError,
   CmdrAlreadyExistsError,
   CmdrNotFoundError,
   ColonyNotFoundError,
   DatabaseError,
-  EventNotFoundError,
   ObjectiveNotFoundError,
   ProtectedFactionAlreadyExistsError,
   ProtectedFactionNotFoundError,

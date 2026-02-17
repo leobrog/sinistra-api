@@ -3,7 +3,7 @@ import { TursoClient } from "../client.ts"
 import { FlaskUserRepository } from "../../domain/repositories.ts"
 import { FlaskUser } from "../../domain/models.ts"
 import { DatabaseError, UserAlreadyExistsError, UserNotFoundError } from "../../domain/errors.ts"
-import type { UserId } from "../../domain/ids.ts"
+import { UserId } from "../../domain/ids.ts"
 
 // Row mapper for flask_users table
 const mapRowToFlaskUser = (row: Record<string, unknown>) => ({
@@ -44,7 +44,7 @@ export const FlaskUserRepositoryLive = Layer.effect(
           if (existingByUsername.rows.length > 0) {
             return yield* Effect.fail(
               new UserAlreadyExistsError({
-                message: `User with username ${user.username} already exists`,
+                email: user.username, // Using username as email identifier
               })
             )
           }
@@ -67,7 +67,7 @@ export const FlaskUserRepositoryLive = Layer.effect(
             if (existingByDiscord.rows.length > 0) {
               return yield* Effect.fail(
                 new UserAlreadyExistsError({
-                  message: `User with Discord ID already exists`,
+                  email: Option.getOrElse(user.discordId, () => "unknown"), // Using Discord ID as identifier
                 })
               )
             }
@@ -221,7 +221,7 @@ export const FlaskUserRepositoryLive = Layer.effect(
           if (result.rowsAffected === 0) {
             return yield* Effect.fail(
               new UserNotFoundError({
-                message: `User with id ${user.id} not found`,
+                id: user.id as UserId,
               })
             )
           }
