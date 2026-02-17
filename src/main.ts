@@ -1,4 +1,4 @@
-import { BunHttpServer } from "@effect/platform-bun"
+import { BunHttpServer, BunRuntime } from "@effect/platform-bun"
 import { HttpApiBuilder, HttpMiddleware } from "@effect/platform"
 import { Layer, Effect } from "effect"
 import { Api } from "./api/index.ts"
@@ -33,39 +33,40 @@ import { AppConfigLive } from "./lib/config.ts"
 import { JwtServiceLive } from "./services/jwt.ts"
 
 // Build API from composed endpoint groups
+const ApiHandlersLayer = Layer.mergeAll(
+  EventsApiLive,
+  ActivitiesApiLive,
+  ObjectivesApiLive,
+  SummaryApiLive,
+  ColoniesApiLive,
+  ProtectedFactionsApiLive,
+  SystemApiLive,
+  AuthApiLive,
+  DiscordSummaryApiLive,
+  CommandersApiLive,
+  DiscoveryApiLive
+)
+
+const RepositoriesLayer = Layer.mergeAll(
+  EventRepositoryLive,
+  ActivityRepositoryLive,
+  ObjectiveRepositoryLive,
+  CmdrRepositoryLive,
+  ColonyRepositoryLive,
+  ProtectedFactionRepositoryLive,
+  EddnRepositoryLive,
+  FlaskUserRepositoryLive
+)
+
+const ServicesLayer = Layer.mergeAll(JwtServiceLive, ApiKeyAuthLive)
+
+const InfrastructureLayer = Layer.mergeAll(TursoClientLive, AppConfigLive)
+
 const ApiLive = HttpApiBuilder.api(Api).pipe(
-  // API Handler Layers
-  Layer.provide(EventsApiLive),
-  Layer.provide(ActivitiesApiLive),
-  Layer.provide(ObjectivesApiLive),
-  Layer.provide(SummaryApiLive),
-  Layer.provide(ColoniesApiLive),
-  Layer.provide(ProtectedFactionsApiLive),
-  Layer.provide(SystemApiLive),
-  Layer.provide(AuthApiLive),
-  Layer.provide(DiscordSummaryApiLive),
-  Layer.provide(CommandersApiLive),
-  Layer.provide(DiscoveryApiLive),
-
-  // Middleware
-  Layer.provide(ApiKeyAuthLive),
-
-  // Services
-  Layer.provide(JwtServiceLive),
-
-  // Repositories
-  Layer.provide(EventRepositoryLive),
-  Layer.provide(ActivityRepositoryLive),
-  Layer.provide(ObjectiveRepositoryLive),
-  Layer.provide(CmdrRepositoryLive),
-  Layer.provide(ColonyRepositoryLive),
-  Layer.provide(ProtectedFactionRepositoryLive),
-  Layer.provide(EddnRepositoryLive),
-  Layer.provide(FlaskUserRepositoryLive),
-
-  // Infrastructure
-  Layer.provide(TursoClientLive),
-  Layer.provide(AppConfigLive)
+  Layer.provide(ApiHandlersLayer),
+  Layer.provide(ServicesLayer),
+  Layer.provide(RepositoriesLayer),
+  Layer.provide(InfrastructureLayer)
 )
 
 const ServerLayer = HttpApiBuilder.serve(HttpMiddleware.logger).pipe(
@@ -73,9 +74,9 @@ const ServerLayer = HttpApiBuilder.serve(HttpMiddleware.logger).pipe(
   Layer.provide(BunHttpServer.layer({ port: 3000 }))
 )
 
-const program = Effect.gen(function* () {
-  yield* Effect.logInfo("🚀 Sinistra API Server starting on port 3000")
-  return yield* Layer.launch(ServerLayer)
-})
-
-Effect.runFork(program)
+// Launch the server
+Layer.launch(ServerLayer).pipe(
+  Effect.tap(() => Effect.logInfo("🚀 Sinistra API Server started on port 3000")),
+  Effect.scoped,
+  BunRuntime.runMain
+)
