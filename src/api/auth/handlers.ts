@@ -1,13 +1,12 @@
 import { Effect, Option } from "effect"
 import { HttpApiBuilder } from "@effect/platform"
-import { v4 as uuid } from "uuid"
 import { Api } from "../index.js"
 import { AppConfig } from "../../lib/config.js"
 import { FlaskUserRepository } from "../../domain/repositories.js"
 import { JwtService } from "../../services/jwt.js"
 import { exchangeOAuthCode } from "../../services/discord.js"
 import { FlaskUser } from "../../domain/models.js"
-import { UserId } from "../../domain/ids.js"
+import { UserId, HashedPassword } from "../../domain/ids.js"
 import { UserResponse } from "./dtos.js"
 
 /**
@@ -50,7 +49,7 @@ export const AuthApiLive = HttpApiBuilder.group(Api, "auth", (handlers) =>
     }
 
     // User doesn't exist - generate a sanitized username from Discord username
-    const sanitizedUsername = discord_username.split("#")[0].toLowerCase().replace(/\s+/g, "_")
+    const sanitizedUsername = (discord_username.split("#")[0] || discord_username).toLowerCase().replace(/\s+/g, "_")
 
     // Check if username is available
     const usernameExists = yield* flaskUserRepo.findByUsername(sanitizedUsername)
@@ -60,14 +59,14 @@ export const AuthApiLive = HttpApiBuilder.group(Api, "auth", (handlers) =>
 
     // Return placeholder details (don't create account yet)
     return new UserResponse({
-      id: null,
+      id: undefined, // No account created yet
       username: finalUsername,
       discord_id,
       discord_username,
       is_admin: false,
       tenant_name: config.faction.name,
       account_status: "new",
-      token: null,
+      token: undefined, // No token for new users
     })
       })
     )
@@ -119,7 +118,7 @@ export const AuthApiLive = HttpApiBuilder.group(Api, "auth", (handlers) =>
       flaskUser = new FlaskUser({
         id: crypto.randomUUID() as UserId,
         username: finalUsername,
-        passwordHash: "", // No password for Discord-only users
+        passwordHash: "" as HashedPassword, // No password for Discord-only users
         discordId: Option.some(discordUser.id),
         discordUsername: Option.some(discordUsername),
         isAdmin: false,

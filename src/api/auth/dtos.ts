@@ -21,7 +21,7 @@ export class UserResponse extends Schema.Class<UserResponse>("UserResponse")({
 // Discord OAuth callback query parameters (GET /api/auth/discord/callback)
 export class DiscordOAuthCallbackQuery extends Schema.Class<DiscordOAuthCallbackQuery>("DiscordOAuthCallbackQuery")({
   code: Schema.String,
-  state: Schema.optionalWith(Schema.String, { nullable: true }),
+  state: Schema.optional(Schema.String), // URL params cannot be nullable
 }) {}
 
 // Discord OAuth user info (from Discord API)
