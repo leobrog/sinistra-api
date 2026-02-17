@@ -242,8 +242,8 @@ c820638	Tasks 1-3	Domain layer	0 ✅
 d9dde12	Task 13	EventRepository	29 DONE
 9c061ca	Task 14	ActivityRepository	57 DONE
 95a688f	Task 15	ObjectiveRepository	79 DONE
-ba12140	Task 20	Date filters	133
-28370a4	Tasks 16-19	Remaining repos	225
+ba12140	Task 20	Date filters	133 DONE
+28370a4	Tasks 16-19	Remaining repos	225 DONE
 e082dca	Progress update	-	225
 b931c77	Task 24	Events API	399
 ...	...	More APIs	600+
@@ -253,6 +253,8 @@ Use bun typecheck.
 Write tests for files which are missing one.
 
 Fix all errors present in a single file. Save down here the main changes that probably need to be applied to multiple files or have repercussions to other files, so that future instances of the llm can easily apply them.
+
+For APIs, for each API investigate what is done in the Flask, and then what is done in ../../../dashboard/src/services that uses that API, and write a test which uses the API as intended, so that we know that API will be production ready
 
 ### ✅ Config Service Fixed (src/lib/config.ts) - 11 errors → 0 errors
 
@@ -352,16 +354,6 @@ Fix all errors present in a single file. Save down here the main changes that pr
    // After:  import type { Client } from "@libsql/client" ✅
    ```
 
-3. **Fixed test file imports**: Changed to .js extension for ES module compatibility
-   ```ts
-   // Before: import { buildDateFilter } from "./date-filters" ❌
-   // After:  import { buildDateFilter } from "./date-filters.js" ✅
-   ```
-
-4. **Added type annotations in tests**: Annotated all test results to avoid 'unknown' type errors
-   ```ts
-   const result: DateFilter = await Effect.runPromise(buildDateFilter("cw"))
-   ```
 
 **Pattern to Apply Everywhere:**
 - All @libsql/client imports should use `type { Client }` not `LibsqlClient`
