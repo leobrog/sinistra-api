@@ -7,11 +7,16 @@ import {
   DiscordSummaryResponse,
   Top5SummaryResponse,
 } from "./dtos.js"
+import { ApiKeyAuth, ApiKeyError } from "../middleware/apikey.js"
+import { DiscordApiError } from "../../domain/errors.js"
 
 export const DiscordSummaryApi = HttpApiGroup.make("discord")
   .add(
     HttpApiEndpoint.post("sendTop5All", "/api/summary/discord/top5all")
       .addSuccess(Top5SummaryResponse)
+      .addError(ApiKeyError, { status: 401 })
+      .addError(DiscordApiError, { status: 500 })
+      .middleware(ApiKeyAuth)
       .annotate(OpenApi.Title, "Send Top 5 Summary to Discord")
       .annotate(
         OpenApi.Description,
@@ -32,7 +37,10 @@ Requires API key authentication.`
   .add(
     HttpApiEndpoint.post("triggerTickSummary", "/api/summary/discord/tick")
       .addSuccess(DiscordSummaryResponse)
+      .addError(ApiKeyError, { status: 401 })
+      .addError(DiscordApiError, { status: 500 })
       .setUrlParams(TriggerTickSummaryRequest)
+      .middleware(ApiKeyAuth)
       .annotate(OpenApi.Title, "Trigger Daily Tick Summary")
       .annotate(
         OpenApi.Description,
@@ -47,7 +55,10 @@ Requires API key authentication.`
   .add(
     HttpApiEndpoint.post("sendSyntheticCZ", "/api/summary/discord/syntheticcz")
       .addSuccess(DiscordSummaryResponse)
+      .addError(ApiKeyError, { status: 401 })
+      .addError(DiscordApiError, { status: 500 })
       .setPayload(SyntheticCZSummaryRequest)
+      .middleware(ApiKeyAuth)
       .annotate(OpenApi.Title, "Send Synthetic Space CZ Summary")
       .annotate(
         OpenApi.Description,
@@ -62,7 +73,10 @@ Requires API key authentication.`
   .add(
     HttpApiEndpoint.post("sendSyntheticGroundCZ", "/api/summary/discord/syntheticgroundcz")
       .addSuccess(DiscordSummaryResponse)
+      .addError(ApiKeyError, { status: 401 })
+      .addError(DiscordApiError, { status: 500 })
       .setPayload(SyntheticGroundCZSummaryRequest)
+      .middleware(ApiKeyAuth)
       .annotate(OpenApi.Title, "Send Synthetic Ground CZ Summary")
       .annotate(
         OpenApi.Description,
@@ -77,7 +91,10 @@ Requires API key authentication.`
   .add(
     HttpApiEndpoint.post("sendCustomMessage", "/api/discord/trigger/custom-message")
       .addSuccess(DiscordSummaryResponse)
+      .addError(ApiKeyError, { status: 401 })
+      .addError(DiscordApiError, { status: 500 })
       .setPayload(CustomDiscordMessageRequest)
+      .middleware(ApiKeyAuth)
       .annotate(OpenApi.Title, "Send Custom Discord Message")
       .annotate(
         OpenApi.Description,
@@ -91,4 +108,3 @@ Body parameters:
 Requires API key authentication.`
       )
   )
-  .annotateEndpoints(OpenApi.Security, "apiKey")

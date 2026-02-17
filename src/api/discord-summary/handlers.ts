@@ -1,13 +1,14 @@
 import { Effect, Option } from "effect"
-import { AppConfig } from "../../lib/config"
-import { sendWebhook } from "../../services/discord"
+import { AppConfig } from "../../lib/config.js"
+import { DiscordApiError } from "../../domain/errors.js"
+import { sendWebhook } from "../../services/discord.js"
 import type {
   TriggerTickSummaryRequest,
   SyntheticCZSummaryRequest,
   SyntheticGroundCZSummaryRequest,
   CustomDiscordMessageRequest,
-} from "./dtos"
-import { DiscordSummaryResponse, Top5SummaryResponse } from "./dtos"
+} from "./dtos.js"
+import { DiscordSummaryResponse, Top5SummaryResponse } from "./dtos.js"
 
 /**
  * Handle POST /api/summary/discord/top5all
@@ -17,7 +18,17 @@ export const handleSendTop5AllToDiscord = () =>
   Effect.gen(function* () {
     const config = yield* AppConfig
 
-    const webhookUrl = yield* Effect.fromOption(config.discord.webhooks.shoutout)
+    const webhookUrlOption = config.discord.webhooks.shoutout
+    if (Option.isNone(webhookUrlOption)) {
+      return yield* Effect.fail(
+        new DiscordApiError({
+          message: "Shoutout webhook URL not configured",
+          statusCode: Option.none(),
+          response: Option.none()
+        })
+      )
+    }
+    const webhookUrl = webhookUrlOption.value
 
     // TODO: Implement top5 queries (Market Events, Missions, Combat Bonds, etc.)
     // For now, send a test message
@@ -60,7 +71,17 @@ export const handleTriggerDailyTickSummary = (request: TriggerTickSummaryRequest
     const config = yield* AppConfig
     const { period } = request
 
-    const webhookUrl = yield* Effect.fromOption(config.discord.webhooks.shoutout)
+    const webhookUrlOption = config.discord.webhooks.shoutout
+    if (Option.isNone(webhookUrlOption)) {
+      return yield* Effect.fail(
+        new DiscordApiError({
+          message: "Shoutout webhook URL not configured",
+          statusCode: Option.none(),
+          response: Option.none()
+        })
+      )
+    }
+    const webhookUrl = webhookUrlOption.value
 
     // TODO: Implement tick summary formatting (from fac_shoutout_scheduler.py logic)
     yield* sendWebhook(webhookUrl, {
@@ -70,7 +91,17 @@ export const handleTriggerDailyTickSummary = (request: TriggerTickSummaryRequest
     return new DiscordSummaryResponse({
       status: `Daily summary triggered for period: ${period}`,
     })
-  })
+  }).pipe(
+    Effect.catchTag("DiscordWebhookError", (error) =>
+      Effect.fail(
+        new DiscordApiError({
+          message: error.message,
+          statusCode: Option.none(),
+          response: Option.none()
+        })
+      )
+    )
+  )
 
 /**
  * Handle POST /api/summary/discord/syntheticcz
@@ -81,7 +112,17 @@ export const handleSendSyntheticCZSummary = (request: SyntheticCZSummaryRequest)
     const config = yield* AppConfig
     const { period } = request
 
-    const webhookUrl = yield* Effect.fromOption(config.discord.webhooks.conflict)
+    const webhookUrlOption = config.discord.webhooks.conflict
+    if (Option.isNone(webhookUrlOption)) {
+      return yield* Effect.fail(
+        new DiscordApiError({
+          message: "Conflict webhook URL not configured",
+          statusCode: Option.none(),
+          response: Option.none()
+        })
+      )
+    }
+    const webhookUrl = webhookUrlOption.value
 
     // TODO: Implement synthetic CZ query logic (from send_syntheticcz_summary_to_discord)
     yield* sendWebhook(webhookUrl, {
@@ -91,7 +132,17 @@ export const handleSendSyntheticCZSummary = (request: SyntheticCZSummaryRequest)
     return new DiscordSummaryResponse({
       status: `SyntheticCZ summary sent for tenant: ${config.faction.name} (${period || "default"})`,
     })
-  })
+  }).pipe(
+    Effect.catchTag("DiscordWebhookError", (error) =>
+      Effect.fail(
+        new DiscordApiError({
+          message: error.message,
+          statusCode: Option.none(),
+          response: Option.none()
+        })
+      )
+    )
+  )
 
 /**
  * Handle POST /api/summary/discord/syntheticgroundcz
@@ -102,7 +153,17 @@ export const handleSendSyntheticGroundCZSummary = (request: SyntheticGroundCZSum
     const config = yield* AppConfig
     const { period } = request
 
-    const webhookUrl = yield* Effect.fromOption(config.discord.webhooks.conflict)
+    const webhookUrlOption = config.discord.webhooks.conflict
+    if (Option.isNone(webhookUrlOption)) {
+      return yield* Effect.fail(
+        new DiscordApiError({
+          message: "Conflict webhook URL not configured",
+          statusCode: Option.none(),
+          response: Option.none()
+        })
+      )
+    }
+    const webhookUrl = webhookUrlOption.value
 
     // TODO: Implement synthetic ground CZ query logic (from send_syntheticgroundcz_summary_to_discord)
     yield* sendWebhook(webhookUrl, {
@@ -112,7 +173,17 @@ export const handleSendSyntheticGroundCZSummary = (request: SyntheticGroundCZSum
     return new DiscordSummaryResponse({
       status: `SyntheticGroundCZ summary sent for tenant: ${config.faction.name} (${period || "default"})`,
     })
-  })
+  }).pipe(
+    Effect.catchTag("DiscordWebhookError", (error) =>
+      Effect.fail(
+        new DiscordApiError({
+          message: error.message,
+          statusCode: Option.none(),
+          response: Option.none()
+        })
+      )
+    )
+  )
 
 /**
  * Handle POST /api/discord/trigger/custom-message
@@ -126,21 +197,69 @@ export const handleSendCustomDiscordMessage = (request: CustomDiscordMessageRequ
     // Determine webhook URL based on choice
     let webhookUrl: string
     switch (webhook.toLowerCase()) {
-      case "bgs":
-        webhookUrl = yield* Effect.fromOption(config.discord.webhooks.bgs)
+      case "bgs": {
+        const webhookUrlOption = config.discord.webhooks.bgs
+        if (Option.isNone(webhookUrlOption)) {
+          return yield* Effect.fail(
+            new DiscordApiError({
+          message: "BGS webhook URL not configured",
+          statusCode: Option.none(),
+          response: Option.none()
+        })
+          )
+        }
+        webhookUrl = webhookUrlOption.value
         break
-      case "shoutout":
-        webhookUrl = yield* Effect.fromOption(config.discord.webhooks.shoutout)
+      }
+      case "shoutout": {
+        const webhookUrlOption = config.discord.webhooks.shoutout
+        if (Option.isNone(webhookUrlOption)) {
+          return yield* Effect.fail(
+            new DiscordApiError({
+          message: "Shoutout webhook URL not configured",
+          statusCode: Option.none(),
+          response: Option.none()
+        })
+          )
+        }
+        webhookUrl = webhookUrlOption.value
         break
-      case "conflict":
-        webhookUrl = yield* Effect.fromOption(config.discord.webhooks.conflict)
+      }
+      case "conflict": {
+        const webhookUrlOption = config.discord.webhooks.conflict
+        if (Option.isNone(webhookUrlOption)) {
+          return yield* Effect.fail(
+            new DiscordApiError({
+          message: "Conflict webhook URL not configured",
+          statusCode: Option.none(),
+          response: Option.none()
+        })
+          )
+        }
+        webhookUrl = webhookUrlOption.value
         break
-      case "debug":
-        webhookUrl = yield* Effect.fromOption(config.discord.webhooks.debug)
+      }
+      case "debug": {
+        const webhookUrlOption = config.discord.webhooks.debug
+        if (Option.isNone(webhookUrlOption)) {
+          return yield* Effect.fail(
+            new DiscordApiError({
+          message: "Debug webhook URL not configured",
+          statusCode: Option.none(),
+          response: Option.none()
+        })
+          )
+        }
+        webhookUrl = webhookUrlOption.value
         break
+      }
       default:
         return yield* Effect.fail(
-          new Error(`Invalid webhook choice: ${webhook}. Must be one of: BGS, shoutout, conflict, debug`)
+          new DiscordApiError({
+            message: `Invalid webhook choice: ${webhook}. Must be one of: BGS, shoutout, conflict, debug`,
+            statusCode: Option.none(),
+            response: Option.none()
+          })
         )
     }
 
@@ -153,4 +272,63 @@ export const handleSendCustomDiscordMessage = (request: CustomDiscordMessageRequ
     return new DiscordSummaryResponse({
       status: `Custom message sent to ${webhook} channel`,
     })
-  })
+  }).pipe(
+    Effect.catchTag("DiscordWebhookError", (error) =>
+      Effect.fail(
+        new DiscordApiError({
+          message: error.message,
+          statusCode: Option.none(),
+          response: Option.none()
+        })
+      )
+    )
+  )
+
+// Import HttpApiBuilder for creating handler wrappers
+import { HttpApiBuilder } from "@effect/platform"
+import { Api } from "../index.js"
+
+// Handler wrappers
+export const sendTop5AllHandler = HttpApiBuilder.handler(
+  Api,
+  "discord",
+  "sendTop5All",
+  () => handleSendTop5AllToDiscord()
+)
+
+export const triggerTickSummaryHandler = HttpApiBuilder.handler(
+  Api,
+  "discord",
+  "triggerTickSummary",
+  ({ urlParams }) => handleTriggerDailyTickSummary(urlParams)
+)
+
+export const sendSyntheticCZHandler = HttpApiBuilder.handler(
+  Api,
+  "discord",
+  "sendSyntheticCZ",
+  ({ payload }) => handleSendSyntheticCZSummary(payload)
+)
+
+export const sendSyntheticGroundCZHandler = HttpApiBuilder.handler(
+  Api,
+  "discord",
+  "sendSyntheticGroundCZ",
+  ({ payload }) => handleSendSyntheticGroundCZSummary(payload)
+)
+
+export const sendCustomMessageHandler = HttpApiBuilder.handler(
+  Api,
+  "discord",
+  "sendCustomMessage",
+  ({ payload }) => handleSendCustomDiscordMessage(payload)
+)
+
+export const DiscordSummaryApiLive = HttpApiBuilder.group(Api, "discord", (handlers) =>
+  handlers
+    .handle("sendTop5All", sendTop5AllHandler)
+    .handle("triggerTickSummary", triggerTickSummaryHandler)
+    .handle("sendSyntheticCZ", sendSyntheticCZHandler)
+    .handle("sendSyntheticGroundCZ", sendSyntheticGroundCZHandler)
+    .handle("sendCustomMessage", sendCustomMessageHandler)
+)
