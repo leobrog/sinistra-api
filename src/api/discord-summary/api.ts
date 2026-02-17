@@ -1,5 +1,4 @@
-import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect"
-import { Schema } from "effect"
+import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "@effect/platform"
 import {
   TriggerTickSummaryRequest,
   SyntheticCZSummaryRequest,
@@ -7,9 +6,9 @@ import {
   CustomDiscordMessageRequest,
   DiscordSummaryResponse,
   Top5SummaryResponse,
-} from "./dtos"
+} from "./dtos.js"
 
-export class DiscordSummaryApi extends HttpApiGroup.make("discord")
+export const DiscordSummaryApi = HttpApiGroup.make("discord")
   .add(
     HttpApiEndpoint.post("sendTop5All", "/api/summary/discord/top5all")
       .addSuccess(Top5SummaryResponse)
@@ -92,4 +91,4 @@ Body parameters:
 Requires API key authentication.`
       )
   )
-  .annotateEndpoints(OpenApi.Security, "apiKey") {}
+  .annotateEndpoints(OpenApi.Security, "apiKey")

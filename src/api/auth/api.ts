@@ -1,8 +1,7 @@
-import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect"
-import { Schema } from "effect"
-import { DiscordVerifyRequest, DiscordOAuthCallbackQuery, UserResponse } from "./dtos"
+import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "@effect/platform"
+import { DiscordVerifyRequest, DiscordOAuthCallbackQuery, UserResponse } from "./dtos.js"
 
-export class AuthApi extends HttpApiGroup.make("auth")
+export const AuthApi = HttpApiGroup.make("auth")
   .add(
     HttpApiEndpoint.post("verifyDiscord", "/api/verify_discord")
       .addSuccess(UserResponse)
@@ -33,4 +32,4 @@ Returns user details with JWT token for session authentication.
 
 This endpoint is called by Discord after user authorization.`
       )
-  ) {}
+  )

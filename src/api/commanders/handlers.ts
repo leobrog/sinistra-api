@@ -1,6 +1,6 @@
 import { HttpApiBuilder } from "@effect/platform"
 import { Effect, Option } from "effect"
-import { CommandersApi } from "./api.js"
+import { Api } from "../index.js"
 import { SyncCmdrsResponse, SyncCmdrsError } from "./dtos.js"
 import { EventRepository, CmdrRepository } from "../../domain/repositories.js"
 import { Cmdr } from "../../domain/models.js"
@@ -13,7 +13,7 @@ import { v4 as uuid } from "uuid"
 const RATE_LIMIT_DELAY_MS = 60_000 // 60 seconds between Inara requests
 
 export const CommandersApiLive = HttpApiBuilder.group(
-  CommandersApi,
+  Api,
   "commanders",
   (handlers) =>
     handlers.handle("syncCmdrs", ({ urlParams }) =>

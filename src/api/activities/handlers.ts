@@ -1,25 +1,27 @@
-import { Effect, Option, Schema } from "effect"
+import { Effect, Option } from "effect"
 import { HttpApiBuilder, HttpServerRequest } from "@effect/platform"
-import { ActivitiesApi } from "./api.ts"
-import { ActivityRepository } from "../../domain/repositories.ts"
-import { PutActivityRequest, FactionInput, SystemInput } from "./dtos.ts"
-import { Activity, System, Faction } from "../../domain/models.ts"
-import { ActivityId, SystemId, FactionId } from "../../domain/ids.ts"
-import { TursoClient } from "../../database/client.ts"
-import { DatabaseError } from "../../domain/errors.ts"
+import { v4 as uuid } from "uuid"
+import { Api } from "../index.js"
+import { ActivityRepository } from "../../domain/repositories.js"
+import type { PutActivityRequest } from "./dtos.js"
+import { Activity, System, Faction } from "../../domain/models.js"
+import { ActivityId, SystemId, FactionId } from "../../domain/ids.js"
+import type { Client } from "@libsql/client"
+import { TursoClient } from "../../database/client.js"
+import { DatabaseError } from "../../domain/errors.js"
 
 /**
  * Convert PUT request DTO to domain Activity entity
  */
 const requestToActivity = (req: PutActivityRequest): Activity => {
-  const activityId = ActivityId.make()
+  const activityId = uuid() as ActivityId
 
   const systems = req.systems.map((sys) => {
-    const systemId = SystemId.make()
+    const systemId = uuid() as SystemId
 
     const factions = sys.factions.map((fac) =>
       new Faction({
-        id: FactionId.make(),
+        id: uuid() as FactionId,
         name: fac.name,
         state: fac.state,
         systemId,
@@ -62,7 +64,7 @@ const requestToActivity = (req: PutActivityRequest): Activity => {
  */
 const resolveTickFilter = (
   period: string | undefined,
-  client: TursoClient
+  client: Client
 ): Effect.Effect<string | null, DatabaseError> => {
   if (!period) {
     return Effect.succeed(null)
@@ -73,7 +75,7 @@ const resolveTickFilter = (
   if (normalized === "ct" || normalized === "current") {
     // Get most recent tickid
     return Effect.gen(function* () {
-      const result = yield* Effect.tryPromise({
+      const result: { rows: any[] } = yield* Effect.tryPromise({
         try: () =>
           client.execute({
             sql: "SELECT tickid FROM activity ORDER BY timestamp DESC LIMIT 1",
@@ -87,14 +89,14 @@ const resolveTickFilter = (
         return null
       }
 
-      return String(result.rows[0][0])
+      return String(result.rows[0]![0])
     })
   }
 
   if (normalized === "lt" || normalized === "last") {
     // Get second most recent tickid
     return Effect.gen(function* () {
-      const result = yield* Effect.tryPromise({
+      const result: { rows: any[] } = yield* Effect.tryPromise({
         try: () =>
           client.execute({
             sql: "SELECT DISTINCT tickid FROM activity ORDER BY timestamp DESC LIMIT 2",
@@ -108,7 +110,7 @@ const resolveTickFilter = (
         return null
       }
 
-      return String(result.rows[1][0])
+      return String(result.rows[1]![0])
     })
   }
 
@@ -119,7 +121,7 @@ const resolveTickFilter = (
 /**
  * Activities API handlers
  */
-export const ActivitiesApiLive = HttpApiBuilder.group(ActivitiesApi, "activities", (handlers) =>
+export const ActivitiesApiLive = HttpApiBuilder.group(Api, "activities", (handlers) =>
   handlers
     .handle("putActivity", (request) =>
       Effect.gen(function* () {
@@ -136,7 +138,7 @@ export const ActivitiesApiLive = HttpApiBuilder.group(ActivitiesApi, "activities
         }
       })
     )
-    .handle("getActivities", (request) =>
+    .handle("getActivities", (_request) =>
       Effect.gen(function* () {
         const activityRepo = yield* ActivityRepository
         const client = yield* TursoClient
@@ -203,8 +205,8 @@ export const ActivitiesApiLive = HttpApiBuilder.group(ActivitiesApi, "activities
         const activities: Activity[] = []
 
         for (const row of result.rows) {
-          const activityId = String(row[0])
-          const activityOption = yield* activityRepo.findById(ActivityId.make(activityId))
+          const activityId = String(row[0]) as ActivityId
+          const activityOption = yield* activityRepo.findById(activityId)
 
           if (Option.isSome(activityOption)) {
             activities.push(activityOption.value)

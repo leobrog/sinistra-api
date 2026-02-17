@@ -1,11 +1,11 @@
 import { HttpApiBuilder } from "@effect/platform"
 import { Effect } from "effect"
-import { DiscoveryApi } from "./api.js"
+import { Api } from "../index.js"
 import { DiscoveryResponse, DiscoveryError, EndpointConfig, HeaderRequirement } from "./dtos.js"
 import { AppConfig } from "../../lib/config.js"
 
 export const DiscoveryApiLive = HttpApiBuilder.group(
-  DiscoveryApi,
+  Api,
   "discovery",
   (handlers) =>
     handlers.handle("discovery", () =>

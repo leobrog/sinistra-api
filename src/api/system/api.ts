@@ -1,16 +1,16 @@
-import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect"
+import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "@effect/platform"
 import { Schema } from "effect"
 import {
   SystemSummaryQuery,
   SystemDetailResponse,
   SystemListResponse,
   SystemSearchErrorResponse,
-} from "./dtos"
+} from "./dtos.js"
 
 // Union type for response (can be single system, list, or error)
 const SystemSummaryResponse = Schema.Union(SystemDetailResponse, SystemListResponse, SystemSearchErrorResponse)
 
-export class SystemApi extends HttpApiGroup.make("system")
+export const SystemApi = HttpApiGroup.make("system")
   .add(
     HttpApiEndpoint.get("getSystemSummary", "/:systemName")
       .addSuccess(SystemSummaryResponse)
@@ -48,4 +48,4 @@ Returns up to 400 systems. Use filters to narrow results.`
       .annotate(OpenApi.Description, "Search systems using query parameters. Same as getSystemSummary but without path parameter.")
   )
   .prefix("/api/system-summary")
-  .annotateEndpoints(OpenApi.Security, "apiKey") {}
+  .annotateEndpoints(OpenApi.Security, "apiKey")

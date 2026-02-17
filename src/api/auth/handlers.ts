@@ -1,33 +1,33 @@
 import { Effect, Option } from "effect"
-import { HttpApiSchema } from "effect"
-import { AppConfig } from "../../lib/config"
-import { FlaskUserRepository } from "../../domain/repositories"
-import { JwtService } from "../../services/jwt"
-import { exchangeOAuthCode } from "../../services/discord"
-import { FlaskUser } from "../../domain/models"
-import { UserId } from "../../domain/ids"
-import type { DiscordVerifyRequest, DiscordOAuthCallbackQuery } from "./dtos"
-import { UserResponse } from "./dtos"
+import { HttpApiBuilder } from "@effect/platform"
+import { v4 as uuid } from "uuid"
+import { Api } from "../index.js"
+import { AppConfig } from "../../lib/config.js"
+import { FlaskUserRepository } from "../../domain/repositories.js"
+import { JwtService } from "../../services/jwt.js"
+import { exchangeOAuthCode } from "../../services/discord.js"
+import { FlaskUser } from "../../domain/models.js"
+import { UserId } from "../../domain/ids.js"
+import { UserResponse } from "./dtos.js"
 
 /**
- * Handle POST /api/verify_discord
- * Verify a Discord user and check if they have an account.
- * If they do, return their details with JWT token.
- * If not, return placeholder details for account creation.
+ * Auth API handlers
  */
-export const handleVerifyDiscord = (request: DiscordVerifyRequest) =>
-  Effect.gen(function* () {
-    const flaskUserRepo = yield* FlaskUserRepository
-    const jwtService = yield* JwtService
-    const config = yield* AppConfig
+export const AuthApiLive = HttpApiBuilder.group(Api, "auth", (handlers) =>
+  handlers
+    .handle("verifyDiscord", (request) =>
+      Effect.gen(function* () {
+        const flaskUserRepo = yield* FlaskUserRepository
+        const jwtService = yield* JwtService
+        const config = yield* AppConfig
 
-    const { discord_id, discord_username } = request
+        const { discord_id, discord_username } = request.payload
 
     // Check if user exists with this Discord ID
     const existingUser = yield* flaskUserRepo.findByDiscordId(discord_id)
 
     if (Option.isSome(existingUser)) {
-      const user = Option.getOrThrow(existingUser)
+      const user: FlaskUser = Option.getOrThrow(existingUser)
 
       // Generate JWT token for existing user
       const token = yield* jwtService.sign({
@@ -69,22 +69,17 @@ export const handleVerifyDiscord = (request: DiscordVerifyRequest) =>
       account_status: "new",
       token: null,
     })
-  })
+      })
+    )
+    .handle("discordOAuthCallback", (request) =>
+      Effect.gen(function* () {
+        const config = yield* AppConfig
+        const flaskUserRepo = yield* FlaskUserRepository
+        const jwtService = yield* JwtService
 
-/**
- * Handle GET /api/auth/discord/callback
- * OAuth callback that exchanges authorization code for Discord user data
- * and creates or updates the user account.
- */
-export const handleDiscordOAuthCallback = (query: DiscordOAuthCallbackQuery) =>
-  Effect.gen(function* () {
-    const config = yield* AppConfig
-    const flaskUserRepo = yield* FlaskUserRepository
-    const jwtService = yield* JwtService
-
-    // Exchange OAuth code for Discord user data
-    const discordUser = yield* exchangeOAuthCode(
-      query.code,
+        // Exchange OAuth code for Discord user data
+        const discordUser = yield* exchangeOAuthCode(
+          request.urlParams.code,
       config.discord.oauth.clientId,
       config.discord.oauth.clientSecret,
       config.discord.oauth.redirectUri
@@ -153,5 +148,7 @@ export const handleDiscordOAuthCallback = (query: DiscordOAuthCallbackQuery) =>
       tenant_name: config.faction.name,
       account_status: "existing",
       token,
-    })
-  })
+        })
+      })
+    )
+)

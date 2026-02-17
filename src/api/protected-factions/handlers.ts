@@ -1,14 +1,15 @@
 import { Effect, Option } from "effect";
 import { HttpApiBuilder } from "@effect/platform";
-import { ProtectedFactionsApi } from "./api.ts";
-import { ProtectedFactionRepository, EddnRepository } from "../../domain/repositories.ts";
-import { ProtectedFaction } from "../../domain/models.ts";
-import { ProtectedFactionId } from "../../domain/ids.ts";
+import { v4 as uuid } from "uuid";
+import { Api } from "../index.js";
+import { ProtectedFactionRepository, EddnRepository } from "../../domain/repositories.js";
+import { ProtectedFaction } from "../../domain/models.js";
+import type { ProtectedFactionId } from "../../domain/ids.js";
 import {
   CreateProtectedFactionRequest,
   UpdateProtectedFactionRequest,
-} from "./dtos.ts";
-import { ProtectedFactionNotFoundError } from "../../domain/errors.ts";
+} from "./dtos.js";
+import { ProtectedFactionNotFoundError } from "../../domain/errors.js";
 
 /**
  * Convert ProtectedFaction domain model to response DTO
@@ -25,7 +26,7 @@ const factionToResponse = (faction: ProtectedFaction) => ({
  * Handler for GET /api/protected-faction - Get all protected factions
  */
 export const getAllProtectedFactions = HttpApiBuilder.handle(
-  ProtectedFactionsApi,
+  Api,
   "getAllProtectedFactions",
   () =>
     Effect.gen(function* () {
@@ -39,14 +40,14 @@ export const getAllProtectedFactions = HttpApiBuilder.handle(
  * Handler for POST /api/protected-faction - Create a new protected faction
  */
 export const createProtectedFaction = HttpApiBuilder.handle(
-  ProtectedFactionsApi,
+  Api,
   "createProtectedFaction",
   ({ payload }) =>
     Effect.gen(function* () {
       const factionRepo = yield* ProtectedFactionRepository;
 
       const newFaction = new ProtectedFaction({
-        id: ProtectedFactionId.make(),
+        id: uuid() as ProtectedFactionId,
         name: payload.name,
         webhookUrl: Option.fromNullable(payload.webhook_url),
         description: Option.fromNullable(payload.description),
@@ -65,7 +66,7 @@ export const createProtectedFaction = HttpApiBuilder.handle(
  * Handler for GET /api/protected-faction/:id - Get protected faction by ID
  */
 export const getProtectedFactionById = HttpApiBuilder.handle(
-  ProtectedFactionsApi,
+  Api,
   "getProtectedFactionById",
   ({ path }) =>
     Effect.gen(function* () {
@@ -85,7 +86,7 @@ export const getProtectedFactionById = HttpApiBuilder.handle(
  * Handler for PUT /api/protected-faction/:id - Update protected faction
  */
 export const updateProtectedFaction = HttpApiBuilder.handle(
-  ProtectedFactionsApi,
+  Api,
   "updateProtectedFaction",
   ({ path, payload }) =>
     Effect.gen(function* () {
@@ -124,7 +125,7 @@ export const updateProtectedFaction = HttpApiBuilder.handle(
  * Handler for DELETE /api/protected-faction/:id - Delete protected faction
  */
 export const deleteProtectedFaction = HttpApiBuilder.handle(
-  ProtectedFactionsApi,
+  Api,
   "deleteProtectedFaction",
   ({ path }) =>
     Effect.gen(function* () {
@@ -141,7 +142,7 @@ export const deleteProtectedFaction = HttpApiBuilder.handle(
  * Handler for GET /api/protected-faction/systems - Get all system names from EDDN
  */
 export const getAllSystemNames = HttpApiBuilder.handle(
-  ProtectedFactionsApi,
+  Api,
   "getAllSystemNames",
   () =>
     Effect.gen(function* () {
@@ -157,7 +158,7 @@ export const getAllSystemNames = HttpApiBuilder.handle(
 );
 
 export const ProtectedFactionsHandlers = HttpApiBuilder.group(
-  ProtectedFactionsApi,
+  Api,
   "protected-factions",
   (handlers) =>
     handlers

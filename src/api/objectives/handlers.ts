@@ -1,25 +1,26 @@
 import { Effect, Option } from "effect"
 import { HttpApiBuilder, HttpServerRequest } from "@effect/platform"
-import { ObjectivesApi } from "./api.ts"
-import { ObjectiveRepository } from "../../domain/repositories.ts"
-import { CreateObjectiveRequest, UpdateObjectiveRequest, TargetInput } from "./dtos.ts"
-import { Objective, ObjectiveTarget, ObjectiveTargetSettlement } from "../../domain/models.ts"
-import { ObjectiveId, ObjectiveTargetId, ObjectiveTargetSettlementId } from "../../domain/ids.ts"
-import { TursoClient } from "../../database/client.ts"
-import { DatabaseError, ObjectiveNotFoundError } from "../../domain/errors.ts"
+import { v4 as uuid } from "uuid"
+import { Api } from "../index.js"
+import { ObjectiveRepository } from "../../domain/repositories.js"
+import { CreateObjectiveRequest, UpdateObjectiveRequest, TargetInput } from "./dtos.js"
+import { Objective, ObjectiveTarget, ObjectiveTargetSettlement } from "../../domain/models.js"
+import type { ObjectiveId, ObjectiveTargetId, ObjectiveTargetSettlementId } from "../../domain/ids.js"
+import { TursoClient } from "../../database/client.js"
+import { DatabaseError, ObjectiveNotFoundError } from "../../domain/errors.js"
 
 /**
  * Convert create request to domain Objective entity
  */
 const createRequestToObjective = (req: CreateObjectiveRequest): Objective => {
-  const objectiveId = ObjectiveId.make()
+  const objectiveId = uuid() as ObjectiveId
 
   const targets = req.targets.map((targetInput) => {
-    const targetId = ObjectiveTargetId.make()
+    const targetId = uuid() as ObjectiveTargetId
 
     const settlements = targetInput.settlements.map((settlementInput) =>
       new ObjectiveTargetSettlement({
-        id: ObjectiveTargetSettlementId.make(),
+        id: uuid() as ObjectiveTargetSettlementId,
         targetId,
         name: Option.fromNullable(settlementInput.name),
         targetindividual: Option.fromNullable(settlementInput.targetindividual),
@@ -59,7 +60,7 @@ const createRequestToObjective = (req: CreateObjectiveRequest): Objective => {
 /**
  * Objectives API handlers
  */
-export const ObjectivesApiLive = HttpApiBuilder.group(ObjectivesApi, "objectives", (handlers) =>
+export const ObjectivesApiLive = HttpApiBuilder.group(Api, "objectives", (handlers) =>
   handlers
     // Create objective (both paths use same handler)
     .handle("createObjective", (request) =>
@@ -89,7 +90,7 @@ export const ObjectivesApiLive = HttpApiBuilder.group(ObjectivesApi, "objectives
       })
     )
     // Get objectives with filters
-    .handle("getObjectives", (request) =>
+    .handle("getObjectives", (_request) =>
       Effect.gen(function* () {
         const objectiveRepo = yield* ObjectiveRepository
         const client = yield* TursoClient
@@ -128,7 +129,7 @@ export const ObjectivesApiLive = HttpApiBuilder.group(ObjectivesApi, "objectives
         }
 
         // Execute query
-        const result = yield* Effect.tryPromise({
+        const result: { rows: any[] } = yield* Effect.tryPromise({
           try: () => client.execute({ sql, args }),
           catch: (error) => new DatabaseError({ operation: "query.objectives", error }),
         })
@@ -136,7 +137,7 @@ export const ObjectivesApiLive = HttpApiBuilder.group(ObjectivesApi, "objectives
         // Load full objectives
         const objectives: Objective[] = []
         for (const row of result.rows) {
-          const objectiveId = ObjectiveId.make(String(row[0]))
+          const objectiveId = String(row[0]) as ObjectiveId
           const objectiveOption = yield* objectiveRepo.findById(objectiveId)
 
           if (Option.isSome(objectiveOption)) {
@@ -147,7 +148,7 @@ export const ObjectivesApiLive = HttpApiBuilder.group(ObjectivesApi, "objectives
         return objectives
       })
     )
-    .handle("getObjectivesAlt", (request) =>
+    .handle("getObjectivesAlt", (_request) =>
       Effect.gen(function* () {
         const objectiveRepo = yield* ObjectiveRepository
         const client = yield* TursoClient
@@ -234,10 +235,10 @@ export const ObjectivesApiLive = HttpApiBuilder.group(ObjectivesApi, "objectives
           targets:
             updates.targets !== undefined
               ? updates.targets.map((targetInput) => {
-                  const targetId = ObjectiveTargetId.make()
+                  const targetId = uuid() as ObjectiveTargetId
                   const settlements = targetInput.settlements.map((s) =>
                     new ObjectiveTargetSettlement({
-                      id: ObjectiveTargetSettlementId.make(),
+                      id: uuid() as ObjectiveTargetSettlementId,
                       targetId,
                       name: Option.fromNullable(s.name),
                       targetindividual: Option.fromNullable(s.targetindividual),
@@ -297,10 +298,10 @@ export const ObjectivesApiLive = HttpApiBuilder.group(ObjectivesApi, "objectives
           targets:
             updates.targets !== undefined
               ? updates.targets.map((targetInput) => {
-                  const targetId = ObjectiveTargetId.make()
+                  const targetId = uuid() as ObjectiveTargetId
                   const settlements = targetInput.settlements.map((s) =>
                     new ObjectiveTargetSettlement({
-                      id: ObjectiveTargetSettlementId.make(),
+                      id: uuid() as ObjectiveTargetSettlementId,
                       targetId,
                       name: Option.fromNullable(s.name),
                       targetindividual: Option.fromNullable(s.targetindividual),

@@ -1,11 +1,11 @@
 import { Effect } from "effect";
 import { HttpApiBuilder } from "@effect/platform";
-import { SummaryApi } from "./api.ts";
-import { SummaryKey, SummaryQueryParams, LeaderboardQueryParams } from "./dtos.ts";
-import { TursoClient } from "../../database/client.ts";
-import { DatabaseError } from "../../domain/errors.ts";
-import { buildDateFilter, DateFilter } from "../../services/date-filters.ts";
-import { AppConfig } from "../../lib/config.ts";
+import { Api } from "../index.js";
+import { SummaryKey, SummaryQueryParams, LeaderboardQueryParams } from "./dtos.js";
+import { TursoClient } from "../../database/client.js";
+import { DatabaseError } from "../../domain/errors.js";
+import { buildDateFilter, DateFilter } from "../../services/date-filters.js";
+import { AppConfig } from "../../lib/config.js";
 
 /**
  * SQL query templates for summary endpoints.
@@ -227,7 +227,7 @@ const executeSummaryQuery = (
 /**
  * Handler for GET /api/summary/:key
  */
-export const getSummary = HttpApiBuilder.handle(SummaryApi, "getSummary", ({ path, query }) =>
+export const getSummary = HttpApiBuilder.handle(Api, "getSummary", ({ path, query }) =>
   Effect.gen(function* () {
     const rows = yield* executeSummaryQuery(path.key, query, false);
     return rows;
@@ -237,7 +237,7 @@ export const getSummary = HttpApiBuilder.handle(SummaryApi, "getSummary", ({ pat
 /**
  * Handler for GET /api/summary/top5/:key
  */
-export const getSummaryTop5 = HttpApiBuilder.handle(SummaryApi, "getSummaryTop5", ({ path, query }) =>
+export const getSummaryTop5 = HttpApiBuilder.handle(Api, "getSummaryTop5", ({ path, query }) =>
   Effect.gen(function* () {
     const rows = yield* executeSummaryQuery(path.key, query, true);
     return rows;
@@ -247,7 +247,7 @@ export const getSummaryTop5 = HttpApiBuilder.handle(SummaryApi, "getSummaryTop5"
 /**
  * Handler for GET /api/summary/leaderboard
  */
-export const getLeaderboard = HttpApiBuilder.handle(SummaryApi, "getLeaderboard", ({ query }) =>
+export const getLeaderboard = HttpApiBuilder.handle(Api, "getLeaderboard", ({ query }) =>
   Effect.gen(function* () {
     const client = yield* TursoClient;
     const config = yield* AppConfig;
@@ -382,7 +382,7 @@ export const getLeaderboard = HttpApiBuilder.handle(SummaryApi, "getLeaderboard"
 /**
  * Handler for GET /api/summary/recruits
  */
-export const getRecruits = HttpApiBuilder.handle(SummaryApi, "getRecruits", () =>
+export const getRecruits = HttpApiBuilder.handle(Api, "getRecruits", () =>
   Effect.gen(function* () {
     const client = yield* TursoClient;
 
@@ -452,7 +452,7 @@ export const getRecruits = HttpApiBuilder.handle(SummaryApi, "getRecruits", () =
 );
 
 export const SummaryHandlers = HttpApiBuilder.group(
-  SummaryApi,
+  Api,
   "summary",
   (handlers) =>
     handlers

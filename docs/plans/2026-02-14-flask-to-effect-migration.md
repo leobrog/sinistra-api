@@ -361,7 +361,65 @@ For APIs, for each API investigate what is done in the Flask, and then what is d
 - All Effect.runPromise results in tests should be type-annotated
 - Export Schema types for all domain constants/literals that need validation
 
-**Remaining Work:** 347 errors remaining (from 402) 
+**Remaining Work:** 211 errors remaining (from 347)
+
+### 🔄 HttpApiBuilder Pattern Fix (In Progress)
+
+**Key Discovery:**
+- HttpApiBuilder.group expects the **full composed API** (from `src/api/index.ts`), not individual API groups
+- Pattern: `HttpApiBuilder.group(Api, "groupName", (handlers) => handlers.handle("endpointName", ...))`
+- Individual handlers can also be created with: `HttpApiBuilder.handler(Api, "groupName", "endpointName", fn)`
+
+**Fixes Applied:**
+1. Changed all handler imports from individual API groups to composed `Api`:
+   ```ts
+   // Before: import { EventsApi } from "./api.js"
+   // After:  import { Api } from "../index.js"
+   ```
+
+2. Updated HttpApiBuilder.group calls:
+   ```ts
+   // Before: HttpApiBuilder.group(EventsApi, "events", ...)
+   // After:  HttpApiBuilder.group(Api, "events", ...)
+   ```
+
+3. Fixed ID creation from `.make()` to UUID casts:
+   ```ts
+   // Before: ActivityId.make()
+   // After:  uuid() as ActivityId
+   ```
+
+4. Fixed Option-to-Effect conversion:
+   ```ts
+   // Before: Effect.fromOption(() => error)(option)
+   // After:  if (Option.isNone(option)) return yield* Effect.fail(error)
+   ```
+
+5. Fixed imports from `"effect"` to `"@effect/platform"` for HTTP types:
+   ```ts
+   // Before: import { HttpApiEndpoint, HttpApiGroup } from "effect"
+   // After:  import { HttpApiEndpoint, HttpApiGroup } from "@effect/platform"
+   ```
+
+**Files Fixed:**
+- ✅ Events API (handlers.ts)
+- ✅ Activities API (handlers.ts)
+- ✅ Objectives API (already had correct pattern)
+- ✅ Commanders API (handlers.ts)
+- ✅ Discovery API (handlers.ts)
+- ✅ Auth API (api.ts, handlers.ts - partially)
+- ✅ Discord Summary API (api.ts)
+- ✅ System API (api.ts)
+- ✅ API index (index.ts - added .js extensions)
+- 🔄 Colonies API (handlers.ts - in progress, uses different pattern)
+- 🔄 Summary API (handlers.ts - needs fixing)
+- 🔄 Protected Factions API (handlers.ts - needs fixing)
+
+**Remaining Issues:**
+- Some handler files use `.pipe()` pattern which doesn't work - need to convert to inline `.handle()` pattern
+- Missing `.js` extensions in some imports
+- Type annotations needed for database query results
+- Service layer errors (jwt.ts, inara.ts) 
 
 ---
 

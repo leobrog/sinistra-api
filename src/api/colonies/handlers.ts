@@ -1,16 +1,17 @@
 import { Effect, Option } from "effect";
 import { HttpApiBuilder } from "@effect/platform";
-import { ColoniesApi } from "./api.ts";
-import { ColonyRepository } from "../../domain/repositories.ts";
-import { Colony } from "../../domain/models.ts";
-import { ColonyId } from "../../domain/ids.ts";
+import { v4 as uuid } from "uuid";
+import { Api } from "../index.js";
+import { ColonyRepository } from "../../domain/repositories.js";
+import { Colony } from "../../domain/models.js";
+import type { ColonyId } from "../../domain/ids.js";
 import {
   CreateColonyRequest,
   UpdateColonyRequest,
   SetPriorityRequest,
   SearchColoniesQuery,
-} from "./dtos.ts";
-import { ColonyNotFoundError } from "../../domain/errors.ts";
+} from "./dtos.js";
+import { ColonyNotFoundError } from "../../domain/errors.js";
 
 /**
  * Convert Colony domain model to response DTO
@@ -26,7 +27,7 @@ const colonyToResponse = (colony: Colony) => ({
 /**
  * Handler for GET /api/colonies - Get all colonies
  */
-export const getAllColonies = HttpApiBuilder.handle(ColoniesApi, "getAllColonies", () =>
+export const getAllColonies = HttpApiBuilder.handler(Api, "colonies", "getAllColonies", () =>
   Effect.gen(function* () {
     const colonyRepo = yield* ColonyRepository;
     const colonies = yield* colonyRepo.findAll();
@@ -37,12 +38,12 @@ export const getAllColonies = HttpApiBuilder.handle(ColoniesApi, "getAllColonies
 /**
  * Handler for POST /api/colonies - Create a new colony
  */
-export const createColony = HttpApiBuilder.handle(ColoniesApi, "createColony", ({ payload }) =>
+export const createColony = HttpApiBuilder.handler(Api, "colonies", "createColony", ({ payload }) =>
   Effect.gen(function* () {
     const colonyRepo = yield* ColonyRepository;
 
     const newColony = new Colony({
-      id: ColonyId.make(),
+      id: uuid() as ColonyId,
       cmdr: Option.fromNullable(payload.cmdr),
       starsystem: Option.some(payload.starsystem),
       ravenurl: Option.fromNullable(payload.ravenurl),
@@ -61,50 +62,53 @@ export const createColony = HttpApiBuilder.handle(ColoniesApi, "createColony", (
 /**
  * Handler for GET /api/colonies/:id - Get colony by ID
  */
-export const getColonyById = HttpApiBuilder.handle(ColoniesApi, "getColonyById", ({ path }) =>
+export const getColonyById = HttpApiBuilder.handler(Api, "colonies", "getColonyById", ({ path }) =>
   Effect.gen(function* () {
     const colonyRepo = yield* ColonyRepository;
     const colonyOption = yield* colonyRepo.findById(path.id);
 
-    return yield* Effect.gen(function* () {
-      const colony = yield* Effect.fromOption(() => new ColonyNotFoundError({ id: path.id }))(colonyOption);
-      return colonyToResponse(colony);
-    });
+    if (Option.isNone(colonyOption)) {
+      return yield* Effect.fail(new ColonyNotFoundError({ id: path.id }));
+    }
+
+    return colonyToResponse(colonyOption.value);
   })
 );
 
 /**
  * Handler for PUT /api/colonies/:id - Update colony
  */
-export const updateColony = HttpApiBuilder.handle(ColoniesApi, "updateColony", ({ path, payload }) =>
+export const updateColony = HttpApiBuilder.handler(Api, "colonies", "updateColony", ({ path, payload }) =>
   Effect.gen(function* () {
     const colonyRepo = yield* ColonyRepository;
     const colonyOption = yield* colonyRepo.findById(path.id);
 
-    return yield* Effect.gen(function* () {
-      const existing = yield* Effect.fromOption(() => new ColonyNotFoundError({ id: path.id }))(colonyOption);
+    if (Option.isNone(colonyOption)) {
+      return yield* Effect.fail(new ColonyNotFoundError({ id: path.id }));
+    }
 
-      const updated = new Colony({
-        id: existing.id,
-        cmdr: payload.cmdr !== undefined ? Option.fromNullable(payload.cmdr) : existing.cmdr,
-        starsystem: payload.starsystem !== undefined ? Option.fromNullable(payload.starsystem) : existing.starsystem,
-        ravenurl: payload.ravenurl !== undefined ? Option.fromNullable(payload.ravenurl) : existing.ravenurl,
-        priority: payload.priority !== undefined ? payload.priority : existing.priority,
-      });
+    const existing = colonyOption.value;
 
-      yield* colonyRepo.update(updated);
-
-      return {
-        status: "Colony updated successfully",
-      };
+    const updated = new Colony({
+      id: existing.id,
+      cmdr: payload.cmdr !== undefined ? Option.fromNullable(payload.cmdr) : existing.cmdr,
+      starsystem: payload.starsystem !== undefined ? Option.fromNullable(payload.starsystem) : existing.starsystem,
+      ravenurl: payload.ravenurl !== undefined ? Option.fromNullable(payload.ravenurl) : existing.ravenurl,
+      priority: payload.priority !== undefined ? payload.priority : existing.priority,
     });
+
+    yield* colonyRepo.update(updated);
+
+    return {
+      status: "Colony updated successfully",
+    };
   })
 );
 
 /**
  * Handler for DELETE /api/colonies/:id - Delete colony
  */
-export const deleteColony = HttpApiBuilder.handle(ColoniesApi, "deleteColony", ({ path }) =>
+export const deleteColony = HttpApiBuilder.handler(Api, "colonies", "deleteColony", ({ path }) =>
   Effect.gen(function* () {
     const colonyRepo = yield* ColonyRepository;
     yield* colonyRepo.delete(path.id);
@@ -118,7 +122,7 @@ export const deleteColony = HttpApiBuilder.handle(ColoniesApi, "deleteColony", (
 /**
  * Handler for GET /api/colonies/search - Search colonies
  */
-export const searchColonies = HttpApiBuilder.handle(ColoniesApi, "searchColonies", ({ query }) =>
+export const searchColonies = HttpApiBuilder.handler(Api, "colonies", "searchColonies", ({ query }) =>
   Effect.gen(function* () {
     const colonyRepo = yield* ColonyRepository;
 
@@ -140,7 +144,7 @@ export const searchColonies = HttpApiBuilder.handle(ColoniesApi, "searchColonies
 /**
  * Handler for GET /api/colonies/priority - Get priority colonies
  */
-export const getPriorityColonies = HttpApiBuilder.handle(ColoniesApi, "getPriorityColonies", () =>
+export const getPriorityColonies = HttpApiBuilder.handler(Api, "colonies", "getPriorityColonies", () =>
   Effect.gen(function* () {
     const colonyRepo = yield* ColonyRepository;
     const colonies = yield* colonyRepo.findPriority();
@@ -152,7 +156,7 @@ export const getPriorityColonies = HttpApiBuilder.handle(ColoniesApi, "getPriori
  * Handler for POST /api/colonies/:id/priority - Set colony priority
  */
 export const setColonyPriority = HttpApiBuilder.handle(
-  ColoniesApi,
+  Api,
   "setColonyPriority",
   ({ path, payload }) =>
     Effect.gen(function* () {
@@ -180,7 +184,7 @@ export const setColonyPriority = HttpApiBuilder.handle(
 );
 
 export const ColoniesHandlers = HttpApiBuilder.group(
-  ColoniesApi,
+  Api,
   "colonies",
   (handlers) =>
     handlers

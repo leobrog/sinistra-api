@@ -1,7 +1,7 @@
-import { HttpApiGroup, HttpApiEndpoint, HttpApiSchema } from "@effect/platform"
-import { PutActivityRequest, PutActivityResponse, GetActivitiesResponse } from "./dtos.ts"
-import { DatabaseError } from "../../domain/errors.ts"
-import { ApiKeyAuth, ApiKeyError } from "../middleware/apikey.ts"
+import { HttpApiGroup, HttpApiEndpoint } from "@effect/platform"
+import { PutActivityRequest, PutActivityResponse, GetActivitiesResponse } from "./dtos.js"
+import { DatabaseError } from "../../domain/errors.js"
+import { ApiKeyAuth, ApiKeyError } from "../middleware/apikey.js"
 
 /**
  * Activities API Group

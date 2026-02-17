@@ -1,7 +1,7 @@
 import { Effect, Option } from "effect"
 import { HttpApiBuilder } from "@effect/platform"
 import { v4 as uuid } from "uuid"
-import { EventsApi } from "./api.js"
+import { Api } from "../index.js"
 import { EventRepository } from "../../domain/repositories.js"
 import type { EventData } from "./dtos.js"
 import {
@@ -301,7 +301,7 @@ const createSubEvents = (
 /**
  * Events API handlers
  */
-export const EventsApiLive = HttpApiBuilder.group(EventsApi, "events", (handlers) =>
+export const EventsApiLive = HttpApiBuilder.group(Api, "events", (handlers) =>
   handlers.handle("postEvents", (request) =>
     Effect.gen(function* () {
       const eventRepo = yield* EventRepository
