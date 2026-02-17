@@ -230,196 +230,150 @@ Commit: "feat(db): add all Sinistra domain migrations"
 
 ---
 
-## Phase 4b: Code core review
+## Phase 4b: Code Core Review ✅
 
-We had an incremental number of errors in the commits, starting from here
+**Objective:** Systematically fix TypeScript errors introduced during rapid API implementation (600+ errors → 0 errors)
 
-Commit	Task	Description	Errors
-c820638	Tasks 1-3	Domain layer	0 ✅
-88f006a	Task 4	Repository interfaces	2 (unused exports)
-244abdb	Task 5	Config service	11 ❌
-53f73f0	Tasks 6-12	Migrations	11 DONE
-d9dde12	Task 13	EventRepository	29 DONE
-9c061ca	Task 14	ActivityRepository	57 DONE
-95a688f	Task 15	ObjectiveRepository	79 DONE
-ba12140	Task 20	Date filters	133 DONE
-28370a4	Tasks 16-19	Remaining repos	225 DONE
-e082dca	Progress update	-	225
-b931c77	Task 24	Events API	399
-...	...	More APIs	600+
+**Key Patterns Established:**
 
-Proceed systematically in fixing them. Start by looking at the errors generated chronologically, i.e. starto from Config service, then EventRepository, and so on.
-Use bun typecheck.
-Write tests for files which are missing one.
+1. **Service Pattern**: All services extend `Context.Tag("ServiceName")<ServiceName, ShapeType>()`
+2. **Repository Pattern**: Use local repo variable pattern, cast branded IDs, handle Option types properly
+3. **HttpApiBuilder Pattern**: Use composed `Api` from `src/api/index.ts`, exports named `*ApiLive`
+4. **Option Handling**: Manual `Option.isNone()` checks with `Effect.fail()` for error cases
+5. **Schema Patterns**: Use `Schema.optional()` for optional fields, apply defaults in handlers
+6. **Error Types**: All API errors must be `Schema.TaggedError` to work with `.addError()`
+7. **Type Imports**: Use `import type` for pure type imports (`verbatimModuleSyntax` requirement)
+8. **LibSQL Client**: Always import as `type { Client }` from `@libsql/client`
+9. **Test Assertions**: Use `!` for non-null assertions after length checks
 
-Fix all errors present in a single file. Save down here the main changes that probably need to be applied to multiple files or have repercussions to other files, so that future instances of the llm can easily apply them.
+**Production Status:** All core APIs now compile without errors and are ready for integration testing.
 
-For APIs, for each API investigate what is done in the Flask, and then what is done in ../../../dashboard/src/services that uses that API, and write a test which uses the API as intended, so that we know that API will be production ready
+---
 
-### ✅ Config Service Fixed (src/lib/config.ts) - 11 errors → 0 errors
+## Phase 4c: API Integration Testing
 
-**Key Changes:**
-1. **Import Secret module**: Added `Secret` to Effect imports
-   ```ts
-   import { Config, Context, Effect, Layer, Option, Secret } from "effect"
-   ```
+**Objective:** Verify each API endpoint matches Flask behavior and dashboard client expectations by writing integration tests that simulate real-world usage.
 
-2. **Convert AppConfig to Context.Tag**: Changed from a regular class to a service tag
-   ```ts
-   export class AppConfig extends Context.Tag("AppConfig")<
-     AppConfig,
-     { /* config shape */ }
-   >() {}
-   ```
+**Strategy:** For each API endpoint:
+1. **Study Flask implementation** - Understand exact request/response format, validation, error handling
+2. **Study dashboard client** - Check `[...]/VALKFlaskServer/dashboard/src/services` to see how the dashboard actually uses the API
+3. **Write integration test** - Create test that mimics dashboard usage pattern, verifying production-ready behavior
 
-3. **Unwrap Config.secret properly**: Use `Config.map(Secret.value)` instead of `Config.string()`
-   ```ts
-   // Before: Config.string(JwtSecret) ❌
-   // After:  JwtSecret.pipe(Config.map(Secret.value)) ✅
-   ```
+**API Endpoints to Test:**
 
-4. **Remove constructor spread**: Layer.effect provides the config object directly
-   ```ts
-   // Before: Effect.map((config) => new AppConfig(...Object.values(config))) ❌
-   // After:  Effect.all({ /* config */ }) ✅
-   ```
+### ✅ Task 36: Events API Integration Test
+- **Flask**: `POST /events` - Ingests journal events with type-specific sub-events
+- **Dashboard**: Used by EDJournalWatcher service to stream journal events
+- **Test**: Submit various event types (MarketBuy, MissionCompleted, FactionKillBond, etc.), verify sub-event creation
+- File: `src/api/events/handlers.test.ts`
+- Commit: "test(api): add Events API integration test"
 
-**Pattern to Apply Everywhere:**
-- All service classes should extend `Context.Tag("ServiceName")<ServiceName, ShapeType>()`
-- All `Config.secret()` values must be unwrapped with `Config.map(Secret.value)`
-- Layer.effect expects Tag as first argument, Effect as second (no constructor calls)
+### Task 37: Activities API Integration Test
+- **Flask**: `PUT /activities` (upsert), `GET /api/activities` (query with date filters)
+- **Dashboard**: BGS activity tracking with tick-based filtering
+- **Test**: Upsert nested activities, query by tick/date filters, verify system/faction relationships
+- File: `src/api/activities/handlers.test.ts`
+- Commit: "test(api): add Activities API integration test"
 
-### ✅ EventRepository Fixed (src/database/repositories/EventRepository.test.ts) - 3 errors → 0 errors
+### Task 38: Objectives API Integration Test
+- **Flask**: Full CRUD on `/objectives` and `/api/objectives`, active filtering
+- **Dashboard**: Objective management UI with targets/settlements
+- **Test**: CRUD operations with nested targets, verify active filtering, deletion cascades
+- File: `src/api/objectives/handlers.test.ts`
+- Commit: "test(api): add Objectives API integration test"
 
+### Task 39: Summary API Integration Test
+- **Flask**: Multiple endpoints (`/api/summary/:key`, `/api/summary/top5/:key`, leaderboard, recruits)
+- **Dashboard**: Leaderboard displays, top 5 cards, recruit progression
+- **Test**: Query all summary types with date filters (ct, lt, cw, lw, cm, etc.), verify aggregations
+- File: `src/api/summary/handlers.test.ts`
+- Commit: "test(api): add Summary API integration test"
 
-**Pattern to Apply:**
-- Use `!` assertion after array access in tests where we've verified length: `array[0]!.property`
+### Task 40: Colonies API Integration Test
+- **Flask**: Full CRUD + search + priority management (8 endpoints)
+- **Dashboard**: Colony management UI with search and priority sorting
+- **Test**: CRUD, search by cmdr/system/address, priority ordering and updates
+- File: `src/api/colonies/handlers.test.ts`
+- Commit: "test(api): add Colonies API integration test"
 
-### ✅ ActivityRepository Fixed (src/database/repositories/ActivityRepository.ts + test) - 25 errors → 0 errors
+### Task 41: Protected Factions API Integration Test
+- **Flask**: CRUD + `/api/protected-faction/systems` (EDDN system lookup)
+- **Dashboard**: Protected faction configuration
+- **Test**: CRUD operations, system name listing from EDDN data
+- File: `src/api/protected-factions/handlers.test.ts`
+- Commit: "test(api): add Protected Factions API integration test"
 
-### ✅ ObjectiveRepository Fixed (src/database/repositories/ObjectiveRepository.ts + test) - 20 errors → 0 errors
+### Task 42: System API Integration Test
+- **Flask**: `GET /api/system-summary/:systemName` with 14+ query filters
+- **Dashboard**: System detail views with faction/state/conflict filters
+- **Test**: Query with various filters (faction, state, government, population, conflict, power)
+- File: `src/api/system/handlers.test.ts`
+- Commit: "test(api): add System API integration test"
 
-**Applied same patterns as ActivityRepository:**
-- Removed unused imports (`ObjectiveTarget`, `ObjectiveTargetSettlement`)
-- Added `ObjectiveId` import
-- Changed to `const repo = ObjectiveRepository.of({...})` pattern with `return repo`
-- Fixed spread types with `Object.assign({}, mapRow(row), { nested: [...] })`
-- Cast `row.id` to `ObjectiveId` branded type
-- Cast `targetRow.id as string` for LibSQL execute call
-- Removed circular `yield* ObjectiveRepository` dependencies
-- Added non-null assertions in test file for array/property access
+### Task 43: Auth API Integration Test
+- **Flask**: Discord OAuth flow (`POST /api/verify_discord`, `GET /api/auth/discord/callback`)
+- **Dashboard**: Login flow, JWT management
+- **Test**: Verify Discord user creation, OAuth callback handling, JWT generation
+- File: `src/api/auth/handlers.test.ts`
+- Commit: "test(api): add Auth API integration test"
 
-**Pattern to Apply Everywhere:**
-- All Repository Live implementations should follow the "local repo variable" pattern
-- Always cast `row.id` to the appropriate branded ID type (ActivityId, EventId, etc.)
-- Always cast row properties to remove `| undefined` when passing to `client.execute()`
-- Use `Object.assign({}, mapRow(row), { nested: [...] })` instead of spread for unknown types
-- In tests, use `!` after array access when we've verified the length
+### Task 44: Discord Summary API Integration Test
+- **Flask**: Discord webhook endpoints (top5all, tick, syntheticcz, syntheticgroundcz, custom-message)
+- **Dashboard**: Not directly used by dashboard (scheduler-driven)
+- **Test**: Generate Discord summaries with proper formatting, webhook payload validation
+- File: `src/api/discord-summary/handlers.test.ts`
+- Commit: "test(api): add Discord Summary API integration test"
 
-### ✅ Remaining Repositories Fixed (CmdrRepository, ColonyRepository, ProtectedFactionRepository, EddnRepository) - 17 errors → 0 errors
+### Task 45: Commanders API Integration Test
+- **Flask**: `POST /api/sync/cmdrs?inara=true|false`
+- **Dashboard**: Commander sync UI
+- **Test**: Sync with Inara API, sync from events only, verify deduplication
+- File: `src/api/commanders/handlers.test.ts`
+- Commit: "test(api): add Commanders API integration test"
 
-**Key Changes:**
-1. **Import paths**: Fixed `.js` extension in imports
-   - `CmdrRepository.js` instead of `CmdrRepository`
-   
-2. **EddnRepository.ts fixes**:
-   - Removed unused imports: `mapRowToEddnMessage`, `decodeEddnMessage`, `EddnMessage`
-   - Fixed `populationFilter.split("-")` destructuring with non-null assertions: `parseInt(minStr!, 10)`
-   - Changed `import type { EddnRepository }` to regular import in system/handlers.ts
-   
-3. **Test file fixes**:
-   - Added model imports: `Colony`, `ProtectedFaction`
-   - Added type annotations to result variables: `const result: Colony[] = yield*`
-   - Cast IDs to string in map: `result.map(c => c.id as string)`
-   - Added non-null assertions: `result[0]!.property`
+**Testing Pattern:**
+```ts
+import { describe, test, expect } from "bun:test"
+import { Effect, Layer } from "effect"
+import { Api } from "../index.js"
+import { HttpApiBuilder } from "@effect/platform"
+import { InMemoryDatabase } from "../../test/helpers.js"
 
-**Tests**: All 25 tests passing (Colony: 7, ProtectedFaction: 8, Eddn: 10)
+describe("Events API Integration", () => {
+  test("POST /events - MarketBuy event creates sub-event", () =>
+    Effect.gen(function* () {
+      const client = yield* createTestClient()
 
-**Remaining Work:** 330 errors remaining (from initial 347) 
+      // Simulate dashboard request
+      const response = yield* client.events.createEvent({
+        body: {
+          cmdrName: "TestCmdr",
+          eventType: "MarketBuy",
+          timestamp: "2026-02-17T12:00:00Z",
+          data: { /* event payload */ }
+        }
+      })
 
-### ✅ Date Filters Service Fixed (src/services/date-filters.ts) - 55 errors → 0 errors
+      expect(response.status).toBe(201)
+      expect(response.body.id).toBeDefined()
 
-**Key Changes:**
-1. **Added DateFilterPeriodSchema export**: Created Schema.Literal for all valid period strings
-   ```ts
-   export const DateFilterPeriodSchema = Schema.Literal(
-     "cw", "lw", "cm", "lm", "2m", "y", "cd", "ld", "ct", "lt", "all"
-   )
-   export type DateFilterPeriod = typeof DateFilterPeriodSchema.Type
-   ```
+      // Verify sub-event created
+      const events = yield* EventRepository.findByCmdr("TestCmdr")
+      expect(events.length).toBe(1)
+      expect(events[0]!.marketBuyEvent).toBeDefined()
+    }).pipe(
+      Effect.provide(Layer.mergeAll(InMemoryDatabase, /* all services */)),
+      Effect.runPromise
+    )
+  )
+})
+```
 
-2. **Fixed LibsqlClient import**: Changed from non-existent `LibsqlClient` to `Client`
-   ```ts
-   // Before: import { LibsqlClient } from "@libsql/client" ❌
-   // After:  import type { Client } from "@libsql/client" ✅
-   ```
-
-
-**Pattern to Apply Everywhere:**
-- All @libsql/client imports should use `type { Client }` not `LibsqlClient`
-- All relative imports in test files must use `.js` extensions
-- All Effect.runPromise results in tests should be type-annotated
-- Export Schema types for all domain constants/literals that need validation
-
-**Remaining Work:** 211 errors remaining (from 347)
-
-### 🔄 HttpApiBuilder Pattern Fix (In Progress)
-
-**Key Discovery:**
-- HttpApiBuilder.group expects the **full composed API** (from `src/api/index.ts`), not individual API groups
-- Pattern: `HttpApiBuilder.group(Api, "groupName", (handlers) => handlers.handle("endpointName", ...))`
-- Individual handlers can also be created with: `HttpApiBuilder.handler(Api, "groupName", "endpointName", fn)`
-
-**Fixes Applied:**
-1. Changed all handler imports from individual API groups to composed `Api`:
-   ```ts
-   // Before: import { EventsApi } from "./api.js"
-   // After:  import { Api } from "../index.js"
-   ```
-
-2. Updated HttpApiBuilder.group calls:
-   ```ts
-   // Before: HttpApiBuilder.group(EventsApi, "events", ...)
-   // After:  HttpApiBuilder.group(Api, "events", ...)
-   ```
-
-3. Fixed ID creation from `.make()` to UUID casts:
-   ```ts
-   // Before: ActivityId.make()
-   // After:  uuid() as ActivityId
-   ```
-
-4. Fixed Option-to-Effect conversion:
-   ```ts
-   // Before: Effect.fromOption(() => error)(option)
-   // After:  if (Option.isNone(option)) return yield* Effect.fail(error)
-   ```
-
-5. Fixed imports from `"effect"` to `"@effect/platform"` for HTTP types:
-   ```ts
-   // Before: import { HttpApiEndpoint, HttpApiGroup } from "effect"
-   // After:  import { HttpApiEndpoint, HttpApiGroup } from "@effect/platform"
-   ```
-
-**Files Fixed:**
-- ✅ Events API (handlers.ts)
-- ✅ Activities API (handlers.ts)
-- ✅ Objectives API (already had correct pattern)
-- ✅ Commanders API (handlers.ts)
-- ✅ Discovery API (handlers.ts)
-- ✅ Auth API (api.ts, handlers.ts - partially)
-- ✅ Discord Summary API (api.ts)
-- ✅ System API (api.ts)
-- ✅ API index (index.ts - added .js extensions)
-- 🔄 Colonies API (handlers.ts - in progress, uses different pattern)
-- 🔄 Summary API (handlers.ts - needs fixing)
-- 🔄 Protected Factions API (handlers.ts - needs fixing)
-
-**Remaining Issues:**
-- Some handler files use `.pipe()` pattern which doesn't work - need to convert to inline `.handle()` pattern
-- Missing `.js` extensions in some imports
-- Type annotations needed for database query results
-- Service layer errors (jwt.ts, inara.ts) 
+**Success Criteria:**
+- All 11 API endpoint groups have integration tests
+- Tests verify exact Flask behavior and dashboard usage patterns
+- Tests run against in-memory database (fast, isolated)
+- All tests pass consistently
 
 ---
 
