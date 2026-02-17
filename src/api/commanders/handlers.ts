@@ -6,7 +6,6 @@ import { EventRepository, CmdrRepository } from "../../domain/repositories.js"
 import { Cmdr } from "../../domain/models.js"
 import { CmdrId } from "../../domain/ids.js"
 import { fetchCmdrProfile } from "../../services/inara.js"
-import { InaraRateLimitError } from "../../services/inara.js"
 import { AppConfig } from "../../lib/config.js"
 import { v4 as uuid } from "uuid"
 
@@ -22,7 +21,7 @@ export const CommandersApiLive = HttpApiBuilder.group(
         const cmdrRepo = yield* CmdrRepository
         const config = yield* AppConfig
 
-        const inaraParam = Option.getOrElse(urlParams.inara, () => "true")
+        const inaraParam = Option.getOrElse(Option.fromNullable(urlParams.inara), () => "true")
         const useInara = inaraParam.toLowerCase() === "true" || inaraParam === "1" || inaraParam === "yes"
 
         // Get distinct commander names from events (limit 100)
