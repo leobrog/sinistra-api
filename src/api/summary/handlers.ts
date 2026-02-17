@@ -1,10 +1,11 @@
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import { HttpApiBuilder } from "@effect/platform";
 import { Api } from "../index.js";
-import { SummaryKey, SummaryQueryParams, LeaderboardQueryParams } from "./dtos.js";
+import type { SummaryKey, SummaryQueryParams } from "./dtos.js";
+import { RecruitsResponseSchema, LeaderboardResponseSchema } from "./dtos.js";
 import { TursoClient } from "../../database/client.js";
 import { DatabaseError } from "../../domain/errors.js";
-import { buildDateFilter, DateFilter } from "../../services/date-filters.js";
+import { buildDateFilter, type DateFilter } from "../../services/date-filters.js";
 import { AppConfig } from "../../lib/config.js";
 
 /**
@@ -163,7 +164,7 @@ const executeSummaryQuery = (
   key: SummaryKey,
   queryParams: SummaryQueryParams,
   isTop5: boolean
-): Effect.Effect<unknown[], DatabaseError | Error, TursoClient | AppConfig> =>
+): Effect.Effect<unknown[], DatabaseError, TursoClient | AppConfig> =>
   Effect.gen(function* () {
     const client = yield* TursoClient;
     const config = yield* AppConfig;
@@ -213,23 +214,36 @@ const executeSummaryQuery = (
 
     // Execute query
     const result = yield* Effect.tryPromise({
-      try: () => client.execute({ sql, args }),
+      try: () => client.execute({ sql, args: args as Array<string | number | null> }),
       catch: (error) =>
         new DatabaseError({
-          message: `Failed to execute summary query: ${error}`,
-          cause: error,
+          operation: "execute summary query",
+          error,
         }),
     });
 
     return result.rows;
-  });
+  }).pipe(
+    Effect.catchAll((error) => {
+      // Map generic Error from buildDateFilter to DatabaseError
+      if (error instanceof Error && !(error instanceof DatabaseError)) {
+        return Effect.fail(
+          new DatabaseError({
+            operation: "build date filter",
+            error,
+          })
+        );
+      }
+      return Effect.fail(error);
+    })
+  );
 
 /**
  * Handler for GET /api/summary/:key
  */
-export const getSummary = HttpApiBuilder.handle(Api, "getSummary", ({ path, query }) =>
+export const getSummary = HttpApiBuilder.handler(Api, "summary", "getSummary", ({ path, urlParams }) =>
   Effect.gen(function* () {
-    const rows = yield* executeSummaryQuery(path.key, query, false);
+    const rows = yield* executeSummaryQuery(path.key, urlParams, false);
     return rows;
   })
 );
@@ -237,9 +251,9 @@ export const getSummary = HttpApiBuilder.handle(Api, "getSummary", ({ path, quer
 /**
  * Handler for GET /api/summary/top5/:key
  */
-export const getSummaryTop5 = HttpApiBuilder.handle(Api, "getSummaryTop5", ({ path, query }) =>
+export const getSummaryTop5 = HttpApiBuilder.handler(Api, "summary", "getSummaryTop5", ({ path, urlParams }) =>
   Effect.gen(function* () {
-    const rows = yield* executeSummaryQuery(path.key, query, true);
+    const rows = yield* executeSummaryQuery(path.key, urlParams, true);
     return rows;
   })
 );
@@ -247,15 +261,15 @@ export const getSummaryTop5 = HttpApiBuilder.handle(Api, "getSummaryTop5", ({ pa
 /**
  * Handler for GET /api/summary/leaderboard
  */
-export const getLeaderboard = HttpApiBuilder.handle(Api, "getLeaderboard", ({ query }) =>
+export const getLeaderboard = HttpApiBuilder.handler(Api, "summary", "getLeaderboard", ({ urlParams }) =>
   Effect.gen(function* () {
     const client = yield* TursoClient;
     const config = yield* AppConfig;
 
     // Build date filter
     let dateFilter: DateFilter;
-    if (query.period) {
-      dateFilter = yield* buildDateFilter(query.period, client);
+    if (urlParams.period) {
+      dateFilter = yield* buildDateFilter(urlParams.period, client);
     } else {
       dateFilter = { type: "date", label: "All Time" };
     }
@@ -267,10 +281,10 @@ export const getLeaderboard = HttpApiBuilder.handle(Api, "getLeaderboard", ({ qu
     const args: unknown[] = [];
     let systemFilterSql = "";
     let systemFilterSqlSub = "";
-    if (query.system_name) {
+    if (urlParams.system_name) {
       systemFilterSql = " AND e.starsystem = ?";
       systemFilterSqlSub = " AND ex.starsystem = ?";
-      args.push(query.system_name);
+      args.push(urlParams.system_name);
     }
 
     // Faction filter for influence calculation
@@ -367,22 +381,44 @@ export const getLeaderboard = HttpApiBuilder.handle(Api, "getLeaderboard", ({ qu
     const finalArgs = [factionLikePattern, ...args];
 
     const result = yield* Effect.tryPromise({
-      try: () => client.execute({ sql, args: finalArgs }),
+      try: () => client.execute({ sql, args: finalArgs as Array<string | number | null> }),
       catch: (error) =>
         new DatabaseError({
-          message: `Failed to execute leaderboard query: ${error}`,
-          cause: error,
+          operation: "execute leaderboard query",
+          error,
         }),
     });
 
-    return result.rows;
-  })
+    // Decode and validate the rows using the schema
+    return yield* Schema.decodeUnknown(LeaderboardResponseSchema)(result.rows);
+  }).pipe(
+    Effect.catchTag("ParseError", (error) =>
+      Effect.fail(
+        new DatabaseError({
+          operation: "decode leaderboard response",
+          error: new Error(error.message),
+        })
+      )
+    ),
+    Effect.catchAll((error) => {
+      // Map generic Error from buildDateFilter to DatabaseError
+      if (error instanceof Error && !(error instanceof DatabaseError)) {
+        return Effect.fail(
+          new DatabaseError({
+            operation: "build date filter",
+            error,
+          })
+        );
+      }
+      return Effect.fail(error);
+    })
+  )
 );
 
 /**
  * Handler for GET /api/summary/recruits
  */
-export const getRecruits = HttpApiBuilder.handle(Api, "getRecruits", () =>
+export const getRecruits = HttpApiBuilder.handler(Api, "summary", "getRecruits", () =>
   Effect.gen(function* () {
     const client = yield* TursoClient;
 
@@ -439,25 +475,35 @@ export const getRecruits = HttpApiBuilder.handle(Api, "getRecruits", () =>
     `;
 
     const result = yield* Effect.tryPromise({
-      try: () => client.execute({ sql, args: [] }),
+      try: () => client.execute({ sql, args: [] as Array<string | number | null> }),
       catch: (error) =>
         new DatabaseError({
-          message: `Failed to execute recruits query: ${error}`,
-          cause: error,
+          operation: "execute recruits query",
+          error,
         }),
     });
 
-    return result.rows;
-  })
+    // Decode and validate the rows using the schema
+    return yield* Schema.decodeUnknown(RecruitsResponseSchema)(result.rows);
+  }).pipe(
+    Effect.catchTag("ParseError", (error) =>
+      Effect.fail(
+        new DatabaseError({
+          operation: "decode recruits response",
+          error: new Error(error.message),
+        })
+      )
+    )
+  )
 );
 
-export const SummaryHandlers = HttpApiBuilder.group(
+export const SummaryApiLive = HttpApiBuilder.group(
   Api,
   "summary",
   (handlers) =>
     handlers
-      .pipe(getSummary)
-      .pipe(getSummaryTop5)
-      .pipe(getLeaderboard)
-      .pipe(getRecruits)
+      .handle("getSummary", getSummary)
+      .handle("getSummaryTop5", getSummaryTop5)
+      .handle("getLeaderboard", getLeaderboard)
+      .handle("getRecruits", getRecruits)
 );

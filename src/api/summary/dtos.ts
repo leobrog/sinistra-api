@@ -25,7 +25,7 @@ export type SummaryKey = typeof SummaryKeySchema.Type;
  */
 export const SummaryQueryParamsSchema = Schema.Struct({
   /** Period filter (e.g., "ct", "lt", "cw", "cm", etc.) */
-  period: Schema.optional(DateFilterPeriodSchema).pipe(Schema.withDefault(() => undefined as const)),
+  period: Schema.optional(DateFilterPeriodSchema),
   /** Custom start date (ISO 8601 format: YYYY-MM-DDTHH:MM:SSZ) */
   start_date: Schema.optional(Schema.String),
   /** Custom end date (ISO 8601 format: YYYY-MM-DDTHH:MM:SSZ) */
@@ -140,7 +140,7 @@ export type SummaryResponse = typeof SummaryResponseSchema.Type;
  */
 export const LeaderboardQueryParamsSchema = Schema.Struct({
   /** Period filter (e.g., "ct", "lt", "cw", "cm", etc.) */
-  period: Schema.optional(DateFilterPeriodSchema).pipe(Schema.withDefault(() => undefined as const)),
+  period: Schema.optional(DateFilterPeriodSchema),
   /** Optional system name filter */
   system_name: Schema.optional(Schema.String),
 });
