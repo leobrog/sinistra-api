@@ -1,7 +1,7 @@
 import { describe, it, expect } from "bun:test"
 import { Context, Effect, Layer, Option } from "effect"
 import { createClient } from "@libsql/client"
-import { TursoClient } from "@/database/client.ts"
+import { TursoClient } from "../../database/client.js"
 import { EventRepository, CmdrRepository } from "../../domain/repositories.js"
 import { EventRepositoryLive } from "../../database/repositories/EventRepository.js"
 import { CmdrRepositoryLive } from "../../database/repositories/CmdrRepository.js"

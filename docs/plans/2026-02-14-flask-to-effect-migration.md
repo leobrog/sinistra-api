@@ -4,7 +4,7 @@
 
 **Goal:** Convert the entire Sinistra Flask Server backend from Flask + SQLAlchemy + SQLite to Bun + Effect-TS + Turso/LibSQL.
 
-**Progress:** Tasks 1-35 complete (35/47) | Phase 1: 13/13 tasks ✅ | Phase 2: 7/7 tasks ✅ | Phase 3: 3/3 tasks ✅ | Phase 4: 13/13 tasks ✅
+**Progress:** Tasks 1-45 complete (45/47) | Phase 1: 13/13 tasks ✅ | Phase 2: 7/7 tasks ✅ | Phase 3: 3/3 tasks ✅ | Phase 4: 13/13 tasks ✅ | Phase 4c: 10/10 tasks ✅
 
 **Architecture:** Single-tenant Bun server using Effect HttpApi for endpoints, Turso/LibSQL for persistence, Effect Fibers for background schedulers.
 
@@ -275,56 +275,62 @@ Commit: "feat(db): add all Sinistra domain migrations"
 - File: `src/api/activities/handlers.test.ts`
 - Commit: "test(api): add Activities API integration test"
 
-### Task 38: Objectives API Integration Test
+### ✅ Task 38: Objectives API Integration Test [DONE]
 - **Flask**: Full CRUD on `/objectives` and `/api/objectives`, active filtering
 - **Dashboard**: Objective management UI with targets/settlements
-- **Test**: CRUD operations with nested targets, verify active filtering, deletion cascades
+- **Test**: CRUD operations with nested targets, verify active filtering, deletion cascades (13 tests)
 - File: `src/api/objectives/handlers.test.ts`
 - Commit: "test(api): add Objectives API integration test"
 
-### Task 39: Summary API Integration Test
+### ✅ Task 38d: Objectives progressDetail [DONE]
+- **Flask**: GET `/objectives` now returns a `progressDetail` field per target, calculated dynamically from event data (synthetic_cz, redeem_voucher_event, etc.) rather than stored values. The `progress` field on targets and settlements is also overridden with the calculated value.
+- **Change**: Added `ProgressDetailSchema` (overallProgress, overallTarget, overallPercentage, cmdrProgress[], settlementProgress[]) to `dtos.ts`; `GetObjectivesResponse` now uses new `ObjectiveResponseSchema` that includes `progressDetail` on each target
+- **Logic**: Period is auto-determined from objective dates (custom range if startdate set, current tick otherwise); `?period=` param overrides; all 9 target types supported (space_cz, ground_cz, bv, cb, inf, expl, trade_prof, mission_fail, murder); graceful fallback to zero progress if tables unavailable
+- Files: `src/api/objectives/dtos.ts`, `src/api/objectives/handlers.ts`
+
+### ✅ Task 39: Summary API Integration Test [DONE]
 - **Flask**: Multiple endpoints (`/api/summary/:key`, `/api/summary/top5/:key`, leaderboard, recruits)
 - **Dashboard**: Leaderboard displays, top 5 cards, recruit progression
 - **Test**: Query all summary types with date filters (ct, lt, cw, lw, cm, etc.), verify aggregations
 - File: `src/api/summary/handlers.test.ts`
 - Commit: "test(api): add Summary API integration test"
 
-### Task 40: Colonies API Integration Test
+### ✅ Task 40: Colonies API Integration Test [DONE]
 - **Flask**: Full CRUD + search + priority management (8 endpoints)
 - **Dashboard**: Colony management UI with search and priority sorting
 - **Test**: CRUD, search by cmdr/system/address, priority ordering and updates
 - File: `src/api/colonies/handlers.test.ts`
 - Commit: "test(api): add Colonies API integration test"
 
-### Task 41: Protected Factions API Integration Test
+### ✅ Task 41: Protected Factions API Integration Test [DONE]
 - **Flask**: CRUD + `/api/protected-faction/systems` (EDDN system lookup)
 - **Dashboard**: Protected faction configuration
 - **Test**: CRUD operations, system name listing from EDDN data
 - File: `src/api/protected-factions/handlers.test.ts`
 - Commit: "test(api): add Protected Factions API integration test"
 
-### Task 42: System API Integration Test
+### ✅ Task 42: System API Integration Test [DONE]
 - **Flask**: `GET /api/system-summary/:systemName` with 14+ query filters
 - **Dashboard**: System detail views with faction/state/conflict filters
 - **Test**: Query with various filters (faction, state, government, population, conflict, power)
 - File: `src/api/system/handlers.test.ts`
 - Commit: "test(api): add System API integration test"
 
-### Task 43: Auth API Integration Test
+### ✅ Task 43: Auth API Integration Test [DONE]
 - **Flask**: Discord OAuth flow (`POST /api/verify_discord`, `GET /api/auth/discord/callback`)
 - **Dashboard**: Login flow, JWT management
 - **Test**: Verify Discord user creation, OAuth callback handling, JWT generation
 - File: `src/api/auth/handlers.test.ts`
 - Commit: "test(api): add Auth API integration test"
 
-### Task 44: Discord Summary API Integration Test
+### ✅ Task 44: Discord Summary API Integration Test [DONE]
 - **Flask**: Discord webhook endpoints (top5all, tick, syntheticcz, syntheticgroundcz, custom-message)
 - **Dashboard**: Not directly used by dashboard (scheduler-driven)
 - **Test**: Generate Discord summaries with proper formatting, webhook payload validation
 - File: `src/api/discord-summary/handlers.test.ts`
 - Commit: "test(api): add Discord Summary API integration test"
 
-### Task 45: Commanders API Integration Test
+### ✅ Task 45: Commanders API Integration Test [DONE]
 - **Flask**: `POST /api/sync/cmdrs?inara=true|false`
 - **Dashboard**: Commander sync UI
 - **Test**: Sync with Inara API, sync from events only, verify deduplication
