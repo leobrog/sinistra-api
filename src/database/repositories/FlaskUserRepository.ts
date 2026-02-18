@@ -10,12 +10,12 @@ const mapRowToFlaskUser = (row: Record<string, unknown>) => ({
   id: row.id as string,
   username: row.username as string,
   passwordHash: row.password_hash as string,
-  discordId: row.discord_id as string | null,
-  discordUsername: row.discord_username as string | null,
+  discordId: row.discord_id === null ? undefined : (row.discord_id as string),
+  discordUsername: row.discord_username === null ? undefined : (row.discord_username as string),
   isAdmin: Boolean(row.is_admin),
   active: Boolean(row.active),
-  createdAt: new Date(row.created_at as string),
-  updatedAt: new Date(row.updated_at as string),
+  createdAt: row.created_at as string,
+  updatedAt: row.updated_at as string,
 })
 
 export const FlaskUserRepositoryLive = Layer.effect(

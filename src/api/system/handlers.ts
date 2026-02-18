@@ -25,7 +25,7 @@ const isTruthy = (value: string | undefined): boolean => {
 // Map domain models to DTOs
 const mapSystemInfo = (domain: DomainModels.EddnSystemInfo): EddnSystemInfoDTO => {
   return new EddnSystemInfoDTO({
-    id: domain.id as unknown as number, // Cast branded UUID to number for DTO
+    id: domain.id,
     system_name: domain.systemName,
     system_address: undefined, // Not in domain model
     controlling_faction: Option.getOrUndefined(domain.controllingFaction),
@@ -42,7 +42,7 @@ const mapSystemInfo = (domain: DomainModels.EddnSystemInfo): EddnSystemInfoDTO =
 
 const mapConflict = (domain: DomainModels.EddnConflict): EddnConflictDTO => {
   return new EddnConflictDTO({
-    id: domain.id as unknown as number,
+    id: domain.id,
     system_name: domain.systemName,
     war_type: Option.getOrUndefined(domain.warType),
     status: Option.getOrUndefined(domain.status),
@@ -65,7 +65,7 @@ const mapFaction = (domain: DomainModels.EddnFaction): EddnFactionDTO => {
   }
 
   return new EddnFactionDTO({
-    id: domain.id as unknown as number,
+    id: domain.id,
     system_name: domain.systemName,
     name: domain.name,
     allegiance: Option.getOrUndefined(domain.allegiance),
@@ -89,7 +89,7 @@ const mapPowerplay = (domain: DomainModels.EddnPowerplay): EddnPowerplayDTO => {
   }
 
   return new EddnPowerplayDTO({
-    id: domain.id as unknown as number,
+    id: domain.id,
     system_name: domain.systemName,
     power: stringifyJson(domain.power),
     powerplay_state: Option.getOrUndefined(domain.powerplayState),

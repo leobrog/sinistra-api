@@ -20,7 +20,7 @@ export class SystemSummaryQuery extends Schema.Class<SystemSummaryQuery>("System
 
 // System info from EDDN
 export class EddnSystemInfo extends Schema.Class<EddnSystemInfo>("EddnSystemInfo")({
-  id: Schema.Number,
+  id: Schema.String,
   system_name: Schema.String,
   system_address: Schema.optionalWith(Schema.Number, { nullable: true }),
   controlling_faction: Schema.optionalWith(Schema.String, { nullable: true }),
@@ -36,7 +36,7 @@ export class EddnSystemInfo extends Schema.Class<EddnSystemInfo>("EddnSystemInfo
 
 // Faction from EDDN
 export class EddnFaction extends Schema.Class<EddnFaction>("EddnFaction")({
-  id: Schema.Number,
+  id: Schema.String,
   system_name: Schema.String,
   name: Schema.String,
   allegiance: Schema.optionalWith(Schema.String, { nullable: true }),
@@ -52,7 +52,7 @@ export class EddnFaction extends Schema.Class<EddnFaction>("EddnFaction")({
 
 // Conflict from EDDN
 export class EddnConflict extends Schema.Class<EddnConflict>("EddnConflict")({
-  id: Schema.Number,
+  id: Schema.String,
   system_name: Schema.String,
   war_type: Schema.optionalWith(Schema.String, { nullable: true }),
   status: Schema.optionalWith(Schema.String, { nullable: true }),
@@ -67,7 +67,7 @@ export class EddnConflict extends Schema.Class<EddnConflict>("EddnConflict")({
 
 // Powerplay from EDDN
 export class EddnPowerplay extends Schema.Class<EddnPowerplay>("EddnPowerplay")({
-  id: Schema.Number,
+  id: Schema.String,
   system_name: Schema.String,
   power: Schema.optionalWith(Schema.String, { nullable: true }), // JSON array as string
   powerplay_state: Schema.optionalWith(Schema.String, { nullable: true }),
