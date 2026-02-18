@@ -32,6 +32,9 @@ import { TursoClientLive } from "./database/client.ts"
 import { AppConfigLive } from "./lib/config.ts"
 import { JwtServiceLive } from "./services/jwt.ts"
 
+// Schedulers
+import { SchedulersLive } from "./schedulers/index.ts"
+
 // Build API from composed endpoint groups
 const ApiHandlersLayer = Layer.mergeAll(
   EventsApiLive,
@@ -62,6 +65,8 @@ const ServicesLayer = Layer.mergeAll(JwtServiceLive, ApiKeyAuthLive)
 
 const InfrastructureLayer = Layer.mergeAll(TursoClientLive, AppConfigLive)
 
+const SchedulerLayer = SchedulersLive.pipe(Layer.provide(InfrastructureLayer))
+
 const ApiLive = HttpApiBuilder.api(Api).pipe(
   Layer.provide(ApiHandlersLayer),
   Layer.provide(ServicesLayer),
@@ -74,8 +79,8 @@ const ServerLayer = HttpApiBuilder.serve(HttpMiddleware.logger).pipe(
   Layer.provide(BunHttpServer.layer({ port: 3000 }))
 )
 
-// Launch the server
-Layer.launch(ServerLayer).pipe(
+// Launch server and schedulers together
+Layer.launch(Layer.mergeAll(ServerLayer, SchedulerLayer)).pipe(
   Effect.tap(() => Effect.logInfo("🚀 Sinistra API Server started on port 3000")),
   Effect.scoped,
   BunRuntime.runMain

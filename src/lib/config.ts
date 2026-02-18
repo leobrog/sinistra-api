@@ -98,7 +98,7 @@ export const TickPollIntervalMs = Config.integer("TICK_POLL_INTERVAL_MS").pipe(
 ) // 5 minutes
 
 export const TickApiUrl = Config.string("TICK_API_URL").pipe(
-  Config.withDefault("https://elitebgs.app/api/ebgs/v5/ticks")
+  Config.withDefault("http://tick.infomancer.uk/galtick.json")
 )
 
 // Scheduler Config
