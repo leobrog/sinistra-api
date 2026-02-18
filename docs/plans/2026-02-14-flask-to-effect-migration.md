@@ -4,7 +4,7 @@
 
 **Goal:** Convert the entire Sinistra Flask Server backend from Flask + SQLAlchemy + SQLite to Bun + Effect-TS + Turso/LibSQL.
 
-**Progress:** Tasks 1-45 complete (45/47) | Phase 1: 13/13 tasks ✅ | Phase 2: 7/7 tasks ✅ | Phase 3: 3/3 tasks ✅ | Phase 4: 13/13 tasks ✅ | Phase 4c: 10/10 tasks ✅
+**Progress:** Phase 5 complete ✅ | Phase 1: 13/13 ✅ | Phase 2: 7/7 ✅ | Phase 3: 3/3 ✅ | Phase 4: 13/13 ✅ | Phase 4c: 10/10 ✅ | Phase 5: 6/6 ✅
 
 **Architecture:** Single-tenant Bun server using Effect HttpApi for endpoints, Turso/LibSQL for persistence, Effect Fibers for background schedulers.
 
@@ -449,53 +449,74 @@ describe("Xxx API Integration", () => {
 
 ---
 
-## Phase 5: Background Schedulers
+## Phase 5: Background Schedulers ✅
 
-### Task EDDN Client Fiber
+All schedulers use TursoClient directly (no repository abstraction). Each is
+`Effect<never, never, AppConfig | TursoClient>`, catches all errors internally,
+and is forked via `Effect.forkDaemon` so failures never propagate to the server.
+Guarded by `ENABLE_SCHEDULERS` env var.
+
+**Commit:** `1206f95` — `feat(schedulers): add Phase 5 background schedulers`
+
+### ✅ Task EDDN Client Fiber
 
 - File: `src/schedulers/eddn-client.ts`
-- Logic: ZMQ consumer, upsert EDDN data, cleanup job
-- Commit: "feat(schedulers): add EDDN client"
+- ZMQ subscriber on `tcp://eddn.edcd.io:9500`; decompresses zlib frames; saves
+  raw message + system/faction/conflict/powerplay rows; periodic cleanup of old
+  messages. Retries every 5s on disconnect.
+- Bug fixed: `eddn_faction` INSERT had 12 columns but 11 `?` placeholders
+  (missing `updated_at`).
 
-### Task Tick Monitor Fiber
+### ✅ Task Tick Monitor Fiber
 
 - File: `src/schedulers/tick-monitor.ts`
-- Logic: Poll tick, detect changes, notify Discord
-- Commit: "feat(schedulers): add tick monitor"
+- Polls Zoy's `http://tick.infomancer.uk/galtick.json` every 5 min (default).
+  On new `lastGalaxyTick`: saves to `tick_state`, posts to BGS webhook.
+  Seed last known tick from DB on startup to avoid duplicate notifications.
 
-### Task Shoutout Scheduler Fiber
+### ✅ Task Shoutout Scheduler Fiber
 
 - File: `src/schedulers/shoutout-scheduler.ts`
-- Logic: Run queries on tick change, send to Discord
-- Commit: "feat(schedulers): add shoutout scheduler"
+- Schedule: daily at 20:00, 20:01, 20:02 UTC (based on `fac_shoutout_scheduler.py`)
+- Period: "lt" (last tick) = `SELECT DISTINCT tickid FROM event ORDER BY timestamp DESC LIMIT 2`, use `rows[1]`
+- Three sequential jobs:
+  - 20:00 — BGS tick summary (influence, missions, CZs, market) → BGS webhook
+  - 20:01 — Space CZ summary per system/type → conflict webhook
+  - 20:02 — Ground CZ summary per system/settlement/type → shoutout webhook
+- Mission influence JOIN corrected to TS schema: `mce.id = mci.mission_id`
 
-### Task Conflict Scheduler Fiber
+### ✅ Task Conflict Scheduler Fiber
 
 - File: `src/schedulers/conflict-scheduler.ts`
-- Logic: Monitor conflicts, send notifications
-- Commit: "feat(schedulers): add conflict scheduler"
+- Schedule: every 6 hours at 00:00, 06:00, 12:00, 18:00 UTC (based on `fac_conflict_scheduler.py` + `fac_in_conflict.py`)
+- Reads current tick's `raw_json` from `event` table; parses `Conflicts[]` array
+  from FSDJump/Location events; deduplicates by system (keeps latest timestamp,
+  accumulates CMDRs); posts to BGS webhook. No-op if no active conflicts.
 
-### Task Inara Sync Scheduler Fiber
+### ✅ Task Inara Sync Scheduler Fiber
 
 - File: `src/schedulers/inara-sync.ts`
-- Logic: Periodic cmdr sync with Inara API
-- Commit: "feat(schedulers): add Inara sync"
+- Schedule: daily at 01:00 UTC (based on `cmdr_sync_inara.py`)
+- Raw SQL against `cmdr` table (no CmdrRepository); 60s sleep between each CMDR;
+  aborts batch on `InaraRateLimitError`; converts numeric ranks to strings before
+  storing (cmdr table stores ranks as TEXT).
 
-### Task Compose Schedulers
+### ✅ Task Compose Schedulers
 
 - File: `src/schedulers/index.ts`
-- Fork all scheduler fibers
-- Commit: "feat(schedulers): compose all schedulers"
+- `Layer.effectDiscard` that forks all 5 fibers; exits early if
+  `config.schedulers.enabled` is false.
+- Wired into `src/main.ts` as `SchedulerLayer` alongside `ServerLayer`:
+  `Layer.launch(Layer.mergeAll(ServerLayer, SchedulerLayer))`
 
 ---
 
 ## Phase 6: Server Composition
 
-### Task Main Server
+### ✅ Task Main Server [DONE]
 
 - File: `src/main.ts`
-- Wire all layers together
-- Commit: "feat: compose full server"
+- Server + schedulers wired together via `Layer.mergeAll(ServerLayer, SchedulerLayer)`
 
 ### Task Static Dashboard Serving
 
@@ -600,7 +621,7 @@ describe("Xxx API Integration", () => {
 - [ ] All TypeScript compiles
 - [ ] All tests pass
 - [ ] All Flask endpoints ported
-- [ ] All schedulers running
+- [x] All schedulers running
 - [ ] Dashboard loads
 - [ ] EDDN client connects
 - [ ] Discord webhooks work
