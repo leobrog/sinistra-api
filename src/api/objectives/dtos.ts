@@ -1,6 +1,5 @@
 import { Schema } from "effect"
-import { Objective } from "../../domain/models.js"
-import { ObjectiveId } from "../../domain/ids.js"
+import { ObjectiveId, ObjectiveTargetId, ObjectiveTargetSettlementId } from "../../domain/ids.js"
 
 /**
  * DTOs for Objectives API
@@ -94,6 +93,70 @@ export const GetObjectivesQuery = Schema.Struct({
 
 export type GetObjectivesQuery = typeof GetObjectivesQuery.Type
 
-// GET /objectives response (no IDs)
-export const GetObjectivesResponse = Schema.Array(Objective)
+// Progress detail schemas (for GET response)
+export const CmdrProgressSchema = Schema.Struct({
+  cmdr: Schema.String,
+  progress: Schema.Number,
+  target: Schema.Number,
+  percentage: Schema.Number,
+})
+
+export const SettlementProgressSchema = Schema.Struct({
+  settlement: Schema.String,
+  progress: Schema.Number,
+  target: Schema.Number,
+  percentage: Schema.Number,
+})
+
+export const ProgressDetailSchema = Schema.Struct({
+  overallProgress: Schema.Number,
+  overallTarget: Schema.Number,
+  overallPercentage: Schema.Number,
+  cmdrProgress: Schema.Array(CmdrProgressSchema),
+  settlementProgress: Schema.Array(SettlementProgressSchema),
+})
+
+export type ProgressDetail = typeof ProgressDetailSchema.Type
+
+// Settlement in GET response
+const SettlementResponseSchema = Schema.Struct({
+  id: ObjectiveTargetSettlementId,
+  targetId: ObjectiveTargetId,
+  name: Schema.optionalWith(Schema.String, { as: "Option" }),
+  targetindividual: Schema.optionalWith(Schema.Number, { as: "Option" }),
+  targetoverall: Schema.optionalWith(Schema.Number, { as: "Option" }),
+  progress: Schema.optionalWith(Schema.Number, { as: "Option" }),
+})
+
+// Target in GET response (includes progressDetail)
+const ObjectiveTargetResponseSchema = Schema.Struct({
+  id: ObjectiveTargetId,
+  objectiveId: ObjectiveId,
+  type: Schema.optionalWith(Schema.String, { as: "Option" }),
+  station: Schema.optionalWith(Schema.String, { as: "Option" }),
+  system: Schema.optionalWith(Schema.String, { as: "Option" }),
+  faction: Schema.optionalWith(Schema.String, { as: "Option" }),
+  progress: Schema.optionalWith(Schema.Number, { as: "Option" }),
+  targetindividual: Schema.optionalWith(Schema.Number, { as: "Option" }),
+  targetoverall: Schema.optionalWith(Schema.Number, { as: "Option" }),
+  settlements: Schema.Array(SettlementResponseSchema),
+  progressDetail: ProgressDetailSchema,
+})
+
+// Objective in GET response
+const ObjectiveResponseSchema = Schema.Struct({
+  id: ObjectiveId,
+  title: Schema.optionalWith(Schema.String, { as: "Option" }),
+  priority: Schema.optionalWith(Schema.Number, { as: "Option" }),
+  type: Schema.optionalWith(Schema.String, { as: "Option" }),
+  system: Schema.optionalWith(Schema.String, { as: "Option" }),
+  faction: Schema.optionalWith(Schema.String, { as: "Option" }),
+  description: Schema.optionalWith(Schema.String, { as: "Option" }),
+  startdate: Schema.optionalWith(Schema.Date, { as: "Option" }),
+  enddate: Schema.optionalWith(Schema.Date, { as: "Option" }),
+  targets: Schema.Array(ObjectiveTargetResponseSchema),
+})
+
+// GET /objectives response
+export const GetObjectivesResponse = Schema.Array(ObjectiveResponseSchema)
 export type GetObjectivesResponse = typeof GetObjectivesResponse.Type
