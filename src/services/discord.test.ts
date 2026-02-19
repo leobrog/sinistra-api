@@ -5,10 +5,7 @@ import {
   getUserRoles,
   exchangeOAuthCode,
   buildOAuthUrl,
-  DiscordWebhookError,
-  DiscordApiError,
-  DiscordOAuthError,
-} from "./discord"
+} from "./discord.js"
 
 describe("DiscordService", () => {
   beforeEach(() => {
@@ -19,7 +16,7 @@ describe("DiscordService", () => {
   describe("sendWebhook", () => {
     it("should send a simple text webhook successfully", async () => {
       // Mock successful webhook response (204 No Content)
-      globalThis.fetch = mock(async () => {
+      (globalThis as any).fetch = mock(async () => {
         return new Response(null, { status: 204 })
       })
 
@@ -30,11 +27,11 @@ describe("DiscordService", () => {
       )
 
       expect(result).toBeUndefined() // Void return
-      expect(globalThis.fetch).toHaveBeenCalledTimes(1)
+      expect((globalThis as any).fetch).toHaveBeenCalledTimes(1)
     })
 
     it("should send webhook with embeds", async () => {
-      globalThis.fetch = mock(async () => {
+      (globalThis as any).fetch = mock(async () => {
         return new Response(null, { status: 204 })
       })
 
@@ -54,7 +51,7 @@ describe("DiscordService", () => {
     })
 
     it("should fail when webhook returns error status", async () => {
-      globalThis.fetch = mock(async () => {
+      (globalThis as any).fetch = mock(async () => {
         return new Response("Bad Request", { status: 400 })
       })
 
@@ -70,8 +67,8 @@ describe("DiscordService", () => {
 
   describe("getUserRoles", () => {
     it("should fetch user roles successfully", async () => {
-      let callCount = 0
-      globalThis.fetch = mock(async (url: string | URL) => {
+      let callCount = 0;
+      (globalThis as any).fetch = mock(async (url: string | URL) => {
         callCount++
         const urlStr = url.toString()
 
@@ -114,7 +111,7 @@ describe("DiscordService", () => {
     })
 
     it("should return empty array when user not in guild", async () => {
-      globalThis.fetch = mock(async () => {
+      (globalThis as any).fetch = mock(async () => {
         return new Response("Not Found", { status: 404 })
       })
 
@@ -124,8 +121,8 @@ describe("DiscordService", () => {
     })
 
     it("should return empty array when user has no roles", async () => {
-      let callCount = 0
-      globalThis.fetch = mock(async (url: string | URL) => {
+      let callCount = 0;
+      (globalThis as any).fetch = mock(async (url: string | URL) => {
         callCount++
         const urlStr = url.toString()
 
@@ -156,7 +153,7 @@ describe("DiscordService", () => {
     })
 
     it("should fail when API returns error", async () => {
-      globalThis.fetch = mock(async () => {
+      (globalThis as any).fetch = mock(async () => {
         return new Response("Server Error", { status: 500 })
       })
 
@@ -168,8 +165,8 @@ describe("DiscordService", () => {
 
   describe("exchangeOAuthCode", () => {
     it("should exchange code for user data successfully", async () => {
-      let callCount = 0
-      globalThis.fetch = mock(async (url: string | URL) => {
+      let callCount = 0;
+      (globalThis as any).fetch = mock(async (url: string | URL) => {
         callCount++
         const urlStr = url.toString()
 
@@ -214,7 +211,7 @@ describe("DiscordService", () => {
     })
 
     it("should fail when token exchange fails", async () => {
-      globalThis.fetch = mock(async () => {
+      (globalThis as any).fetch = mock(async () => {
         return new Response("Invalid code", { status: 400 })
       })
 
@@ -226,8 +223,8 @@ describe("DiscordService", () => {
     })
 
     it("should fail when user fetch fails", async () => {
-      let callCount = 0
-      globalThis.fetch = mock(async (url: string | URL) => {
+      let callCount = 0;
+      (globalThis as any).fetch = mock(async (url: string | URL) => {
         callCount++
         const urlStr = url.toString()
 

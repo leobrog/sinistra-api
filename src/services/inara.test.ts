@@ -3,9 +3,7 @@ import { Effect, Option } from "effect"
 import {
   fetchCmdrProfile,
   profileToDbValues,
-  InaraApiError,
-  InaraRateLimitError,
-} from "./inara"
+} from "./inara.js"
 
 describe("InaraService", () => {
   beforeEach(() => {
@@ -14,7 +12,7 @@ describe("InaraService", () => {
 
   describe("fetchCmdrProfile", () => {
     it("should fetch commander profile successfully", async () => {
-      globalThis.fetch = mock(async () => {
+      (globalThis as any).fetch = mock(async () => {
         return new Response(
           JSON.stringify({
             header: {
@@ -47,22 +45,22 @@ describe("InaraService", () => {
         )
       })
 
-      const result = await Effect.runPromise(fetchCmdrProfile("TestCmdr", "test_api_key"))
+      const result = await Effect.runPromise(fetchCmdrProfile("TestCmdr", "test_api_key")) as any
 
-      expect(Option.getOrNull(result.rankCombat)).toBe(5)
-      expect(Option.getOrNull(result.rankTrade)).toBe(3)
-      expect(Option.getOrNull(result.rankExplore)).toBe(7)
-      expect(Option.getOrNull(result.rankCqc)).toBe(0)
-      expect(Option.getOrNull(result.rankEmpire)).toBe(12)
-      expect(Option.getOrNull(result.rankFederation)).toBe(4)
-      expect(Option.getOrNull(result.rankPower)).toBe("Aisling Duval")
-      expect(Option.getOrNull(result.inaraUrl)).toBe("https://inara.cz/cmdr/TestCmdr/")
-      expect(Option.getOrNull(result.squadronName)).toBe("Test Squadron")
-      expect(Option.getOrNull(result.squadronRank)).toBe("Officer")
+      expect(Option.getOrNull(result.rankCombat as Option.Option<any>)).toBe(5)
+      expect(Option.getOrNull(result.rankTrade as Option.Option<any>)).toBe(3)
+      expect(Option.getOrNull(result.rankExplore as Option.Option<any>)).toBe(7)
+      expect(Option.getOrNull(result.rankCqc as Option.Option<any>)).toBe(0)
+      expect(Option.getOrNull(result.rankEmpire as Option.Option<any>)).toBe(12)
+      expect(Option.getOrNull(result.rankFederation as Option.Option<any>)).toBe(4)
+      expect(Option.getOrNull(result.rankPower as Option.Option<any>)).toBe("Aisling Duval")
+      expect(Option.getOrNull(result.inaraUrl as Option.Option<any>)).toBe("https://inara.cz/cmdr/TestCmdr/")
+      expect(Option.getOrNull(result.squadronName as Option.Option<any>)).toBe("Test Squadron")
+      expect(Option.getOrNull(result.squadronRank as Option.Option<any>)).toBe("Officer")
     })
 
     it("should handle commander with no squadron", async () => {
-      globalThis.fetch = mock(async () => {
+      (globalThis as any).fetch = mock(async () => {
         return new Response(
           JSON.stringify({
             header: {
@@ -82,15 +80,15 @@ describe("InaraService", () => {
         )
       })
 
-      const result = await Effect.runPromise(fetchCmdrProfile("SoloCmdr", "test_api_key"))
+      const result = await Effect.runPromise(fetchCmdrProfile("SoloCmdr", "test_api_key")) as any
 
-      expect(Option.getOrNull(result.rankCombat)).toBe(2)
-      expect(Option.isNone(result.squadronName)).toBe(true)
-      expect(Option.isNone(result.squadronRank)).toBe(true)
+      expect(Option.getOrNull(result.rankCombat as Option.Option<any>)).toBe(2)
+      expect(Option.isNone(result.squadronName as Option.Option<any>)).toBe(true)
+      expect(Option.isNone(result.squadronRank as Option.Option<any>)).toBe(true)
     })
 
     it("should handle rate limiting error", async () => {
-      globalThis.fetch = mock(async () => {
+      (globalThis as any).fetch = mock(async () => {
         return new Response(
           JSON.stringify({
             header: {
@@ -110,7 +108,7 @@ describe("InaraService", () => {
     })
 
     it("should fail when HTTP request fails", async () => {
-      globalThis.fetch = mock(async () => {
+      (globalThis as any).fetch = mock(async () => {
         return new Response("Server Error", { status: 500 })
       })
 
@@ -120,7 +118,7 @@ describe("InaraService", () => {
     })
 
     it("should fail when no event data returned", async () => {
-      globalThis.fetch = mock(async () => {
+      (globalThis as any).fetch = mock(async () => {
         return new Response(
           JSON.stringify({
             header: {
@@ -143,7 +141,7 @@ describe("InaraService", () => {
     })
 
     it("should handle missing rank fields", async () => {
-      globalThis.fetch = mock(async () => {
+      (globalThis as any).fetch = mock(async () => {
         return new Response(
           JSON.stringify({
             header: {
@@ -163,12 +161,12 @@ describe("InaraService", () => {
         )
       })
 
-      const result = await Effect.runPromise(fetchCmdrProfile("NewCmdr", "test_api_key"))
+      const result = await Effect.runPromise(fetchCmdrProfile("NewCmdr", "test_api_key")) as any
 
-      expect(Option.isNone(result.rankCombat)).toBe(true)
-      expect(Option.isNone(result.rankTrade)).toBe(true)
-      expect(Option.isNone(result.rankExplore)).toBe(true)
-      expect(Option.getOrNull(result.inaraUrl)).toBe("https://inara.cz/cmdr/NewCmdr/")
+      expect(Option.isNone(result.rankCombat as Option.Option<any>)).toBe(true)
+      expect(Option.isNone(result.rankTrade as Option.Option<any>)).toBe(true)
+      expect(Option.isNone(result.rankExplore as Option.Option<any>)).toBe(true)
+      expect(Option.getOrNull(result.inaraUrl as Option.Option<any>)).toBe("https://inara.cz/cmdr/NewCmdr/")
     })
   })
 

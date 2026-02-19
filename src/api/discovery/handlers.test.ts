@@ -1,18 +1,16 @@
 import { describe, it, expect } from "bun:test"
-import { Context, Effect, Layer, Option } from "effect"
-import { AppConfig } from "../../lib/config"
-import { DiscoveryResponse, EndpointConfig, HeaderRequirement } from "./dtos"
+import { Effect, Option } from "effect"
+import { AppConfig } from "../../lib/config.js"
+import { DiscoveryResponse, EndpointConfig, HeaderRequirement } from "./dtos.js"
 
-// Create the same Tag as used in the config layer
-const AppConfigTag = Context.GenericTag<AppConfig>("AppConfig")
 
 describe("DiscoveryApi", () => {
-  const testConfig = new AppConfig(
-    {
+  const testConfig = {
+    database: {
       url: "file::memory:",
       eddnUrl: "file::memory:",
     },
-    {
+    server: {
       port: 3000,
       host: "localhost",
       nodeEnv: "test",
@@ -23,11 +21,14 @@ describe("DiscoveryApi", () => {
       apiKey: "test-api-key",
       frontendUrl: "http://localhost:5000",
     },
-    {
+    faction: {
+      name: "Test Faction",
+    },
+    jwt: {
       secret: "test-jwt-secret",
       expiresIn: "7d",
     },
-    {
+    discord: {
       oauth: {
         clientId: "test-client-id",
         clientSecret: "test-client-secret",
@@ -44,34 +45,33 @@ describe("DiscoveryApi", () => {
         debug: Option.none(),
       },
     },
-    {
+    inara: {
       apiKey: "test-inara-key",
       appName: "Test",
       apiUrl: "https://inara.cz/inapi/v1/",
     },
-    {
+    eddn: {
       zmqUrl: "tcp://localhost:9500",
       cleanupIntervalMs: 3600000,
       messageRetentionMs: 86400000,
     },
-    {
+    tick: {
       pollIntervalMs: 300000,
       apiUrl: "https://elitebgs.app/api/ebgs/v5/ticks",
     },
-    {
+    schedulers: {
       enabled: false,
-    }
-  )
+    },
+  }
 
-  const TestConfigLayer = Layer.succeed(AppConfigTag, testConfig)
 
   const runTest = <A, E>(
     effect: Effect.Effect<A, E, AppConfig>
-  ): Promise<A> =>
-    Effect.runPromise(Effect.provideService(effect, AppConfigTag, testConfig))
+  ): Promise<any> =>
+    Effect.runPromise(Effect.provideService(effect, AppConfig, testConfig as any))
 
   // Test the handler logic directly
-  const createDiscoveryResponse = (config: AppConfig) =>
+  const createDiscoveryResponse = (config: any) =>
     new DiscoveryResponse({
       name: config.server.name,
       description: config.server.description,
@@ -109,7 +109,7 @@ describe("DiscoveryApi", () => {
   it("should return discovery information", async () => {
     const result = await runTest(
       Effect.gen(function* () {
-        const config = yield* AppConfigTag
+        const config = yield* AppConfig
         return createDiscoveryResponse(config)
       })
     )
@@ -126,7 +126,7 @@ describe("DiscoveryApi", () => {
   it("should include required header information", async () => {
     const result = await runTest(
       Effect.gen(function* () {
-        const config = yield* AppConfigTag
+        const config = yield* AppConfig
         return createDiscoveryResponse(config)
       })
     )
@@ -143,7 +143,7 @@ describe("DiscoveryApi", () => {
   it("should include all endpoint configurations", async () => {
     const result = await runTest(
       Effect.gen(function* () {
-        const config = yield* AppConfigTag
+        const config = yield* AppConfig
         return createDiscoveryResponse(config)
       })
     )

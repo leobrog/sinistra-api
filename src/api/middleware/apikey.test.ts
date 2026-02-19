@@ -1,20 +1,15 @@
-import { describe, it, expect, beforeEach, mock, spyOn } from "bun:test"
-import { Context, Effect, Layer, Option } from "effect"
-import { HttpMiddleware, HttpServer, HttpServerRequest, HttpServerResponse, HttpRouter } from "@effect/platform"
-import { NodeHttpServer, NodeRuntime } from "@effect/platform-node"
-import { AppConfig } from "../../lib/config"
-import { ApiKeyAuthMiddleware } from "./apikey"
+import { describe, it, expect, spyOn } from "bun:test"
+import { Effect, Layer, Option, Redacted } from "effect"
+import { AppConfig } from "../../lib/config.js"
+import { ApiKeyAuth, ApiKeyAuthLive } from "./apikey.js"
 
-// Create the same Tag as in the middleware
-const AppConfigTag = Context.GenericTag<AppConfig>("AppConfig")
-
-describe("ApiKeyAuthMiddleware", () => {
-  const testConfig = new AppConfig(
-    {
+describe("ApiKeyAuth", () => {
+  const testConfig = {
+    database: {
       url: "file::memory:",
       eddnUrl: "file::memory:",
     },
-    {
+    server: {
       port: 3000,
       host: "localhost",
       nodeEnv: "test",
@@ -25,11 +20,14 @@ describe("ApiKeyAuthMiddleware", () => {
       apiKey: "test-api-key-12345",
       frontendUrl: "http://localhost:5000",
     },
-    {
+    faction: {
+      name: "Test Faction",
+    },
+    jwt: {
       secret: "test-jwt-secret",
       expiresIn: "7d",
     },
-    {
+    discord: {
       oauth: {
         clientId: "test-client-id",
         clientSecret: "test-client-secret",
@@ -46,181 +44,66 @@ describe("ApiKeyAuthMiddleware", () => {
         debug: Option.none(),
       },
     },
-    {
+    inara: {
       apiKey: "test-inara-key",
       appName: "Test",
       apiUrl: "https://inara.cz/inapi/v1/",
     },
-    {
+    eddn: {
       zmqUrl: "tcp://localhost:9500",
       cleanupIntervalMs: 3600000,
       messageRetentionMs: 86400000,
     },
-    {
+    tick: {
       pollIntervalMs: 300000,
       apiUrl: "https://elitebgs.app/api/ebgs/v5/ticks",
     },
-    {
+    schedulers: {
       enabled: false,
-    }
-  )
-
-  const TestConfigLayer = Layer.succeed(AppConfigTag, testConfig)
-
-  const createTestApp = (handler: Effect.Effect<HttpServerResponse.HttpServerResponse, never, never>) => {
-    const router = HttpRouter.empty.pipe(
-      HttpRouter.get("/test", handler)
-    )
-
-    return HttpServer.serve(router).pipe(
-      HttpMiddleware.logger,
-      HttpServer.withLogAddress
-    )
+    },
   }
 
-  it("should allow request with valid API key and version", async () => {
-    const handler = Effect.gen(function* () {
-      return yield* HttpServerResponse.json({ message: "Success" })
-    })
+  const TestConfigLayer = Layer.succeed(AppConfig, testConfig as any)
+  const TestLayer = ApiKeyAuthLive.pipe(Layer.provide(TestConfigLayer))
 
-    const app = createTestApp(handler).pipe(
-      Layer.provide(NodeHttpServer.layer({ port: 0 })),
-      Layer.provide(TestConfigLayer)
+  const runTest = (effect: Effect.Effect<any, any, any>): Promise<any> =>
+    Effect.runPromise(Effect.provide(effect as any, TestLayer as any) as Effect.Effect<any, any, never>)
+
+  it("should allow request with valid API key", async () => {
+    const result = await runTest(
+      Effect.gen(function* () {
+        const auth = yield* ApiKeyAuth
+        return yield* (auth as any).apiKey(Redacted.make("test-api-key-12345"))
+      })
     )
 
-    // Test would require starting the server and making a request
-    // For now, we'll test the middleware logic directly
-    const request = {
-      headers: {
-        apikey: "test-api-key-12345",
-        apiversion: "2.0.0",
-      },
-    } as unknown as HttpServerRequest.HttpServerRequest
-
-    const middlewareEffect = ApiKeyAuthMiddleware(
-      Effect.succeed(HttpServerResponse.json({ message: "Success" }))
-    ).pipe(
-      Effect.provideService(HttpServerRequest.HttpServerRequest, request),
-      Effect.provide(TestConfigLayer)
-    )
-
-    const result = await Effect.runPromise(middlewareEffect)
-
-    // The middleware should pass through to the handler
-    expect(result).toBeDefined()
+    // void return means undefined
+    expect(result).toBeUndefined()
   })
 
   it("should reject request with invalid API key", async () => {
-    const request = {
-      headers: {
-        apikey: "invalid-key",
-        apiversion: "2.0.0",
-      },
-    } as unknown as HttpServerRequest.HttpServerRequest
-
-    const middlewareEffect = ApiKeyAuthMiddleware(
-      Effect.succeed(HttpServerResponse.json({ message: "Success" }))
-    ).pipe(
-      Effect.provideService(HttpServerRequest.HttpServerRequest, request),
-      Effect.provide(TestConfigLayer)
+    const exit = await Effect.runPromiseExit(
+      Effect.gen(function* () {
+        const auth = yield* ApiKeyAuth
+        return yield* (auth as any).apiKey(Redacted.make("invalid-key"))
+      }).pipe(Effect.provide(TestLayer as any)) as any
     )
 
-    const result = await Effect.runPromise(middlewareEffect)
-
-    // Should return 401 error response
-    expect(result.status).toBe(401)
-  })
-
-  it("should reject request with missing API version", async () => {
-    const request = {
-      headers: {
-        apikey: "test-api-key-12345",
-        // apiversion missing
-      },
-    } as unknown as HttpServerRequest.HttpServerRequest
-
-    const middlewareEffect = ApiKeyAuthMiddleware(
-      Effect.succeed(HttpServerResponse.json({ message: "Success" }))
-    ).pipe(
-      Effect.provideService(HttpServerRequest.HttpServerRequest, request),
-      Effect.provide(TestConfigLayer)
-    )
-
-    const result = await Effect.runPromise(middlewareEffect)
-
-    // Should return 400 error response
-    expect(result.status).toBe(400)
-  })
-
-  it("should reject request with invalid API version format", async () => {
-    const request = {
-      headers: {
-        apikey: "test-api-key-12345",
-        apiversion: "2.0", // Invalid format, should be x.y.z
-      },
-    } as unknown as HttpServerRequest.HttpServerRequest
-
-    const middlewareEffect = ApiKeyAuthMiddleware(
-      Effect.succeed(HttpServerResponse.json({ message: "Success" }))
-    ).pipe(
-      Effect.provideService(HttpServerRequest.HttpServerRequest, request),
-      Effect.provide(TestConfigLayer)
-    )
-
-    const result = await Effect.runPromise(middlewareEffect)
-
-    // Should return 400 error response
-    expect(result.status).toBe(400)
-  })
-
-  it("should allow but warn on API version mismatch", async () => {
-    const consoleWarnSpy = spyOn(console, "warn")
-
-    const request = {
-      headers: {
-        apikey: "test-api-key-12345",
-        apiversion: "1.5.0", // Different from server version
-      },
-    } as unknown as HttpServerRequest.HttpServerRequest
-
-    const middlewareEffect = ApiKeyAuthMiddleware(
-      Effect.succeed(HttpServerResponse.json({ message: "Success" }))
-    ).pipe(
-      Effect.provideService(HttpServerRequest.HttpServerRequest, request),
-      Effect.provide(TestConfigLayer)
-    )
-
-    const result = await Effect.runPromise(middlewareEffect)
-
-    // Should still allow the request
-    expect(result).toBeDefined()
-
-    // Should have logged a warning
-    expect(consoleWarnSpy).toHaveBeenCalled()
+    expect(exit._tag).toBe("Failure")
   })
 
   it("should redact long API keys in logs", async () => {
     const consoleWarnSpy = spyOn(console, "warn")
 
-    const request = {
-      headers: {
-        apikey: "verylongapikey123456789",
-        apiversion: "2.0.0",
-      },
-    } as unknown as HttpServerRequest.HttpServerRequest
-
-    const middlewareEffect = ApiKeyAuthMiddleware(
-      Effect.succeed(HttpServerResponse.json({ message: "Success" }))
-    ).pipe(
-      Effect.provideService(HttpServerRequest.HttpServerRequest, request),
-      Effect.provide(TestConfigLayer)
+    await Effect.runPromiseExit(
+      Effect.gen(function* () {
+        const auth = yield* ApiKeyAuth
+        return yield* (auth as any).apiKey(Redacted.make("verylongapikey123456789"))
+      }).pipe(Effect.provide(TestLayer as any)) as any
     )
 
-    await Effect.runPromise(middlewareEffect)
-
-    // Should have logged warning with redacted key
-    const calls = consoleWarnSpy.mock.calls.map(call => call.join(" "))
-    const hasRedactedKey = calls.some(call => call.includes("verylon**") || call.includes("***"))
+    const calls = consoleWarnSpy.mock.calls.map((call: any[]) => call.join(" "))
+    const hasRedactedKey = calls.some((call: string) => call.includes("verylon") && call.includes("***"))
     expect(hasRedactedKey).toBe(true)
   })
 })

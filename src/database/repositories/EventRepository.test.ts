@@ -272,7 +272,7 @@ describe("EventRepository", () => {
 
         yield* repo.createEvent(event, {
           marketSell: [marketSell],
-          missionCompleted: [mission],
+          missionCompleted: [{ event: mission, influences: [] }],
         });
 
         const result = yield* repo.findById(event.id);

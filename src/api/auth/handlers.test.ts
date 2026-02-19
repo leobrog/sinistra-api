@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test"
-import { Context, Effect, Layer, Option } from "effect"
+import { Effect, Layer, Option } from "effect"
 import { createClient } from "@libsql/client"
 import { TursoClient } from "../../database/client.js"
 import { FlaskUserRepository } from "../../domain/repositories.js"

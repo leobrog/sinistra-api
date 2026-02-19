@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test"
-import { Context, Effect, Layer, Option } from "effect"
+import { Effect, Layer, Option } from "effect"
 import { createClient } from "@libsql/client"
 import { TursoClient } from "../../database/client.js"
 import { ColonyRepository } from "../../domain/repositories.js"
@@ -9,16 +9,14 @@ import { Colony } from "../../domain/models.js"
 import { ColonyId } from "../../domain/ids.js"
 import { v4 as uuid } from "uuid"
 
-// Create the same Tag as used in the config layer
-const AppConfigTag = Context.GenericTag<AppConfig>("AppConfig")
 
 describe("Colonies API Integration", () => {
-  const testConfig = new AppConfig(
-    {
+  const testConfig = {
+    database: {
       url: "file::memory:",
       eddnUrl: "file::memory:",
     },
-    {
+    server: {
       port: 3000,
       host: "localhost",
       nodeEnv: "test",
@@ -29,14 +27,14 @@ describe("Colonies API Integration", () => {
       apiKey: "test-api-key",
       frontendUrl: "http://localhost:5000",
     },
-    {
+    faction: {
       name: "Test Faction",
     },
-    {
+    jwt: {
       secret: "test-jwt-secret",
       expiresIn: "7d",
     },
-    {
+    discord: {
       oauth: {
         clientId: "test-client-id",
         clientSecret: "test-client-secret",
@@ -53,24 +51,24 @@ describe("Colonies API Integration", () => {
         debug: Option.none(),
       },
     },
-    {
+    inara: {
       apiKey: "test-inara-key",
       appName: "Test",
       apiUrl: "https://inara.cz/inapi/v1/",
     },
-    {
+    eddn: {
       zmqUrl: "tcp://localhost:9500",
       cleanupIntervalMs: 3600000,
       messageRetentionMs: 86400000,
     },
-    {
+    tick: {
       pollIntervalMs: 300000,
       apiUrl: "https://elitebgs.app/api/ebgs/v5/ticks",
     },
-    {
+    schedulers: {
       enabled: false,
-    }
-  )
+    },
+  }
 
   // Helper to create a fresh test database for each test
   const ClientLayer = Layer.effect(
@@ -101,7 +99,7 @@ describe("Colonies API Integration", () => {
     })
   )
 
-  const TestConfigLayer = Layer.succeed(AppConfigTag, testConfig)
+  const TestConfigLayer = Layer.succeed(AppConfig, testConfig)
 
   const TestLayer = ColonyRepositoryLive.pipe(
     Layer.provide(ClientLayer),

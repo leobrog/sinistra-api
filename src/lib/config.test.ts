@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { ConfigProvider, Effect, Layer } from "effect"
+import { ConfigProvider, Effect } from "effect"
 import { AppConfig, AppConfigLive } from "./config.ts"
 
 describe("AppConfig", () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test"
-import { Context, Effect, Layer, Option } from "effect"
+import { Effect, Layer, Option } from "effect"
 import { AppConfig } from "../../lib/config.js"
 import {
   handleSendTop5AllToDiscord,
@@ -100,7 +100,7 @@ describe("Discord Summary API Integration", () => {
         ) as any,
         NoWebhookLayer
       )
-    )
+    ) as any
 
     expect(result._tag).toBe("Left")
     if (result._tag === "Left") {
@@ -121,7 +121,7 @@ describe("Discord Summary API Integration", () => {
         ) as any,
         NoWebhookLayer
       )
-    )
+    ) as any
 
     expect(result._tag).toBe("Left")
     if (result._tag === "Left") {
@@ -142,7 +142,7 @@ describe("Discord Summary API Integration", () => {
         ) as any,
         NoWebhookLayer
       )
-    )
+    ) as any
 
     expect(result._tag).toBe("Left")
     if (result._tag === "Left") {
@@ -165,7 +165,7 @@ describe("Discord Summary API Integration", () => {
         }).pipe(Effect.either) as any,
         NoWebhookLayer
       )
-    )
+    ) as any
 
     expect(result._tag).toBe("Left")
     if (result._tag === "Left") {
@@ -188,7 +188,7 @@ describe("Discord Summary API Integration", () => {
         }).pipe(Effect.either) as any,
         NoWebhookLayer
       )
-    )
+    ) as any
 
     expect(result._tag).toBe("Left")
     if (result._tag === "Left") {
@@ -211,7 +211,7 @@ describe("Discord Summary API Integration", () => {
         }).pipe(Effect.either) as any,
         NoWebhookLayer
       )
-    )
+    ) as any
 
     expect(result._tag).toBe("Left")
     if (result._tag === "Left") {
@@ -234,7 +234,7 @@ describe("Discord Summary API Integration", () => {
         }).pipe(Effect.either) as any,
         NoWebhookLayer
       )
-    )
+    ) as any
 
     expect(result._tag).toBe("Left")
     if (result._tag === "Left") {
@@ -257,7 +257,7 @@ describe("Discord Summary API Integration", () => {
         }).pipe(Effect.either) as any,
         NoWebhookLayer
       )
-    )
+    ) as any
 
     expect(result._tag).toBe("Left")
     if (result._tag === "Left") {
