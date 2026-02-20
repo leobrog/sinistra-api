@@ -6,6 +6,8 @@ services:
       - .env
     ports:
       - "3000:3000"
+    volumes:
+      - sinistra_data:/app/data
     networks:
       - sinistra_network
 
@@ -20,6 +22,7 @@ services:
       - sinistra_network
 
   discordsinistragoal:
+    profiles: [discord]
     build:
       context: ../SinistraGoal
     command: ["/bin/bash", "/app/entrypoint.sh"]
@@ -38,3 +41,6 @@ services:
 networks:
   sinistra_network:
     driver: bridge
+
+volumes:
+  sinistra_data:
