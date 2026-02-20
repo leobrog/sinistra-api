@@ -97,6 +97,12 @@ describe("Activities API Integration", () => {
             name TEXT NOT NULL,
             address INTEGER NOT NULL,
             activity_id TEXT NOT NULL,
+            twreactivate INTEGER,
+            twkills_cyclops INTEGER, twkills_basilisk INTEGER, twkills_medusa INTEGER,
+            twkills_hydra INTEGER, twkills_orthrus INTEGER, twkills_scout INTEGER,
+            twkills_revenant INTEGER, twkills_banshee INTEGER, twkills_scythe_glaive INTEGER,
+            twsandr_blackboxes INTEGER, twsandr_damagedpods INTEGER, twsandr_occupiedpods INTEGER,
+            twsandr_tissuesamples INTEGER, twsandr_thargoidpods INTEGER,
             FOREIGN KEY (activity_id) REFERENCES activity(id) ON DELETE CASCADE
           );
 
@@ -108,22 +114,55 @@ describe("Activities API Integration", () => {
             name TEXT NOT NULL,
             state TEXT NOT NULL,
             system_id TEXT NOT NULL,
-            bvs INTEGER,
-            cbs INTEGER,
-            exobiology INTEGER,
-            exploration INTEGER,
-            scenarios INTEGER,
-            infprimary INTEGER,
-            infsecondary INTEGER,
-            missionfails INTEGER,
-            murdersground INTEGER,
-            murdersspace INTEGER,
-            tradebm INTEGER,
+            bvs INTEGER, cbs INTEGER, exobiology INTEGER, exploration INTEGER, scenarios INTEGER,
+            infprimary INTEGER, infsecondary INTEGER, missionfails INTEGER,
+            murdersground INTEGER, murdersspace INTEGER, tradebm INTEGER,
+            czspace_low INTEGER, czspace_medium INTEGER, czspace_high INTEGER,
+            czground_low INTEGER, czground_medium INTEGER, czground_high INTEGER,
+            sandr_blackboxes INTEGER, sandr_damagedpods INTEGER, sandr_occupiedpods INTEGER,
+            sandr_thargoidpods INTEGER, sandr_wreckagecomponents INTEGER,
+            sandr_personaleffects INTEGER, sandr_politicalprisoners INTEGER, sandr_hostages INTEGER,
+            tradebuy_high_items INTEGER, tradebuy_high_value INTEGER,
+            tradebuy_low_items INTEGER, tradebuy_low_value INTEGER,
+            tradebuy_zero_items INTEGER, tradebuy_zero_value INTEGER,
+            tradesell_high_items INTEGER, tradesell_high_value INTEGER, tradesell_high_profit INTEGER,
+            tradesell_low_items INTEGER, tradesell_low_value INTEGER, tradesell_low_profit INTEGER,
+            tradesell_zero_items INTEGER, tradesell_zero_value INTEGER, tradesell_zero_profit INTEGER,
             FOREIGN KEY (system_id) REFERENCES system(id) ON DELETE CASCADE
           );
 
           CREATE INDEX IF NOT EXISTS idx_faction_system_id ON faction(system_id);
           CREATE INDEX IF NOT EXISTS idx_faction_name ON faction(name);
+
+          CREATE TABLE IF NOT EXISTS faction_settlement (
+            id TEXT PRIMARY KEY,
+            faction_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            type TEXT NOT NULL,
+            count INTEGER NOT NULL,
+            FOREIGN KEY (faction_id) REFERENCES faction(id) ON DELETE CASCADE
+          );
+
+          CREATE TABLE IF NOT EXISTS faction_station (
+            id TEXT PRIMARY KEY,
+            faction_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            twreactivate INTEGER,
+            twcargo_sum INTEGER, twcargo_count INTEGER,
+            twescapepods_low_sum INTEGER, twescapepods_low_count INTEGER,
+            twescapepods_medium_sum INTEGER, twescapepods_medium_count INTEGER,
+            twescapepods_high_sum INTEGER, twescapepods_high_count INTEGER,
+            twpassengers_low_sum INTEGER, twpassengers_low_count INTEGER,
+            twpassengers_medium_sum INTEGER, twpassengers_medium_count INTEGER,
+            twpassengers_high_sum INTEGER, twpassengers_high_count INTEGER,
+            twmassacre_cyclops_sum INTEGER, twmassacre_cyclops_count INTEGER,
+            twmassacre_basilisk_sum INTEGER, twmassacre_basilisk_count INTEGER,
+            twmassacre_medusa_sum INTEGER, twmassacre_medusa_count INTEGER,
+            twmassacre_hydra_sum INTEGER, twmassacre_hydra_count INTEGER,
+            twmassacre_orthrus_sum INTEGER, twmassacre_orthrus_count INTEGER,
+            twmassacre_scout_sum INTEGER, twmassacre_scout_count INTEGER,
+            FOREIGN KEY (faction_id) REFERENCES faction(id) ON DELETE CASCADE
+          );
         `)
       )
 
@@ -175,14 +214,24 @@ describe("Activities API Integration", () => {
           murdersground: Option.none(),
           murdersspace: Option.none(),
           tradebm: Option.some(150),
+          czspace: Option.none(),
+          czground: Option.none(),
+          czgroundSettlements: [],
+          sandr: Option.none(),
+          tradebuy: Option.none(),
+          tradesell: Option.none(),
+          stations: [],
         })
 
         const system = new System({
           id: systemId,
           name: "Sol",
-          address: BigInt(10477373803),
+          address: 10477373803,
           activityId,
           factions: [faction],
+          twkills: Option.none(),
+          twsandr: Option.none(),
+          twreactivate: Option.none(),
         })
 
         const activity = new Activity({
@@ -252,6 +301,13 @@ describe("Activities API Integration", () => {
           murdersground: Option.none(),
           murdersspace: Option.some(5),
           tradebm: Option.some(200),
+          czspace: Option.none(),
+          czground: Option.none(),
+          czgroundSettlements: [],
+          sandr: Option.none(),
+          tradebuy: Option.none(),
+          tradesell: Option.none(),
+          stations: [],
         })
 
         const faction2 = new Faction({
@@ -270,14 +326,24 @@ describe("Activities API Integration", () => {
           murdersground: Option.some(3),
           murdersspace: Option.some(10),
           tradebm: Option.none(),
+          czspace: Option.none(),
+          czground: Option.none(),
+          czgroundSettlements: [],
+          sandr: Option.none(),
+          tradebuy: Option.none(),
+          tradesell: Option.none(),
+          stations: [],
         })
 
         const system1 = new System({
           id: system1Id,
           name: "Sol",
-          address: BigInt(10477373803),
+          address: 10477373803,
           activityId,
           factions: [faction1, faction2],
+          twkills: Option.none(),
+          twsandr: Option.none(),
+          twreactivate: Option.none(),
         })
 
         // System 2: Achenar with 1 faction
@@ -300,14 +366,24 @@ describe("Activities API Integration", () => {
           murdersground: Option.none(),
           murdersspace: Option.none(),
           tradebm: Option.some(300),
+          czspace: Option.none(),
+          czground: Option.none(),
+          czgroundSettlements: [],
+          sandr: Option.none(),
+          tradebuy: Option.none(),
+          tradesell: Option.none(),
+          stations: [],
         })
 
         const system2 = new System({
           id: system2Id,
           name: "Achenar",
-          address: BigInt(3932277478106),
+          address: 3932277478106,
           activityId,
           factions: [faction3],
+          twkills: Option.none(),
+          twsandr: Option.none(),
+          twreactivate: Option.none(),
         })
 
         const activity = new Activity({
@@ -502,17 +578,23 @@ describe("Activities API Integration", () => {
         const system1 = new System({
           id: uuid() as SystemId,
           name: "Sol",
-          address: BigInt(10477373803),
+          address: 10477373803,
           activityId,
           factions: [],
+          twkills: Option.none(),
+          twsandr: Option.none(),
+          twreactivate: Option.none(),
         })
 
         const system2 = new System({
           id: uuid() as SystemId,
           name: "Achenar",
-          address: BigInt(3932277478106),
+          address: 3932277478106,
           activityId,
           factions: [],
+          twkills: Option.none(),
+          twsandr: Option.none(),
+          twreactivate: Option.none(),
         })
 
         const activity = new Activity({
@@ -576,6 +658,13 @@ describe("Activities API Integration", () => {
           murdersground: Option.none(),
           murdersspace: Option.none(),
           tradebm: Option.none(),
+          czspace: Option.none(),
+          czground: Option.none(),
+          czgroundSettlements: [],
+          sandr: Option.none(),
+          tradebuy: Option.none(),
+          tradesell: Option.none(),
+          stations: [],
         })
 
         const faction2 = new Faction({
@@ -594,14 +683,24 @@ describe("Activities API Integration", () => {
           murdersground: Option.none(),
           murdersspace: Option.none(),
           tradebm: Option.none(),
+          czspace: Option.none(),
+          czground: Option.none(),
+          czgroundSettlements: [],
+          sandr: Option.none(),
+          tradebuy: Option.none(),
+          tradesell: Option.none(),
+          stations: [],
         })
 
         const system = new System({
           id: systemId,
           name: "Sol",
-          address: BigInt(10477373803),
+          address: 10477373803,
           activityId,
           factions: [faction1, faction2],
+          twkills: Option.none(),
+          twsandr: Option.none(),
+          twreactivate: Option.none(),
         })
 
         const activity = new Activity({
@@ -653,9 +752,12 @@ describe("Activities API Integration", () => {
         const system1 = new System({
           id: uuid() as SystemId,
           name: "Sol",
-          address: BigInt(10477373803),
+          address: 10477373803,
           activityId,
           factions: [],
+          twkills: Option.none(),
+          twsandr: Option.none(),
+          twreactivate: Option.none(),
         })
 
         const activity1 = new Activity({
@@ -673,9 +775,12 @@ describe("Activities API Integration", () => {
         const system2 = new System({
           id: uuid() as SystemId,
           name: "Achenar",
-          address: BigInt(3932277478106),
+          address: 3932277478106,
           activityId,
           factions: [],
+          twkills: Option.none(),
+          twsandr: Option.none(),
+          twreactivate: Option.none(),
         })
 
         const activity2 = new Activity({
@@ -736,14 +841,24 @@ describe("Activities API Integration", () => {
           murdersground: Option.none(),
           murdersspace: Option.none(),
           tradebm: Option.none(),
+          czspace: Option.none(),
+          czground: Option.none(),
+          czgroundSettlements: [],
+          sandr: Option.none(),
+          tradebuy: Option.none(),
+          tradesell: Option.none(),
+          stations: [],
         })
 
         const system1 = new System({
           id: systemId1,
           name: "Target System",
-          address: BigInt(12345),
+          address: 12345,
           activityId: activityId1,
           factions: [faction1],
+          twkills: Option.none(),
+          twsandr: Option.none(),
+          twreactivate: Option.none(),
         })
 
         const activity1 = new Activity({

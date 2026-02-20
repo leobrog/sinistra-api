@@ -33,6 +33,12 @@ export type SystemId = typeof SystemId.Type
 export const FactionId = Schema.String.pipe(Schema.brand("FactionId"))
 export type FactionId = typeof FactionId.Type
 
+export const FactionSettlementId = Schema.String.pipe(Schema.brand("FactionSettlementId"))
+export type FactionSettlementId = typeof FactionSettlementId.Type
+
+export const FactionStationId = Schema.String.pipe(Schema.brand("FactionStationId"))
+export type FactionStationId = typeof FactionStationId.Type
+
 export const ObjectiveId = Schema.String.pipe(Schema.brand("ObjectiveId"))
 export type ObjectiveId = typeof ObjectiveId.Type
 

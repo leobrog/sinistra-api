@@ -14,6 +14,8 @@ import {
   Email,
   EventId,
   FactionId,
+  FactionSettlementId,
+  FactionStationId,
   FactionKillBondEventId,
   HashedPassword,
   MarketBuyEventId,
@@ -88,7 +90,7 @@ export class Event extends Schema.Class<Event>("Event")({
   ticktime: Schema.String,
   cmdr: Schema.optionalWith(Schema.String, { as: "Option" }),
   starsystem: Schema.optionalWith(Schema.String, { as: "Option" }),
-  systemaddress: Schema.optionalWith(Schema.BigInt, { as: "Option" }),
+  systemaddress: Schema.optionalWith(Schema.Number, { as: "Option" }),
   rawJson: Schema.optionalWith(Schema.String, { as: "Option" }),
 }) {}
 
@@ -122,7 +124,7 @@ export class MissionCompletedEvent extends Schema.Class<MissionCompletedEvent>("
 export class MissionCompletedInfluence extends Schema.Class<MissionCompletedInfluence>("MissionCompletedInfluence")({
   id: MissionCompletedInfluenceId,
   missionId: MissionCompletedEventId,
-  system: Schema.optionalWith(Schema.String, { as: "Option" }),
+  systemAddress: Schema.optionalWith(Schema.Number, { as: "Option" }),
   influence: Schema.optionalWith(Schema.String, { as: "Option" }),
   trend: Schema.optionalWith(Schema.String, { as: "Option" }),
   factionName: Schema.optionalWith(Schema.String, { as: "Option" }),
@@ -198,7 +200,115 @@ export class SyntheticCZ extends Schema.Class<SyntheticCZ>("SyntheticCZ")({
   stationFactionName: Schema.optionalWith(Schema.String, { as: "Option" }),
 }) {}
 
+// ============================================================================
+// Activity sub-model value objects (no IDs — reconstructed from flat columns)
+// ============================================================================
+
+export const CZLevels = Schema.Struct({
+  low: Schema.optionalWith(Schema.Int, { as: "Option" }),
+  medium: Schema.optionalWith(Schema.Int, { as: "Option" }),
+  high: Schema.optionalWith(Schema.Int, { as: "Option" }),
+})
+export type CZLevels = typeof CZLevels.Type
+
+export const SumCount = Schema.Struct({
+  sum: Schema.Int,
+  count: Schema.Int,
+})
+export type SumCount = typeof SumCount.Type
+
+export const LMH = Schema.Struct({
+  low: Schema.optionalWith(SumCount, { as: "Option" }),
+  medium: Schema.optionalWith(SumCount, { as: "Option" }),
+  high: Schema.optionalWith(SumCount, { as: "Option" }),
+})
+export type LMH = typeof LMH.Type
+
+export const TradeBracket = Schema.Struct({
+  items: Schema.optionalWith(Schema.Int, { as: "Option" }),
+  value: Schema.optionalWith(Schema.Int, { as: "Option" }),
+  profit: Schema.optionalWith(Schema.Int, { as: "Option" }),
+})
+export type TradeBracket = typeof TradeBracket.Type
+
+export const Trade = Schema.Struct({
+  high: Schema.optionalWith(TradeBracket, { as: "Option" }),
+  low: Schema.optionalWith(TradeBracket, { as: "Option" }),
+  zero: Schema.optionalWith(TradeBracket, { as: "Option" }),
+})
+export type Trade = typeof Trade.Type
+
+export const ActivitySandR = Schema.Struct({
+  blackboxes: Schema.optionalWith(Schema.Int, { as: "Option" }),
+  damagedpods: Schema.optionalWith(Schema.Int, { as: "Option" }),
+  occupiedpods: Schema.optionalWith(Schema.Int, { as: "Option" }),
+  thargoidpods: Schema.optionalWith(Schema.Int, { as: "Option" }),
+  wreckagecomponents: Schema.optionalWith(Schema.Int, { as: "Option" }),
+  personaleffects: Schema.optionalWith(Schema.Int, { as: "Option" }),
+  politicalprisoners: Schema.optionalWith(Schema.Int, { as: "Option" }),
+  hostages: Schema.optionalWith(Schema.Int, { as: "Option" }),
+})
+export type ActivitySandR = typeof ActivitySandR.Type
+
+export const TWKills = Schema.Struct({
+  cyclops: Schema.optionalWith(Schema.Int, { as: "Option" }),
+  basilisk: Schema.optionalWith(Schema.Int, { as: "Option" }),
+  medusa: Schema.optionalWith(Schema.Int, { as: "Option" }),
+  hydra: Schema.optionalWith(Schema.Int, { as: "Option" }),
+  orthrus: Schema.optionalWith(Schema.Int, { as: "Option" }),
+  scout: Schema.optionalWith(Schema.Int, { as: "Option" }),
+  revenant: Schema.optionalWith(Schema.Int, { as: "Option" }),
+  banshee: Schema.optionalWith(Schema.Int, { as: "Option" }),
+  scytheGlaive: Schema.optionalWith(Schema.Int, { as: "Option" }),
+})
+export type TWKills = typeof TWKills.Type
+
+export const TWSandR = Schema.Struct({
+  blackboxes: Schema.optionalWith(Schema.Int, { as: "Option" }),
+  damagedpods: Schema.optionalWith(Schema.Int, { as: "Option" }),
+  occupiedpods: Schema.optionalWith(Schema.Int, { as: "Option" }),
+  tissuesamples: Schema.optionalWith(Schema.Int, { as: "Option" }),
+  thargoidpods: Schema.optionalWith(Schema.Int, { as: "Option" }),
+})
+export type TWSandR = typeof TWSandR.Type
+
+export const TWMassacre = Schema.Struct({
+  cyclops: Schema.optionalWith(SumCount, { as: "Option" }),
+  basilisk: Schema.optionalWith(SumCount, { as: "Option" }),
+  medusa: Schema.optionalWith(SumCount, { as: "Option" }),
+  hydra: Schema.optionalWith(SumCount, { as: "Option" }),
+  orthrus: Schema.optionalWith(SumCount, { as: "Option" }),
+  scout: Schema.optionalWith(SumCount, { as: "Option" }),
+})
+export type TWMassacre = typeof TWMassacre.Type
+
+// ============================================================================
+// Activity child entities (own DB rows with IDs)
+// ============================================================================
+
+export class FactionSettlement extends Schema.Class<FactionSettlement>("FactionSettlement")({
+  id: FactionSettlementId,
+  factionId: FactionId,
+  name: Schema.String,
+  type: Schema.String,
+  count: Schema.Int,
+}) {}
+
+export class FactionStation extends Schema.Class<FactionStation>("FactionStation")({
+  id: FactionStationId,
+  factionId: FactionId,
+  name: Schema.String,
+  twreactivate: Schema.optionalWith(Schema.Int, { as: "Option" }),
+  twcargo: Schema.optionalWith(SumCount, { as: "Option" }),
+  twescapepods: Schema.optionalWith(LMH, { as: "Option" }),
+  twpassengers: Schema.optionalWith(LMH, { as: "Option" }),
+  twmassacre: Schema.optionalWith(TWMassacre, { as: "Option" }),
+}) {}
+
+// ============================================================================
 // Activity and nested entities
+// ============================================================================
+
 export class Faction extends Schema.Class<Faction>("Faction")({
   id: FactionId,
   name: Schema.String,
@@ -215,14 +325,24 @@ export class Faction extends Schema.Class<Faction>("Faction")({
   murdersground: Schema.optionalWith(Schema.Int, { as: "Option" }),
   murdersspace: Schema.optionalWith(Schema.Int, { as: "Option" }),
   tradebm: Schema.optionalWith(Schema.Int, { as: "Option" }),
+  czspace: Schema.optionalWith(CZLevels, { as: "Option" }),
+  czground: Schema.optionalWith(CZLevels, { as: "Option" }),
+  czgroundSettlements: Schema.Array(FactionSettlement),
+  sandr: Schema.optionalWith(ActivitySandR, { as: "Option" }),
+  tradebuy: Schema.optionalWith(Trade, { as: "Option" }),
+  tradesell: Schema.optionalWith(Trade, { as: "Option" }),
+  stations: Schema.Array(FactionStation),
 }) {}
 
 export class System extends Schema.Class<System>("System")({
   id: SystemId,
   name: Schema.String,
-  address: Schema.BigInt,
+  address: Schema.Number,
   activityId: ActivityId,
   factions: Schema.Array(Faction),
+  twkills: Schema.optionalWith(TWKills, { as: "Option" }),
+  twsandr: Schema.optionalWith(TWSandR, { as: "Option" }),
+  twreactivate: Schema.optionalWith(Schema.Int, { as: "Option" }),
 }) {}
 
 export class Activity extends Schema.Class<Activity>("Activity")({
@@ -281,8 +401,8 @@ export class Cmdr extends Schema.Class<Cmdr>("Cmdr")({
   rankEmpire: Schema.optionalWith(Schema.String, { as: "Option" }),
   rankFederation: Schema.optionalWith(Schema.String, { as: "Option" }),
   rankPower: Schema.optionalWith(Schema.String, { as: "Option" }),
-  credits: Schema.optionalWith(Schema.BigInt, { as: "Option" }),
-  assets: Schema.optionalWith(Schema.BigInt, { as: "Option" }),
+  credits: Schema.optionalWith(Schema.Number, { as: "Option" }),
+  assets: Schema.optionalWith(Schema.Number, { as: "Option" }),
   inaraUrl: Schema.optionalWith(Schema.String, { as: "Option" }),
   squadronName: Schema.optionalWith(Schema.String, { as: "Option" }),
   squadronRank: Schema.optionalWith(Schema.String, { as: "Option" }),

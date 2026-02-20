@@ -4,8 +4,8 @@ import { v4 as uuid } from "uuid"
 import { Api } from "../index.js"
 import { ActivityRepository } from "../../domain/repositories.js"
 import type { PutActivityRequest } from "./dtos.js"
-import { Activity, System, Faction } from "../../domain/models.js"
-import { ActivityId, SystemId, FactionId } from "../../domain/ids.js"
+import { Activity, Faction, FactionSettlement, FactionStation, System } from "../../domain/models.js"
+import { ActivityId, FactionId, FactionSettlementId, FactionStationId, SystemId } from "../../domain/ids.js"
 import type { Client } from "@libsql/client"
 import { TursoClient } from "../../database/client.js"
 import { DatabaseError } from "../../domain/errors.js"
@@ -19,9 +19,97 @@ const requestToActivity = (req: PutActivityRequest): Activity => {
   const systems = req.systems.map((sys) => {
     const systemId = uuid() as SystemId
 
-    const factions = sys.factions.map((fac) =>
-      new Faction({
-        id: uuid() as FactionId,
+    const factions = sys.factions.map((fac) => {
+      const factionId = uuid() as FactionId
+
+      const czgroundSettlements: FactionSettlement[] = (fac.czground?.settlements ?? []).map(
+        (s) =>
+          new FactionSettlement({
+            id: uuid() as FactionSettlementId,
+            factionId,
+            name: s.name,
+            type: s.type,
+            count: s.count,
+          })
+      )
+
+      const stations: FactionStation[] = (fac.stations ?? []).map((st) => {
+        const twcargo = st.twcargo
+          ? Option.some({ sum: st.twcargo.sum, count: st.twcargo.count })
+          : Option.none()
+
+        const mapLMH = (lmh: typeof st.twescapepods) =>
+          lmh
+            ? Option.some({
+                low: lmh.low ? Option.some({ sum: lmh.low.sum, count: lmh.low.count }) : Option.none(),
+                medium: lmh.medium ? Option.some({ sum: lmh.medium.sum, count: lmh.medium.count }) : Option.none(),
+                high: lmh.high ? Option.some({ sum: lmh.high.sum, count: lmh.high.count }) : Option.none(),
+              })
+            : Option.none()
+
+        const twmassacre = st.twmassacre
+          ? Option.some({
+              cyclops: st.twmassacre.cyclops ? Option.some({ sum: st.twmassacre.cyclops.sum, count: st.twmassacre.cyclops.count }) : Option.none(),
+              basilisk: st.twmassacre.basilisk ? Option.some({ sum: st.twmassacre.basilisk.sum, count: st.twmassacre.basilisk.count }) : Option.none(),
+              medusa: st.twmassacre.medusa ? Option.some({ sum: st.twmassacre.medusa.sum, count: st.twmassacre.medusa.count }) : Option.none(),
+              hydra: st.twmassacre.hydra ? Option.some({ sum: st.twmassacre.hydra.sum, count: st.twmassacre.hydra.count }) : Option.none(),
+              orthrus: st.twmassacre.orthrus ? Option.some({ sum: st.twmassacre.orthrus.sum, count: st.twmassacre.orthrus.count }) : Option.none(),
+              scout: st.twmassacre.scout ? Option.some({ sum: st.twmassacre.scout.sum, count: st.twmassacre.scout.count }) : Option.none(),
+            })
+          : Option.none()
+
+        return new FactionStation({
+          id: uuid() as FactionStationId,
+          factionId,
+          name: st.name,
+          twreactivate: Option.fromNullable(st.twreactivate),
+          twcargo,
+          twescapepods: mapLMH(st.twescapepods),
+          twpassengers: mapLMH(st.twpassengers),
+          twmassacre,
+        })
+      })
+
+      const mapCZLevels = (cz: typeof fac.czspace) =>
+        cz
+          ? Option.some({
+              low: Option.fromNullable(cz.low),
+              medium: Option.fromNullable(cz.medium),
+              high: Option.fromNullable(cz.high),
+            })
+          : Option.none()
+
+      const mapTrade = (t: typeof fac.tradebuy) =>
+        t
+          ? Option.some({
+              high: t.high
+                ? Option.some({ items: Option.fromNullable(t.high.items), value: Option.fromNullable(t.high.value), profit: Option.fromNullable(t.high.profit) })
+                : Option.none(),
+              low: t.low
+                ? Option.some({ items: Option.fromNullable(t.low.items), value: Option.fromNullable(t.low.value), profit: Option.fromNullable(t.low.profit) })
+                : Option.none(),
+              zero: t.zero
+                ? Option.some({ items: Option.fromNullable(t.zero.items), value: Option.fromNullable(t.zero.value), profit: Option.fromNullable(t.zero.profit) })
+                : Option.none(),
+            })
+          : Option.none()
+
+      const mapSandR = (s: typeof fac.sandr) =>
+        s
+          ? Option.some({
+              blackboxes: Option.fromNullable(s.blackboxes),
+              damagedpods: Option.fromNullable(s.damagedpods),
+              occupiedpods: Option.fromNullable(s.occupiedpods),
+              thargoidpods: Option.fromNullable(s.thargoidpods),
+              wreckagecomponents: Option.fromNullable(s.wreckagecomponents),
+              personaleffects: Option.fromNullable(s.personaleffects),
+              politicalprisoners: Option.fromNullable(s.politicalprisoners),
+              hostages: Option.fromNullable(s.hostages),
+            })
+          : Option.none()
+
+      return new Faction({
+        id: factionId,
         name: fac.name,
         state: fac.state,
         systemId,
@@ -36,8 +124,41 @@ const requestToActivity = (req: PutActivityRequest): Activity => {
         murdersground: Option.fromNullable(fac.murdersground),
         murdersspace: Option.fromNullable(fac.murdersspace),
         tradebm: Option.fromNullable(fac.tradebm),
+        czspace: mapCZLevels(fac.czspace),
+        czground: mapCZLevels(fac.czground),
+        czgroundSettlements,
+        sandr: mapSandR(fac.sandr),
+        tradebuy: mapTrade(fac.tradebuy),
+        tradesell: mapTrade(fac.tradesell),
+        stations,
       })
-    )
+    })
+
+    const mapTWKills = (tw: typeof sys.twkills) =>
+      tw
+        ? Option.some({
+            cyclops: Option.fromNullable(tw.cyclops),
+            basilisk: Option.fromNullable(tw.basilisk),
+            medusa: Option.fromNullable(tw.medusa),
+            hydra: Option.fromNullable(tw.hydra),
+            orthrus: Option.fromNullable(tw.orthrus),
+            scout: Option.fromNullable(tw.scout),
+            revenant: Option.fromNullable(tw.revenant),
+            banshee: Option.fromNullable(tw.banshee),
+            scytheGlaive: Option.fromNullable(tw["scythe-glaive"]),
+          })
+        : Option.none()
+
+    const mapTWSandR = (tw: typeof sys.twsandr) =>
+      tw
+        ? Option.some({
+            blackboxes: Option.fromNullable(tw.blackboxes),
+            damagedpods: Option.fromNullable(tw.damagedpods),
+            occupiedpods: Option.fromNullable(tw.occupiedpods),
+            tissuesamples: Option.fromNullable(tw.tissuesamples),
+            thargoidpods: Option.fromNullable(tw.thargoidpods),
+          })
+        : Option.none()
 
     return new System({
       id: systemId,
@@ -45,6 +166,9 @@ const requestToActivity = (req: PutActivityRequest): Activity => {
       address: sys.address,
       activityId,
       factions,
+      twkills: mapTWKills(sys.twkills),
+      twsandr: mapTWSandR(sys.twsandr),
+      twreactivate: Option.fromNullable(sys.twreactivate),
     })
   })
 
