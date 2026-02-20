@@ -21,9 +21,8 @@ export const mapRowToCmdr = (row: any): unknown => {
         rankEmpire: row.rank_empire === null ? undefined : row.rank_empire,
         rankFederation: row.rank_federation === null ? undefined : row.rank_federation,
         rankPower: row.rank_power === null ? undefined : row.rank_power,
-        // BigInt stored as INTEGER in SQLite - convert to string for Schema
-        credits: row.credits === null ? undefined : String(row.credits),
-        assets: row.assets === null ? undefined : String(row.assets),
+        credits: row.credits === null ? undefined : row.credits,
+        assets: row.assets === null ? undefined : row.assets,
         inaraUrl: row.inara_url === null ? undefined : row.inara_url,
         squadronName: row.squadron_name === null ? undefined : row.squadron_name,
         squadronRank: row.squadron_rank === null ? undefined : row.squadron_rank,

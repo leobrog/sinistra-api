@@ -26,15 +26,8 @@ export const CmdrRepositoryLive = Layer.effect(
                         Option.getOrNull(cmdr.rankEmpire),
                         Option.getOrNull(cmdr.rankFederation),
                         Option.getOrNull(cmdr.rankPower),
-                        // Convert BigInt to number for SQLite INTEGER
-                        Option.match(cmdr.credits, {
-                            onNone: () => null,
-                            onSome: (val) => Number(val),
-                        }),
-                        Option.match(cmdr.assets, {
-                            onNone: () => null,
-                            onSome: (val) => Number(val),
-                        }),
+                        Option.getOrNull(cmdr.credits),
+                        Option.getOrNull(cmdr.assets),
                         Option.getOrNull(cmdr.inaraUrl),
                         Option.getOrNull(cmdr.squadronName),
                         Option.getOrNull(cmdr.squadronRank),
@@ -135,14 +128,8 @@ export const CmdrRepositoryLive = Layer.effect(
                             Option.getOrNull(cmdr.rankEmpire),
                             Option.getOrNull(cmdr.rankFederation),
                             Option.getOrNull(cmdr.rankPower),
-                            Option.match(cmdr.credits, {
-                                onNone: () => null,
-                                onSome: (val) => Number(val),
-                            }),
-                            Option.match(cmdr.assets, {
-                                onNone: () => null,
-                                onSome: (val) => Number(val),
-                            }),
+                            Option.getOrNull(cmdr.credits),
+                            Option.getOrNull(cmdr.assets),
                             Option.getOrNull(cmdr.inaraUrl),
                             Option.getOrNull(cmdr.squadronName),
                             Option.getOrNull(cmdr.squadronRank),

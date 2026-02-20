@@ -13,8 +13,7 @@ const mapRowToEvent = (row: any): unknown => ({
   ticktime: row.ticktime,
   cmdr: row.cmdr === null ? undefined : row.cmdr,
   starsystem: row.starsystem === null ? undefined : row.starsystem,
-  // BigInt schema expects string in encoded form
-  systemaddress: row.systemaddress === null ? undefined : String(row.systemaddress),
+  systemaddress: row.systemaddress === null ? undefined : row.systemaddress,
   rawJson: row.raw_json === null ? undefined : row.raw_json,
 });
 
@@ -41,11 +40,7 @@ export const EventRepositoryLive = Layer.effect(
                   event.ticktime,
                   Option.getOrNull(event.cmdr),
                   Option.getOrNull(event.starsystem),
-                  // Convert BigInt to number for SQLite INTEGER
-                  Option.match(event.systemaddress, {
-                    onNone: () => null,
-                    onSome: (addr) => Number(addr),
-                  }),
+                  Option.getOrNull(event.systemaddress),
                   Option.getOrNull(event.rawJson),
                 ],
               }),
@@ -137,7 +132,7 @@ export const EventRepositoryLive = Layer.effect(
                       args: [
                         influence.id,
                         influence.missionId,
-                        Option.getOrNull(influence.system),
+                        Option.getOrNull(influence.systemAddress),
                         Option.getOrNull(influence.influence),
                         Option.getOrNull(influence.trend),
                         Option.getOrNull(influence.factionName),

@@ -12,7 +12,6 @@ const ClientLayer = Layer.effect(
   Effect.gen(function* () {
     const client = createClient({
       url: "file::memory:",
-      intMode: "bigint", // Handle large integers as BigInt
     })
 
     // Initialize Schema
@@ -60,8 +59,8 @@ describe("CmdrRepository", () => {
       rankEmpire: Option.none(),
       rankFederation: Option.none(),
       rankPower: Option.none(),
-      credits: Option.some(BigInt(1000000)),
-      assets: Option.some(BigInt(5000000)),
+      credits: Option.some(1000000),
+      assets: Option.some(5000000),
       inaraUrl: Option.some("https://inara.cz/cmdr/123"),
       squadronName: Option.some("Test Squadron"),
       squadronRank: Option.some("Captain"),
@@ -180,7 +179,7 @@ describe("CmdrRepository", () => {
       rankEmpire: Option.none(),
       rankFederation: Option.none(),
       rankPower: Option.none(),
-      credits: Option.some(BigInt(100)),
+      credits: Option.some(100),
       assets: Option.none(),
       inaraUrl: Option.none(),
       squadronName: Option.none(),
@@ -196,7 +195,7 @@ describe("CmdrRepository", () => {
             ...cmdr,
             name: "CMDR Updated",
             rankCombat: Option.some("Elite"),
-            credits: Option.some(BigInt(999999)),
+            credits: Option.some(999999),
         }
 
         yield* repo.update(updatedCmdr)
@@ -206,7 +205,7 @@ describe("CmdrRepository", () => {
         if (Option.isSome(result)) {
             expect(result.value.name).toBe("CMDR Updated")
             expect(Option.getOrNull(result.value.rankCombat)).toBe("Elite")
-            expect(Option.getOrNull(result.value.credits)).toBe(BigInt(999999))
+            expect(Option.getOrNull(result.value.credits)).toBe(999999)
         }
       })
     )
@@ -260,7 +259,7 @@ describe("CmdrRepository", () => {
     )
   })
 
-  it("should handle BigInt values correctly", async () => {
+  it("should handle large integer values correctly", async () => {
     const cmdr = {
       id: CmdrId.make("cmdr_bigint"),
       name: "CMDR BigInt",
@@ -271,8 +270,8 @@ describe("CmdrRepository", () => {
       rankEmpire: Option.none(),
       rankFederation: Option.none(),
       rankPower: Option.none(),
-      credits: Option.some(BigInt("9007199254740991")), // Max safe integer
-      assets: Option.some(BigInt("18014398509481982")),
+      credits: Option.some(9007199254740991), // Number.MAX_SAFE_INTEGER
+      assets: Option.some(1000000000000),
       inaraUrl: Option.none(),
       squadronName: Option.none(),
       squadronRank: Option.none(),
@@ -286,8 +285,8 @@ describe("CmdrRepository", () => {
         const result = yield* repo.findById(cmdr.id)
         expect(Option.isSome(result)).toBe(true)
         if (Option.isSome(result)) {
-            expect(Option.getOrNull(result.value.credits)).toBe(BigInt("9007199254740991"))
-            expect(Option.getOrNull(result.value.assets)).toBe(BigInt("18014398509481982"))
+            expect(Option.getOrNull(result.value.credits)).toBe(9007199254740991)
+            expect(Option.getOrNull(result.value.assets)).toBe(1000000000000)
         }
       })
     )

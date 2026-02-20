@@ -168,7 +168,7 @@ describe("EventRepository", () => {
       ticktime: "2024-01-15T00:00:00Z",
       cmdr: Option.some("TestCommander"),
       starsystem: Option.some("Sol"),
-      systemaddress: Option.some(BigInt(12345678)),
+      systemaddress: Option.some(12345678),
       rawJson: Option.some('{"event":"MarketBuy"}'),
     });
 

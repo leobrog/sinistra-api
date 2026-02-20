@@ -139,7 +139,7 @@ const createSubEvents = (
             new MissionCompletedInfluence({
               id: uuid() as MissionCompletedInfluenceId,
               missionId: missionEvent.id,
-              system: Option.fromNullable(infl.SystemAddress),
+              systemAddress: Option.fromNullable(infl.SystemAddress),
               influence: Option.fromNullable(infl.Influence),
               trend: Option.fromNullable(infl.Trend),
               factionName: Option.fromNullable(factionName),
