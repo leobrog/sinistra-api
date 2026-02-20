@@ -35,6 +35,9 @@ import { JwtServiceLive } from "./services/jwt.ts"
 // Schedulers
 import { SchedulersLive } from "./schedulers/index.ts"
 
+// OAuth callback (outside HttpApiBuilder — needs raw redirect + Set-Cookie)
+import { oauthCallbackMiddleware } from "./api/auth/oauth-callback.ts"
+
 // Build API from composed endpoint groups
 const ApiHandlersLayer = Layer.mergeAll(
   EventsApiLive,
@@ -74,8 +77,12 @@ const ApiLive = HttpApiBuilder.api(Api).pipe(
   Layer.provide(InfrastructureLayer)
 )
 
-const ServerLayer = HttpApiBuilder.serve(HttpMiddleware.logger).pipe(
+const ServerLayer = HttpApiBuilder.serve((app) =>
+  HttpMiddleware.logger(oauthCallbackMiddleware(app))
+).pipe(
   Layer.provide(ApiLive),
+  Layer.provide(RepositoriesLayer),
+  Layer.provide(InfrastructureLayer),
   Layer.provide(BunHttpServer.layer({ port: 3000 }))
 )
 
