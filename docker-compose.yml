@@ -1,0 +1,46 @@
+services:
+  sinistra-api:
+    build:
+      context: .
+    env_file:
+      - .env
+    ports:
+      - "3000:3000"
+    volumes:
+      - sinistra_data:/app/data
+    networks:
+      - sinistra_network
+
+  sinistra-dashboard:
+    build:
+      context: ../sinistra-dashboard
+    ports:
+      - "${DASHBOARD_PORT:-8501}:8501"
+    depends_on:
+      - sinistra-api
+    networks:
+      - sinistra_network
+
+  discordsinistragoal:
+    profiles: [discord]
+    build:
+      context: ../SinistraGoal
+    command: ["/bin/bash", "/app/entrypoint.sh"]
+    env_file:
+      - ../SinistraGoal/.env
+    environment:
+      - API_BASE=http://sinistra-api:3000/api/
+    volumes:
+      - ../SinistraGoal:/app
+    working_dir: /app
+    depends_on:
+      - sinistra-api
+    networks:
+      - sinistra_network
+
+networks:
+  sinistra_network:
+    driver: bridge
+
+volumes:
+  sinistra_data:
