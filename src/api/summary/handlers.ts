@@ -62,7 +62,7 @@ const QUERIES: Record<SummaryKey, string> = {
   "influence-by-faction": `
     SELECT e.cmdr, mci.faction_name, SUM(LENGTH(mci.influence)) AS influence
     FROM mission_completed_influence mci
-    JOIN mission_completed_event mce ON mce.event_id = mci.mission_id
+    JOIN mission_completed_event mce ON mce.id = mci.mission_id
     JOIN event e ON e.id = mce.event_id
     WHERE e.cmdr IS NOT NULL AND {date_filter}
     GROUP BY e.cmdr, mci.faction_name
@@ -71,7 +71,7 @@ const QUERIES: Record<SummaryKey, string> = {
   "influence-eic": `
     SELECT e.cmdr, mci.faction_name, SUM(LENGTH(mci.influence)) AS influence
     FROM mission_completed_influence mci
-    JOIN mission_completed_event mce ON mce.event_id = mci.mission_id
+    JOIN mission_completed_event mce ON mce.id = mci.mission_id
     JOIN event e ON e.id = mce.event_id
     WHERE e.cmdr IS NOT NULL
       AND mci.faction_name LIKE ?
@@ -132,29 +132,24 @@ const BASE_QUERIES: Record<SummaryKey, string> = {
 };
 
 /**
- * Build date filter SQL condition from DateFilter result
+ * Build a parameterized date filter: returns a SQL fragment with ? placeholders
+ * and the corresponding args. The `alias` parameter is the table alias for the
+ * event row (e.g. "e" for the outer query, "ex" for correlated subqueries).
  */
-const buildDateFilterSql = (filter: DateFilter): string => {
+const buildDateFilterParam = (
+  filter: DateFilter,
+  alias: string = "e"
+): { sql: string; args: (string | number | null)[] } => {
   if (filter.type === "tick" && filter.tickId) {
-    return `e.tickid = '${filter.tickId}'`;
+    return { sql: `${alias}.tickid = ?`, args: [filter.tickId] };
   }
   if (filter.type === "date" && filter.startDate && filter.endDate) {
-    return `e.timestamp BETWEEN '${filter.startDate}' AND '${filter.endDate}'`;
+    return {
+      sql: `${alias}.timestamp BETWEEN ? AND ?`,
+      args: [filter.startDate, filter.endDate],
+    };
   }
-  return "1=1"; // No filter
-};
-
-/**
- * Build date filter SQL for subqueries (uses 'ex' alias instead of 'e')
- */
-const buildDateFilterSqlSub = (filter: DateFilter): string => {
-  if (filter.type === "tick" && filter.tickId) {
-    return `ex.tickid = '${filter.tickId}'`;
-  }
-  if (filter.type === "date" && filter.startDate && filter.endDate) {
-    return `ex.timestamp BETWEEN '${filter.startDate}' AND '${filter.endDate}'`;
-  }
-  return "1=1"; // No filter
+  return { sql: "1=1", args: [] };
 };
 
 /**
@@ -194,27 +189,35 @@ const executeSummaryQuery = (
       };
     }
 
-    // Build SQL filter condition
-    let dateFilterSql = buildDateFilterSql(dateFilter);
+    // Build a parameterized filter fragment (no string interpolation of user data)
+    const dateParam = buildDateFilterParam(dateFilter);
 
-    // Add system filter if provided
-    const args: unknown[] = [];
+    // Combine date filter with optional system filter into one fragment
+    let filterSql = dateParam.sql;
+    const filterArgs: (string | number | null)[] = [...dateParam.args];
     if (queryParams.system_name) {
-      dateFilterSql += " AND e.starsystem = ?";
-      args.push(queryParams.system_name);
+      filterSql += " AND e.starsystem = ?";
+      filterArgs.push(queryParams.system_name);
     }
 
-    // Replace placeholder
-    let sql = sqlTemplate.replace("{date_filter}", dateFilterSql);
+    // Replace ALL occurrences of {date_filter} (exploration-sales has two)
+    const occurrences = sqlTemplate.split("{date_filter}").length - 1;
+    const sql = sqlTemplate.split("{date_filter}").join(filterSql);
 
-    // Add faction filter for influence-eic query
+    // Build final args in the order ? placeholders appear in the SQL.
+    // For influence-eic the LIKE ? comes before {date_filter} in the template,
+    // so the faction arg must lead; all other queries have no leading params.
+    const args: (string | number | null)[] = [];
     if (key === "influence-eic") {
-      args.unshift(`%${config.faction.name}%`); // LIKE parameter goes first
+      args.push(`%${config.faction.name}%`);
+    }
+    for (let i = 0; i < occurrences; i++) {
+      args.push(...filterArgs);
     }
 
     // Execute query
     const result = yield* Effect.tryPromise({
-      try: () => client.execute({ sql, args: args as Array<string | number | null> }),
+      try: () => client.execute({ sql, args }),
       catch: (error) =>
         new DatabaseError({
           operation: "execute summary query",
@@ -274,21 +277,28 @@ export const getLeaderboard = HttpApiBuilder.handler(Api, "summary", "getLeaderb
       dateFilter = { type: "date", label: "All Time" };
     }
 
-    const dateFilterSql = buildDateFilterSql(dateFilter);
-    const dateFilterSqlSub = buildDateFilterSqlSub(dateFilter);
+    // Build parameterized date filters (no string interpolation of filter values)
+    const dateParamMain = buildDateFilterParam(dateFilter, "e");
+    const dateParamSub = buildDateFilterParam(dateFilter, "ex");
 
-    // Build system filter
-    const args: unknown[] = [];
-    let systemFilterSql = "";
-    let systemFilterSqlSub = "";
-    if (urlParams.system_name) {
-      systemFilterSql = " AND e.starsystem = ?";
-      systemFilterSqlSub = " AND ex.starsystem = ?";
-      args.push(urlParams.system_name);
-    }
+    // System filter SQL fragments and their arg (0 or 1 value)
+    const systemSqlMain = urlParams.system_name ? " AND e.starsystem = ?" : "";
+    const systemSqlSub = urlParams.system_name ? " AND ex.starsystem = ?" : "";
+    const systemArg: (string | number | null)[] = urlParams.system_name
+      ? [urlParams.system_name]
+      : [];
 
-    // Faction filter for influence calculation
+    // Faction filter for the influence correlated subquery
     const factionLikePattern = `%${config.faction.name}%`;
+
+    // Args for a regular correlated subquery (date + optional system)
+    const subArgs: (string | number | null)[] = [...dateParamSub.args, ...systemArg];
+    // Args for the influence correlated subquery (faction LIKE comes first in WHERE)
+    const influenceSubArgs: (string | number | null)[] = [
+      factionLikePattern,
+      ...dateParamSub.args,
+      ...systemArg,
+    ];
 
     const sql = `
       SELECT e.cmdr,
@@ -319,25 +329,25 @@ export const getLeaderboard = HttpApiBuilder.handler(Api, "summary", "getLeaderb
                SELECT COUNT(*)
                FROM mission_completed_event mc
                JOIN event ex ON ex.id = mc.event_id
-               WHERE ex.cmdr = e.cmdr AND ${dateFilterSqlSub}${systemFilterSqlSub}
+               WHERE ex.cmdr = e.cmdr AND ${dateParamSub.sql}${systemSqlSub}
              ) AS missions_completed,
              (
                SELECT COUNT(*)
                FROM mission_failed_event mf
                JOIN event ex ON ex.id = mf.event_id
-               WHERE ex.cmdr = e.cmdr AND ${dateFilterSqlSub}${systemFilterSqlSub}
+               WHERE ex.cmdr = e.cmdr AND ${dateParamSub.sql}${systemSqlSub}
              ) AS missions_failed,
              (
                SELECT SUM(rv.amount)
                FROM redeem_voucher_event rv
                JOIN event ex ON ex.id = rv.event_id
-               WHERE ex.cmdr = e.cmdr AND rv.type = 'bounty' AND ${dateFilterSqlSub}${systemFilterSqlSub}
+               WHERE ex.cmdr = e.cmdr AND rv.type = 'bounty' AND ${dateParamSub.sql}${systemSqlSub}
              ) AS bounty_vouchers,
              (
                SELECT SUM(rv.amount)
                FROM redeem_voucher_event rv
                JOIN event ex ON ex.id = rv.event_id
-               WHERE ex.cmdr = e.cmdr AND rv.type = 'CombatBond' AND ${dateFilterSqlSub}${systemFilterSqlSub}
+               WHERE ex.cmdr = e.cmdr AND rv.type = 'CombatBond' AND ${dateParamSub.sql}${systemSqlSub}
              ) AS combat_bonds,
              (
                SELECT SUM(t.total_sales)
@@ -345,43 +355,55 @@ export const getLeaderboard = HttpApiBuilder.handler(Api, "summary", "getLeaderb
                  SELECT se.earnings AS total_sales
                  FROM sell_exploration_data_event se
                  JOIN event ex ON ex.id = se.event_id
-                 WHERE ex.cmdr = e.cmdr AND ${dateFilterSqlSub}${systemFilterSqlSub}
+                 WHERE ex.cmdr = e.cmdr AND ${dateParamSub.sql}${systemSqlSub}
                  UNION ALL
                  SELECT me.total_earnings AS total_sales
                  FROM multi_sell_exploration_data_event me
                  JOIN event ex ON ex.id = me.event_id
-                 WHERE ex.cmdr = e.cmdr AND ${dateFilterSqlSub}${systemFilterSqlSub}
+                 WHERE ex.cmdr = e.cmdr AND ${dateParamSub.sql}${systemSqlSub}
                ) t
              ) AS exploration_sales,
              (
                SELECT SUM(LENGTH(mci.influence))
                FROM mission_completed_influence mci
-               JOIN mission_completed_event mce ON mce.event_id = mci.mission_id
+               JOIN mission_completed_event mce ON mce.id = mci.mission_id
                JOIN event ex ON ex.id = mce.event_id
                WHERE ex.cmdr = e.cmdr
                  AND mci.faction_name LIKE ?
-                 AND ${dateFilterSqlSub}${systemFilterSqlSub}
+                 AND ${dateParamSub.sql}${systemSqlSub}
              ) AS influence_eic,
              (
                SELECT SUM(cc.bounty)
                FROM commit_crime_event cc
                JOIN event ex ON ex.id = cc.event_id
-               WHERE ex.cmdr = e.cmdr AND ${dateFilterSqlSub}${systemFilterSqlSub}
+               WHERE ex.cmdr = e.cmdr AND ${dateParamSub.sql}${systemSqlSub}
              ) AS bounty_fines
       FROM event e
       LEFT JOIN cmdr c ON c.name = e.cmdr
       LEFT JOIN market_buy_event mb ON mb.event_id = e.id
       LEFT JOIN market_sell_event ms ON ms.event_id = e.id
-      WHERE e.cmdr IS NOT NULL AND ${dateFilterSql}${systemFilterSql}
+      WHERE e.cmdr IS NOT NULL AND ${dateParamMain.sql}${systemSqlMain}
       GROUP BY e.cmdr
       ORDER BY e.cmdr
     `;
 
-    // Build args: [factionLikePattern, ...systemFilterArgs (0 or 1)]
-    const finalArgs = [factionLikePattern, ...args];
+    // Args must follow the order of ? placeholders in the SQL above:
+    //   missions_completed, missions_failed, bounty_vouchers, combat_bonds,
+    //   exploration_sales (2x UNION ALL), influence_eic, bounty_fines, outer WHERE
+    const finalArgs: (string | number | null)[] = [
+      ...subArgs,           // missions_completed
+      ...subArgs,           // missions_failed
+      ...subArgs,           // bounty_vouchers
+      ...subArgs,           // combat_bonds
+      ...subArgs,           // exploration_sales UNION part 1
+      ...subArgs,           // exploration_sales UNION part 2
+      ...influenceSubArgs,  // influence_eic (faction LIKE ? leads)
+      ...subArgs,           // bounty_fines
+      ...dateParamMain.args, ...systemArg, // outer WHERE
+    ];
 
     const result = yield* Effect.tryPromise({
-      try: () => client.execute({ sql, args: finalArgs as Array<string | number | null> }),
+      try: () => client.execute({ sql, args: finalArgs }),
       catch: (error) =>
         new DatabaseError({
           operation: "execute leaderboard query",
