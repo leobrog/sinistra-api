@@ -110,7 +110,7 @@ const computeTargetProgress = (
         if (targetFaction) { cond += " AND mci.faction_name = ?"; args.push(targetFaction) }
         sql = `SELECT e.cmdr, SUM(LENGTH(mci.influence)) AS influence
                FROM mission_completed_influence mci
-               JOIN mission_completed_event mce ON mce.event_id = mci.mission_id
+               JOIN mission_completed_event mce ON mce.id = mci.mission_id
                JOIN event e ON e.id = mce.event_id
                WHERE ${cond}
                GROUP BY e.cmdr, mci.faction_name`
