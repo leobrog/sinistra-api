@@ -44,14 +44,14 @@ const mapConflict = (domain: DomainModels.EddnConflict): EddnConflictDTO => {
   return new EddnConflictDTO({
     id: domain.id,
     system_name: domain.systemName,
-    war_type: Option.getOrUndefined(domain.warType),
+    conflict_type: Option.getOrUndefined(domain.warType),
     status: Option.getOrUndefined(domain.status),
     faction1: Option.getOrUndefined(domain.faction1),
     faction1_stake: Option.getOrUndefined(domain.stake1),
-    faction1_days_won: Option.getOrUndefined(domain.wonDays1),
+    faction1_won: Option.getOrUndefined(domain.wonDays1),
     faction2: Option.getOrUndefined(domain.faction2),
     faction2_stake: Option.getOrUndefined(domain.stake2),
-    faction2_days_won: Option.getOrUndefined(domain.wonDays2),
+    faction2_won: Option.getOrUndefined(domain.wonDays2),
     timestamp: domain.updatedAt.toISOString(),
   })
 }

@@ -54,14 +54,14 @@ export class EddnFaction extends Schema.Class<EddnFaction>("EddnFaction")({
 export class EddnConflict extends Schema.Class<EddnConflict>("EddnConflict")({
   id: Schema.String,
   system_name: Schema.String,
-  war_type: Schema.optionalWith(Schema.String, { nullable: true }),
+  conflict_type: Schema.optionalWith(Schema.String, { nullable: true }),
   status: Schema.optionalWith(Schema.String, { nullable: true }),
   faction1: Schema.optionalWith(Schema.String, { nullable: true }),
   faction1_stake: Schema.optionalWith(Schema.String, { nullable: true }),
-  faction1_days_won: Schema.optionalWith(Schema.Number, { nullable: true }),
+  faction1_won: Schema.optionalWith(Schema.Number, { nullable: true }),
   faction2: Schema.optionalWith(Schema.String, { nullable: true }),
   faction2_stake: Schema.optionalWith(Schema.String, { nullable: true }),
-  faction2_days_won: Schema.optionalWith(Schema.Number, { nullable: true }),
+  faction2_won: Schema.optionalWith(Schema.Number, { nullable: true }),
   timestamp: Schema.optionalWith(Schema.String, { nullable: true }),
 }) {}
 
