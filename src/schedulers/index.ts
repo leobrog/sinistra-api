@@ -8,7 +8,6 @@
 import { Effect, Layer } from "effect"
 import { AppConfig } from "../lib/config.js"
 import { TursoClient } from "../database/client.js"
-import { runEddnClient } from "./eddn-client.js"
 import { runTickMonitor } from "./tick-monitor.js"
 import { runShoutoutScheduler } from "./shoutout-scheduler.js"
 import { runConflictScheduler } from "./conflict-scheduler.js"
@@ -24,7 +23,6 @@ export const SchedulersLive: Layer.Layer<never, never, AppConfig | TursoClient> 
         return
       }
 
-      yield* Effect.forkDaemon(runEddnClient)
       yield* Effect.forkDaemon(runTickMonitor)
       yield* Effect.forkDaemon(runShoutoutScheduler)
       yield* Effect.forkDaemon(runConflictScheduler)
