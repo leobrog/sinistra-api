@@ -252,7 +252,7 @@ const postToDiscord = (webhookUrl: string, content: string): Effect.Effect<void>
 // Per-tick diff + notification logic
 // ---------------------------------------------------------------------------
 
-const runConflictCheck = (
+export const runConflictCheck = (
   client: Client,
   factionName: string,
   webhookUrl: string | null,
