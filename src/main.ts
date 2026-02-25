@@ -19,6 +19,7 @@ import { TickApiLive } from "./api/tick/handlers.ts"
 import { CmdrLocationApiLive } from "./api/cmdr-location/handlers.ts"
 import { CZApiLive } from "./api/cz/handlers.ts"
 import { BountyVouchersApiLive } from "./api/bounty-vouchers/handlers.ts"
+import { FactionVisitedSystemsApiLive } from "./api/faction-visited-systems/handlers.ts"
 
 // Repositories
 import { EventRepositoryLive } from "./database/repositories/EventRepository.ts"
@@ -60,7 +61,8 @@ const ApiHandlersLayer = Layer.mergeAll(
   TickApiLive,
   CmdrLocationApiLive,
   CZApiLive,
-  BountyVouchersApiLive
+  BountyVouchersApiLive,
+  FactionVisitedSystemsApiLive
 )
 
 const RepositoriesLayer = Layer.mergeAll(
