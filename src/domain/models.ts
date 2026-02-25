@@ -73,6 +73,7 @@ export class FlaskUser extends Schema.Class<FlaskUser>("FlaskUser")({
   discordUsername: Schema.optionalWith(Schema.String, { as: "Option" }),
   isAdmin: Schema.Boolean,
   active: Schema.Boolean,
+  cmdrId: Schema.optionalWith(CmdrId, { as: "Option" }),
   createdAt: Schema.Date,
   updatedAt: Schema.Date,
 }) {}
@@ -485,9 +486,9 @@ export class EddnPowerplay extends Schema.Class<EddnPowerplay>("EddnPowerplay")(
   systemName: Schema.String,
   power: Schema.optionalWith(Schema.Unknown, { as: "Option" }), // JSON
   powerplayState: Schema.optionalWith(Schema.String, { as: "Option" }),
-  controlProgress: Schema.optionalWith(Schema.Int, { as: "Option" }),
-  reinforcement: Schema.optionalWith(Schema.Int, { as: "Option" }),
-  undermining: Schema.optionalWith(Schema.Int, { as: "Option" }),
+  controlProgress: Schema.optionalWith(Schema.Number, { as: "Option" }),
+  reinforcement: Schema.optionalWith(Schema.Number, { as: "Option" }),
+  undermining: Schema.optionalWith(Schema.Number, { as: "Option" }),
   updatedAt: Schema.Date,
 }) {}
 

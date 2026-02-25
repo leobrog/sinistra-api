@@ -14,6 +14,7 @@ const mapRowToFlaskUser = (row: Record<string, unknown>) => ({
   discordUsername: row.discord_username === null ? undefined : (row.discord_username as string),
   isAdmin: Boolean(row.is_admin),
   active: Boolean(row.active),
+  cmdrId: row.cmdr_id === null || row.cmdr_id === undefined ? undefined : (row.cmdr_id as string),
   createdAt: row.created_at as string,
   updatedAt: row.updated_at as string,
 })
@@ -77,8 +78,8 @@ export const FlaskUserRepositoryLive = Layer.effect(
           yield* Effect.tryPromise({
             try: () =>
               client.execute({
-                sql: `INSERT INTO flask_users (id, username, password_hash, discord_id, discord_username, is_admin, active, created_at, updated_at)
-                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                sql: `INSERT INTO flask_users (id, username, password_hash, discord_id, discord_username, is_admin, active, cmdr_id, created_at, updated_at)
+                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 args: [
                   user.id,
                   user.username,
@@ -87,6 +88,7 @@ export const FlaskUserRepositoryLive = Layer.effect(
                   Option.getOrNull(user.discordUsername),
                   user.isAdmin ? 1 : 0,
                   user.active ? 1 : 0,
+                  Option.getOrNull(user.cmdrId),
                   user.createdAt.toISOString(),
                   user.updatedAt.toISOString(),
                 ],
@@ -198,7 +200,7 @@ export const FlaskUserRepositoryLive = Layer.effect(
             try: () =>
               client.execute({
                 sql: `UPDATE flask_users
-                      SET username = ?, password_hash = ?, discord_id = ?, discord_username = ?, is_admin = ?, active = ?, updated_at = ?
+                      SET username = ?, password_hash = ?, discord_id = ?, discord_username = ?, is_admin = ?, active = ?, cmdr_id = ?, updated_at = ?
                       WHERE id = ?`,
                 args: [
                   user.username,
@@ -207,6 +209,7 @@ export const FlaskUserRepositoryLive = Layer.effect(
                   Option.getOrNull(user.discordUsername),
                   user.isAdmin ? 1 : 0,
                   user.active ? 1 : 0,
+                  Option.getOrNull(user.cmdrId),
                   user.updatedAt.toISOString(),
                   user.id,
                 ],
