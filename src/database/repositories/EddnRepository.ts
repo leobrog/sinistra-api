@@ -436,7 +436,7 @@ export const EddnRepositoryLive = Layer.effect(
             findSystemsByGovernment: (government) => Effect.gen(function* () {
                 const result = yield* Effect.tryPromise({
                     try: () => client.execute({
-                        sql: "SELECT DISTINCT system_name FROM eddn_faction WHERE government = ? COLLATE NOCASE",
+                        sql: "SELECT DISTINCT system_name FROM eddn_system_info WHERE government = ? COLLATE NOCASE",
                         args: [government]
                     }),
                     catch: (error) => new DatabaseError({
@@ -626,6 +626,24 @@ export const EddnRepositoryLive = Layer.effect(
                     }),
                     catch: (error) => new DatabaseError({
                         operation: 'findSystemsWithConflictsForFaction.eddn', error
+                    })
+                })
+
+                return result.rows.map((row) => row.system_name as string)
+            }),
+
+            findSystemsWithControllingFactionInConflict: () => Effect.gen(function* () {
+                const result = yield* Effect.tryPromise({
+                    try: () => client.execute({
+                        sql: `SELECT DISTINCT s.system_name 
+                              FROM eddn_system_info s
+                              JOIN eddn_conflict c ON s.system_name = c.system_name
+                              WHERE s.controlling_faction = c.faction1 COLLATE NOCASE
+                                 OR s.controlling_faction = c.faction2 COLLATE NOCASE`,
+                        args: []
+                    }),
+                    catch: (error) => new DatabaseError({
+                        operation: 'findSystemsWithControllingFactionInConflict.eddn', error
                     })
                 })
 
