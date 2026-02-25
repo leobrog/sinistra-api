@@ -30,7 +30,9 @@ export const SchedulersLive: Layer.Layer<never, never, AppConfig | TursoClient> 
       yield* Effect.forkDaemon(
         Effect.provideService(runTickMonitor, TickBus, bus)
       )
-      yield* Effect.forkDaemon(runShoutoutScheduler)
+      yield* Effect.forkDaemon(
+        Effect.provideService(runShoutoutScheduler, TickBus, bus)
+      )
       yield* Effect.forkDaemon(
         Effect.provideService(runConflictScheduler, TickBus, bus)
       )

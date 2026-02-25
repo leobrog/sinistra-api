@@ -1,78 +1,138 @@
 /**
- * Shoutout Scheduler
+ * Shoutout Scheduler (event-driven)
  *
- * Posts daily BGS summaries to Discord at 20:00, 20:01, 20:02 UTC.
- * Uses the "last tick" period: the second most recent distinct tickid.
+ * Subscribes to TickBus. On each new tick, waits 15 minutes for EDDN data
+ * to settle, then posts BGS summaries to Discord as embeds.
  *
  * Three jobs:
- *   20:00 UTC — Tick summary        → BGS webhook
- *   20:01 UTC — Space CZ summary    → conflict webhook
- *   20:02 UTC — Ground CZ summary   → shoutout webhook
+ *   Job 1 — BGS tick summary     → BGS webhook
+ *   Job 2 — Space CZ summary     → conflict webhook
+ *   Job 3 — Ground CZ summary    → shoutout webhook
  *
  * Based on VALKFlaskServer/fac_shoutout_scheduler.py
  */
 
-import { Effect, Duration, Option } from "effect"
+import { Effect, Duration, Option, PubSub, Queue } from "effect"
 import type { Client } from "@libsql/client"
 import { AppConfig } from "../lib/config.js"
 import { TursoClient } from "../database/client.js"
+import { TickBus } from "../services/TickBus.js"
 
 // ---------------------------------------------------------------------------
-// Cron helper
+// Types
 // ---------------------------------------------------------------------------
 
-/** Milliseconds until the next HH:MM UTC (today or tomorrow) */
-const msUntilUtcTime = (hour: number, minute = 0): number => {
-  const now = new Date()
-  const next = new Date()
-  next.setUTCHours(hour, minute, 0, 0)
-  if (next.getTime() <= now.getTime()) next.setUTCDate(next.getUTCDate() + 1)
-  return next.getTime() - now.getTime()
+interface DiscordEmbed {
+  description: string
+  color?: number
 }
 
 // ---------------------------------------------------------------------------
-// Shared helpers
+// Discord helper
 // ---------------------------------------------------------------------------
 
-/** Get the last-tick tickid (second most recent distinct tickid in event table) */
-const getLastTickId = async (client: Client): Promise<string | null> => {
-  const result = await client.execute(
-    "SELECT DISTINCT tickid FROM event ORDER BY timestamp DESC LIMIT 2"
-  )
-  // Prefer second row (previous tick), fall back to first if only one exists
-  const row = result.rows[1] ?? result.rows[0]
-  return (row?.tickid as string | undefined) ?? null
-}
+/**
+ * Post embeds to a Discord webhook.
+ * Splits into multiple requests if needed (max 10 embeds, 6000 total chars per request).
+ */
+const postEmbedsToDiscord = async (webhookUrl: string, embeds: DiscordEmbed[]): Promise<void> => {
+  const chunks: DiscordEmbed[][] = []
+  let current: DiscordEmbed[] = []
+  let totalChars = 0
 
-/** Post content to a Discord webhook, splitting on newlines if > 2000 chars */
-const postToDiscord = async (webhookUrl: string, content: string): Promise<void> => {
-  let remaining = content
-  while (remaining.length > 0) {
-    let chunk: string
-    if (remaining.length <= 2000) {
-      chunk = remaining
-      remaining = ""
-    } else {
-      const split = remaining.lastIndexOf("\n", 2000)
-      const cutAt = split > 0 ? split : 2000
-      chunk = remaining.slice(0, cutAt)
-      remaining = remaining.slice(cutAt + (split > 0 ? 1 : 0))
+  for (const embed of embeds) {
+    const len = embed.description.length
+    if (current.length >= 10 || totalChars + len > 6000) {
+      if (current.length > 0) chunks.push(current)
+      current = []
+      totalChars = 0
     }
+    current.push(embed)
+    totalChars += len
+  }
+  if (current.length > 0) chunks.push(current)
+
+  for (const chunk of chunks) {
     await fetch(webhookUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content: chunk }),
+      body: JSON.stringify({ embeds: chunk }),
       signal: AbortSignal.timeout(10_000),
     })
   }
 }
 
 // ---------------------------------------------------------------------------
+// EDDN context
+// ---------------------------------------------------------------------------
+
+/** Fetch our faction's influence % and active states per system. */
+const getOurFactionBySystem = async (
+  client: Client,
+  factionName: string
+): Promise<Map<string, { influence: number | null; states: string[] }>> => {
+  const result = await client.execute({
+    sql: "SELECT system_name, influence, active_states FROM eddn_faction WHERE name = ?",
+    args: [factionName],
+  })
+
+  const map = new Map<string, { influence: number | null; states: string[] }>()
+  for (const row of result.rows) {
+    const system = String(row.system_name)
+    const influence = row.influence != null ? Number(row.influence) : null
+    let states: string[] = []
+    try {
+      const parsed = JSON.parse(String(row.active_states ?? "[]"))
+      if (Array.isArray(parsed)) states = parsed.map(String)
+    } catch {
+      // ignore malformed JSON
+    }
+    map.set(system, { influence, states })
+  }
+  return map
+}
+
+/** Format EDDN context as a ↳ line, or empty string if no data. */
+const factionContext = (
+  system: string,
+  eddnMap: Map<string, { influence: number | null; states: string[] }>
+): string => {
+  const entry = eddnMap.get(system)
+  if (!entry) return ""
+  const inf = entry.influence !== null ? `${entry.influence.toFixed(1)}%` : "?"
+  const states = entry.states.length > 0 ? entry.states.join(" · ") : "None"
+  return `_↳ ${inf} · ${states}_`
+}
+
+// ---------------------------------------------------------------------------
+// Formatters
+// ---------------------------------------------------------------------------
+
+const formatVolume = (cr: number): string => {
+  if (cr >= 1_000_000) return `${(cr / 1_000_000).toFixed(1)}M cr`
+  if (cr >= 1_000) return `${(cr / 1_000).toFixed(1)}K cr`
+  return `${cr} cr`
+}
+
+const formatQty = (n: number): string => n.toLocaleString("en-US")
+
+const DIVIDER = "┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄"
+
+const sectionHeader = (emoji: string, title: string): string =>
+  `${emoji} **${title}**\n${DIVIDER}`
+
+const groupHeader = (label: string): string => `${DIVIDER}\n**${label}**`
+
+// ---------------------------------------------------------------------------
 // Job 1 — BGS tick summary (BGS webhook)
 // ---------------------------------------------------------------------------
 
-const buildTickSummary = async (client: Client, tickId: string): Promise<string> => {
-  const [influenceRows, missionsRows, czRows, marketRows] = await Promise.all([
+const buildTickSummary = async (
+  client: Client,
+  tickId: string,
+  factionName: string
+): Promise<DiscordEmbed[]> => {
+  const [influenceRows, missionsRows, czRows, marketRows, eddnCtx] = await Promise.all([
     client.execute({
       sql: `SELECT e.starsystem, mci.faction_name, e.cmdr, SUM(LENGTH(mci.influence)) AS influence
             FROM mission_completed_influence mci
@@ -116,54 +176,60 @@ const buildTickSummary = async (client: Client, tickId: string): Promise<string>
             ORDER BY quantity DESC LIMIT 5`,
       args: [tickId],
     }),
+    getOurFactionBySystem(client, factionName),
   ])
 
-  const lines: string[] = [`**📊 BGS Tick Summary** (tick: \`${tickId}\`)`, ""]
+  const header = `📊 BGS Tick Summary · ${tickId}`
+  const embeds: DiscordEmbed[] = []
 
   if (influenceRows.rows.length > 0) {
-    lines.push("**Influence by System / Faction / Cmdr**")
+    const lines = [header, "", sectionHeader("📈", "Influence")]
     for (const r of influenceRows.rows) {
-      lines.push(`  ${r.starsystem} | ${r.faction_name} | ${r.cmdr} — ${r.influence} influence`)
+      lines.push(`**${r.starsystem}** — ${r.faction_name} — ${r.cmdr}: +${r.influence}`)
+      const ctxLine = factionContext(String(r.starsystem), eddnCtx)
+      if (ctxLine) lines.push(ctxLine)
     }
-    lines.push("")
+    embeds.push({ description: lines.join("\n"), color: 3447003 })
   }
 
   if (missionsRows.rows.length > 0) {
-    lines.push("**Missions Completed by System / Faction / Cmdr**")
+    const lines = [header, "", sectionHeader("📋", "Missions")]
     for (const r of missionsRows.rows) {
-      lines.push(
-        `  ${r.starsystem} | ${r.awarding_faction} | ${r.cmdr} — ${r.missions_completed} missions`
-      )
+      lines.push(`**${r.starsystem}** — ${r.awarding_faction} — ${r.cmdr}: ×${r.missions_completed}`)
+      const ctxLine = factionContext(String(r.starsystem), eddnCtx)
+      if (ctxLine) lines.push(ctxLine)
     }
-    lines.push("")
-  }
-
-  if (czRows.rows.length > 0) {
-    lines.push("**Conflict Zones by System / Faction / Cmdr**")
-    for (const r of czRows.rows) {
-      lines.push(`  ${r.starsystem} | ${r.faction} | ${r.cmdr} — ${r.cz_count}× ${r.cz_type}`)
-    }
-    lines.push("")
+    embeds.push({ description: lines.join("\n"), color: 3447003 })
   }
 
   if (marketRows.rows.length > 0) {
-    lines.push("**Market Events by System / Cmdr**")
+    const lines = [header, "", sectionHeader("💰", "Market")]
     for (const r of marketRows.rows) {
       lines.push(
-        `  ${r.starsystem} | ${r.cmdr} — qty: ${r.quantity}, vol: ${r.total_volume} cr`
+        `**${r.starsystem}** — ${r.cmdr}: ${formatVolume(Number(r.total_volume))} / ${formatQty(Number(r.quantity))}t`
       )
     }
-    lines.push("")
+    embeds.push({ description: lines.join("\n"), color: 3447003 })
   }
 
-  return lines.join("\n")
+  if (czRows.rows.length > 0) {
+    const lines = [header, "", sectionHeader("⚔️", "CZs")]
+    for (const r of czRows.rows) {
+      lines.push(`**${r.starsystem}** — ${r.faction} — ${r.cmdr}: ${r.cz_count}× ${r.cz_type}`)
+      const ctxLine = factionContext(String(r.starsystem), eddnCtx)
+      if (ctxLine) lines.push(ctxLine)
+    }
+    embeds.push({ description: lines.join("\n"), color: 3447003 })
+  }
+
+  return embeds
 }
 
 // ---------------------------------------------------------------------------
 // Job 2 — Space CZ summary (conflict webhook)
 // ---------------------------------------------------------------------------
 
-const buildSpaceCzSummary = async (client: Client, tickId: string): Promise<string> => {
+const buildSpaceCzSummary = async (client: Client, tickId: string): Promise<DiscordEmbed[]> => {
   const result = await client.execute({
     sql: `SELECT e.starsystem AS system, scz.cz_type, e.cmdr, COUNT(*) AS cz_count
           FROM synthetic_cz scz
@@ -174,146 +240,144 @@ const buildSpaceCzSummary = async (client: Client, tickId: string): Promise<stri
     args: [tickId],
   })
 
-  if (result.rows.length === 0) return ""
+  if (result.rows.length === 0) return []
 
-  const lines: string[] = [`**⚔️ Space CZ Summary** (tick: \`${tickId}\`)`, ""]
-  let currentSystem = ""
-  let currentType = ""
-
+  // Group: system → type → cmdr list
+  const bySystem = new Map<string, Map<string, Array<{ cmdr: string; count: number }>>>()
   for (const r of result.rows) {
     const system = String(r.system)
     const type = String(r.cz_type ?? "unknown")
-    if (system !== currentSystem) {
-      currentSystem = system
-      currentType = ""
-      lines.push(`\n**${system}**`)
-    }
-    if (type !== currentType) {
-      currentType = type
-      lines.push(`  _${type}_`)
-    }
-    lines.push(`    ${r.cmdr}: ${r.cz_count}`)
+    if (!bySystem.has(system)) bySystem.set(system, new Map())
+    const byType = bySystem.get(system)!
+    if (!byType.has(type)) byType.set(type, [])
+    byType.get(type)!.push({ cmdr: String(r.cmdr), count: Number(r.cz_count) })
   }
 
-  return lines.join("\n")
+  const lines = [`⚔️ Space CZs · ${tickId}`, ""]
+  for (const [system, byType] of bySystem.entries()) {
+    lines.push(groupHeader(system))
+    for (const [type, cmdrs] of byType.entries()) {
+      const cmdrList = cmdrs.map((c) => `${c.cmdr}: ×${c.count}`).join(", ")
+      lines.push(`${type.padEnd(5)} · ${cmdrList}`)
+    }
+  }
+
+  return [{ description: lines.join("\n"), color: 15844367 }]
 }
 
 // ---------------------------------------------------------------------------
 // Job 3 — Ground CZ summary (shoutout webhook)
 // ---------------------------------------------------------------------------
 
-const buildGroundCzSummary = async (client: Client, tickId: string): Promise<string> => {
+const buildGroundCzSummary = async (client: Client, tickId: string): Promise<DiscordEmbed[]> => {
   const result = await client.execute({
     sql: `SELECT e.starsystem AS system, sgcz.settlement, sgcz.cz_type, e.cmdr, COUNT(*) AS cz_count
           FROM synthetic_ground_cz sgcz
           JOIN event e ON e.id = sgcz.event_id
-          WHERE e.tickid = ?
+          WHERE e.tickid = ? AND sgcz.settlement IS NOT NULL
           GROUP BY e.starsystem, sgcz.settlement, sgcz.cz_type, e.cmdr
           ORDER BY e.starsystem, sgcz.settlement, sgcz.cz_type, cz_count DESC`,
     args: [tickId],
   })
 
-  if (result.rows.length === 0) return ""
+  if (result.rows.length === 0) return []
 
-  const lines: string[] = [`**🪖 Ground CZ Summary** (tick: \`${tickId}\`)`, ""]
-  let currentSystem = ""
-  let currentSettlement = ""
-
+  // Group: "system — settlement" → type → cmdr list
+  const bySysSettl = new Map<string, Map<string, Array<{ cmdr: string; count: number }>>>()
   for (const r of result.rows) {
-    const system = String(r.system)
-    const settlement = String(r.settlement ?? "Unknown")
+    const key = `${r.system} — ${r.settlement}`
     const type = String(r.cz_type ?? "unknown")
-    if (system !== currentSystem) {
-      currentSystem = system
-      currentSettlement = ""
-      lines.push(`\n**${system}**`)
-    }
-    if (settlement !== currentSettlement) {
-      currentSettlement = settlement
-      lines.push(`  _${settlement}_`)
-    }
-    lines.push(`    ${r.cmdr}: ${r.cz_count}× ${type}`)
+    if (!bySysSettl.has(key)) bySysSettl.set(key, new Map())
+    const byType = bySysSettl.get(key)!
+    if (!byType.has(type)) byType.set(type, [])
+    byType.get(type)!.push({ cmdr: String(r.cmdr), count: Number(r.cz_count) })
   }
 
-  return lines.join("\n")
+  const lines = [`🪖 Ground CZs · ${tickId}`, ""]
+  for (const [key, byType] of bySysSettl.entries()) {
+    lines.push(groupHeader(key))
+    for (const [type, cmdrs] of byType.entries()) {
+      const cmdrList = cmdrs.map((c) => `${c.cmdr}: ×${c.count}`).join(", ")
+      lines.push(`${type.padEnd(5)} · ${cmdrList}`)
+    }
+  }
+
+  return [{ description: lines.join("\n"), color: 10038562 }]
 }
 
 // ---------------------------------------------------------------------------
-// Main fiber
+// Main fiber — subscribes to TickBus
 // ---------------------------------------------------------------------------
 
-export const runShoutoutScheduler: Effect.Effect<never, never, AppConfig | TursoClient> =
-  Effect.gen(function* () {
-    const config = yield* AppConfig
-    const client = yield* TursoClient
+export const runShoutoutScheduler: Effect.Effect<
+  never,
+  never,
+  AppConfig | TursoClient | TickBus
+> = Effect.gen(function* () {
+  const config = yield* AppConfig
+  const client = yield* TursoClient
+  const bus = yield* TickBus
+  const factionName = config.faction.name
 
-    yield* Effect.logInfo("Shoutout scheduler started")
+  yield* Effect.logInfo("Shoutout scheduler started (event-driven, subscribed to TickBus)")
 
-    const runDaily = Effect.gen(function* () {
-      const ms = msUntilUtcTime(20, 0)
-      yield* Effect.logInfo(`Shoutout scheduler: next run in ${Math.round(ms / 60000)}m`)
-      yield* Effect.sleep(Duration.millis(ms))
+  return yield* Effect.scoped(
+    Effect.gen(function* () {
+      const sub = yield* PubSub.subscribe(bus)
+      return yield* Effect.forever(
+        Effect.gen(function* () {
+          const tickId = yield* Queue.take(sub)
+          yield* Effect.logInfo(
+            `Shoutout scheduler: received tick ${tickId}, waiting 15 minutes`
+          )
+          yield* Effect.sleep(Duration.minutes(15))
+          yield* Effect.logInfo(`Shoutout scheduler: running jobs for tick ${tickId}`)
 
-      yield* Effect.logInfo("Shoutout scheduler: running daily jobs")
+          const bgsWebhook = Option.getOrNull(config.discord.webhooks.bgs)
+          const conflictWebhook = Option.getOrNull(config.discord.webhooks.conflict)
+          const shoutoutWebhook = Option.getOrNull(config.discord.webhooks.shoutout)
 
-      const bgsWebhook = Option.getOrNull(config.discord.webhooks.bgs)
-      const conflictWebhook = Option.getOrNull(config.discord.webhooks.conflict)
-      const shoutoutWebhook = Option.getOrNull(config.discord.webhooks.shoutout)
+          // Job 1: BGS tick summary → bgs webhook
+          if (bgsWebhook) {
+            yield* Effect.tryPromise({
+              try: async () => {
+                const embeds = await buildTickSummary(client, tickId, factionName)
+                if (embeds.length > 0) await postEmbedsToDiscord(bgsWebhook, embeds)
+              },
+              catch: (e) => new Error(`BGS summary failed: ${e}`),
+            }).pipe(Effect.catchAll((e) => Effect.logWarning(`Shoutout BGS error: ${e}`)))
+            yield* Effect.logInfo("Shoutout: BGS summary sent")
+          }
 
-      const tickId = yield* Effect.tryPromise({
-        try: () => getLastTickId(client),
-        catch: (e) => new Error(`Failed to get last tickid: ${e}`),
-      }).pipe(Effect.catchAll((e) => Effect.logWarning(`${e}`).pipe(Effect.as(null))))
+          // Job 2: Space CZ → conflict webhook
+          if (conflictWebhook) {
+            yield* Effect.tryPromise({
+              try: async () => {
+                const embeds = await buildSpaceCzSummary(client, tickId)
+                if (embeds.length > 0) await postEmbedsToDiscord(conflictWebhook, embeds)
+              },
+              catch: (e) => new Error(`Space CZ summary failed: ${e}`),
+            }).pipe(Effect.catchAll((e) => Effect.logWarning(`Shoutout space CZ error: ${e}`)))
+            yield* Effect.logInfo("Shoutout: Space CZ summary sent")
+          }
 
-      if (!tickId) {
-        yield* Effect.logWarning("Shoutout scheduler: no tick data found, skipping")
-        return
-      }
+          // Job 3: Ground CZ → shoutout webhook
+          if (shoutoutWebhook) {
+            yield* Effect.tryPromise({
+              try: async () => {
+                const embeds = await buildGroundCzSummary(client, tickId)
+                if (embeds.length > 0) await postEmbedsToDiscord(shoutoutWebhook, embeds)
+              },
+              catch: (e) => new Error(`Ground CZ summary failed: ${e}`),
+            }).pipe(Effect.catchAll((e) => Effect.logWarning(`Shoutout ground CZ error: ${e}`)))
+            yield* Effect.logInfo("Shoutout: Ground CZ summary sent")
+          }
 
-      // Job 1: BGS tick summary → bgs webhook
-      if (bgsWebhook) {
-        yield* Effect.tryPromise({
-          try: async () => {
-            const summary = await buildTickSummary(client, tickId)
-            if (summary.trim()) await postToDiscord(bgsWebhook, summary)
-          },
-          catch: (e) => new Error(`BGS summary failed: ${e}`),
-        }).pipe(Effect.catchAll((e) => Effect.logWarning(`Shoutout BGS error: ${e}`)))
-        yield* Effect.logInfo("Shoutout: BGS summary sent")
-      }
-
-      yield* Effect.sleep(Duration.minutes(1))
-
-      // Job 2: Space CZ → conflict webhook
-      if (conflictWebhook) {
-        yield* Effect.tryPromise({
-          try: async () => {
-            const summary = await buildSpaceCzSummary(client, tickId)
-            if (summary.trim()) await postToDiscord(conflictWebhook, summary)
-          },
-          catch: (e) => new Error(`Space CZ summary failed: ${e}`),
-        }).pipe(Effect.catchAll((e) => Effect.logWarning(`Shoutout space CZ error: ${e}`)))
-        yield* Effect.logInfo("Shoutout: Space CZ summary sent")
-      }
-
-      yield* Effect.sleep(Duration.minutes(1))
-
-      // Job 3: Ground CZ → shoutout webhook
-      if (shoutoutWebhook) {
-        yield* Effect.tryPromise({
-          try: async () => {
-            const summary = await buildGroundCzSummary(client, tickId)
-            if (summary.trim()) await postToDiscord(shoutoutWebhook, summary)
-          },
-          catch: (e) => new Error(`Ground CZ summary failed: ${e}`),
-        }).pipe(Effect.catchAll((e) => Effect.logWarning(`Shoutout ground CZ error: ${e}`)))
-        yield* Effect.logInfo("Shoutout: Ground CZ summary sent")
-      }
-
-      yield* Effect.logInfo("Shoutout scheduler: daily jobs complete")
+          yield* Effect.logInfo(`Shoutout scheduler: tick ${tickId} jobs complete`)
+        })
+      )
     })
-
-    return yield* Effect.forever(runDaily)
-  }).pipe(
-    Effect.catchAll((e) => Effect.logError(`Shoutout scheduler fatal: ${e}`))
-  ) as Effect.Effect<never, never, AppConfig | TursoClient>
+  )
+}).pipe(
+  Effect.catchAll((e) => Effect.logError(`Shoutout scheduler fatal: ${e}`))
+) as Effect.Effect<never, never, AppConfig | TursoClient | TickBus>
