@@ -18,17 +18,17 @@ export const DiscoveryApiLive = HttpApiBuilder.group(
           url: config.server.url,
           endpoints: {
             events: new EndpointConfig({
-              path: "/events",
+              path: "events",
               minPeriod: "10",
               maxBatch: "100",
             }),
             activities: new EndpointConfig({
-              path: "/activities",
+              path: "activities",
               minPeriod: "60",
               maxBatch: "10",
             }),
             objectives: new EndpointConfig({
-              path: "/objectives",
+              path: "objectives",
               minPeriod: "30",
               maxBatch: "20",
             }),
