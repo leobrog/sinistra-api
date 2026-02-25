@@ -18,6 +18,20 @@ export class UserResponse extends Schema.Class<UserResponse>("UserResponse")({
   token: Schema.optionalWith(Schema.String, { nullable: true }), // JWT token for existing users
 }) {}
 
+// Link commander request (POST /api/link_cmdr)
+export class LinkCmdrRequest extends Schema.Class<LinkCmdrRequest>("LinkCmdrRequest")({
+  discord_id: Schema.String,
+  cmdr_name: Schema.String,
+}) {}
+
+// Link commander response
+export class LinkCmdrResponse extends Schema.Class<LinkCmdrResponse>("LinkCmdrResponse")({
+  message: Schema.String,
+  status: Schema.String,
+  cmdr_name: Schema.String,
+  username: Schema.String,
+}) {}
+
 // Discord OAuth callback query parameters (GET /api/auth/discord/callback)
 export class DiscordOAuthCallbackQuery extends Schema.Class<DiscordOAuthCallbackQuery>("DiscordOAuthCallbackQuery")({
   code: Schema.String,

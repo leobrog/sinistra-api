@@ -2,10 +2,11 @@ import { Effect, Option } from "effect"
 import { HttpApiBuilder } from "@effect/platform"
 import { Api } from "../index.js"
 import { AppConfig } from "../../lib/config.js"
-import { FlaskUserRepository } from "../../domain/repositories.js"
-import type { FlaskUser } from "../../domain/models.js"
+import { FlaskUserRepository, CmdrRepository } from "../../domain/repositories.js"
+import { FlaskUser } from "../../domain/models.js"
 import { JwtService } from "../../services/jwt.js"
-import { UserResponse } from "./dtos.js"
+import { UserResponse, LinkCmdrResponse } from "./dtos.js"
+import { CmdrNotFoundByDiscordError } from "../cmdr-location/api.js"
 
 /**
  * Auth API handlers
@@ -66,6 +67,41 @@ export const AuthApiLive = HttpApiBuilder.group(Api, "auth", (handlers) =>
       account_status: "new",
       token: undefined, // No token for new users
     })
+      })
+    )
+    .handle("linkCmdr", (request) =>
+      Effect.gen(function* () {
+        const flaskUserRepo = yield* FlaskUserRepository
+        const cmdrRepo = yield* CmdrRepository
+
+        const { discord_id, cmdr_name } = request.payload
+
+        const userOpt = yield* flaskUserRepo.findByDiscordId(discord_id)
+        if (Option.isNone(userOpt)) {
+          return yield* Effect.fail(
+            new CmdrNotFoundByDiscordError({ message: `User not found for discord_id: ${discord_id}` })
+          )
+        }
+        const user = userOpt.value
+
+        const cmdrOpt = yield* cmdrRepo.findByName(cmdr_name)
+        if (Option.isNone(cmdrOpt)) {
+          return yield* Effect.fail(
+            new CmdrNotFoundByDiscordError({ message: `Cmdr '${cmdr_name}' not found` })
+          )
+        }
+        const cmdr = cmdrOpt.value
+
+        yield* flaskUserRepo.update(
+          new FlaskUser({ ...user, cmdrId: Option.some(cmdr.id), updatedAt: new Date() })
+        )
+
+        return new LinkCmdrResponse({
+          message: `Cmdr ${cmdr_name} linked to user ${user.username}`,
+          status: "linked",
+          cmdr_name,
+          username: user.username,
+        })
       })
     )
 )

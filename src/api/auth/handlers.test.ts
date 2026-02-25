@@ -76,6 +76,7 @@ describe("Auth API Integration", () => {
             discord_username TEXT,
             is_admin INTEGER NOT NULL DEFAULT 0,
             active INTEGER NOT NULL DEFAULT 1,
+            cmdr_id TEXT,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
           );
@@ -128,6 +129,7 @@ describe("Auth API Integration", () => {
           discordUsername: Option.some(discordUsername),
           isAdmin: false,
           active: true,
+          cmdrId: Option.none(),
           createdAt: new Date(),
           updatedAt: new Date(),
         })
@@ -215,6 +217,7 @@ describe("Auth API Integration", () => {
           discordUsername: Option.some("Pilot#0001"),
           isAdmin: false,
           active: true,
+          cmdrId: Option.none(),
           createdAt: new Date(),
           updatedAt: new Date(),
         })
@@ -263,6 +266,7 @@ describe("Auth API Integration", () => {
           discordUsername: Option.some("Admin#0001"),
           isAdmin: true,
           active: true,
+          cmdrId: Option.none(),
           createdAt: new Date(),
           updatedAt: new Date(),
         })
@@ -329,6 +333,7 @@ describe("Auth API Integration", () => {
           discordUsername: Option.none(),
           isAdmin: false,
           active: true,
+          cmdrId: Option.none(),
           createdAt: new Date(),
           updatedAt: new Date(),
         })
@@ -365,6 +370,7 @@ describe("Auth API Integration", () => {
           discordUsername: Option.some("Inactive#0001"),
           isAdmin: false,
           active: false, // Inactive
+          cmdrId: Option.none(),
           createdAt: new Date(),
           updatedAt: new Date(),
         })

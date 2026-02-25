@@ -1,8 +1,9 @@
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "@effect/platform"
-import { DiscordVerifyRequest, UserResponse } from "./dtos.js"
+import { DiscordVerifyRequest, UserResponse, LinkCmdrRequest, LinkCmdrResponse } from "./dtos.js"
 import { ApiKeyAuth, ApiKeyError } from "../middleware/apikey.js"
 import { DatabaseError } from "../../domain/errors.js"
 import { JwtError } from "../../services/jwt.js"
+import { CmdrNotFoundByDiscordError } from "../cmdr-location/api.js"
 
 export const AuthApi = HttpApiGroup.make("auth")
   .add(
@@ -23,5 +24,14 @@ If not, returns a placeholder with suggested username for account creation.
 
 This endpoint requires API key authentication.`
       )
+  )
+  .add(
+    HttpApiEndpoint.post("linkCmdr", "/api/link_cmdr")
+      .addSuccess(LinkCmdrResponse)
+      .addError(ApiKeyError, { status: 401 })
+      .addError(CmdrNotFoundByDiscordError, { status: 404 })
+      .addError(DatabaseError, { status: 500 })
+      .setPayload(LinkCmdrRequest)
+      .middleware(ApiKeyAuth)
   )
   .prefix("/")
