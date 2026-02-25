@@ -5,10 +5,11 @@
  * On a new tick: saves to tick_state, notifies via BGS Discord webhook.
  */
 
-import { Effect, Option, Ref, Duration } from "effect"
+import { Effect, Option, Ref, Duration, PubSub } from "effect"
 import type { Client } from "@libsql/client"
 import { AppConfig } from "../lib/config.js"
 import { TursoClient } from "../database/client.js"
+import { TickBus } from "../services/TickBus.js"
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -74,10 +75,11 @@ const notifyDiscord = (webhookUrl: string, tickid: string): Effect.Effect<void> 
 // Main fiber
 // ---------------------------------------------------------------------------
 
-export const runTickMonitor: Effect.Effect<never, never, AppConfig | TursoClient> = Effect.gen(
+export const runTickMonitor: Effect.Effect<never, never, AppConfig | TursoClient | TickBus> = Effect.gen(
   function* () {
     const config = yield* AppConfig
     const client = yield* TursoClient
+    const bus = yield* TickBus
 
     yield* Effect.logInfo("Tick monitor started")
 
@@ -107,6 +109,7 @@ export const runTickMonitor: Effect.Effect<never, never, AppConfig | TursoClient
         yield* Effect.logInfo(`New tick detected: ${lastTick ?? "none"} → ${newTick}`)
         yield* Ref.set(lastTickRef, newTick)
         yield* saveTick(client, newTick)
+        yield* PubSub.publish(bus, newTick)
 
         const webhookUrl = config.discord.webhooks.bgs
         if (Option.isSome(webhookUrl)) {
@@ -122,4 +125,4 @@ export const runTickMonitor: Effect.Effect<never, never, AppConfig | TursoClient
   }
 ).pipe(
   Effect.catchAll((e) => Effect.logError(`Tick monitor fatal error: ${e}`))
-) as Effect.Effect<never, never, AppConfig | TursoClient>
+) as Effect.Effect<never, never, AppConfig | TursoClient | TickBus>
