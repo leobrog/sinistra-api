@@ -24,7 +24,7 @@ export const SchedulersLive: Layer.Layer<never, never, AppConfig | TursoClient> 
         return
       }
 
-      // Create TickBus — shared PubSub connecting tick-monitor → conflict-scheduler
+      // Create TickBus — shared PubSub connecting tick-monitor → schedulers
       const bus = yield* PubSub.unbounded<string>()
 
       yield* Effect.forkDaemon(
