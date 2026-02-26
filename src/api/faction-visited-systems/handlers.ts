@@ -87,20 +87,20 @@ export const FactionVisitedSystemsApiLive = HttpApiBuilder.group(
 
           const factions = parsed.Factions.map((fac) => ({
             Name: fac.Name ?? "Unknown",
-            FactionState: fac.FactionState ?? null,
-            Government: fac.Government ?? null,
-            Influence: fac.Influence ?? null,
-            Allegiance: fac.Allegiance ?? null,
-            Happiness: fac.Happiness ?? null,
-            MyReputation: fac.MyReputation ?? null,
-            PendingStates: fac.PendingStates ?? null,
-            RecoveringStates: fac.RecoveringStates ?? null,
+            FactionState: fac.FactionState,
+            Government: fac.Government,
+            Influence: fac.Influence,
+            Allegiance: fac.Allegiance,
+            Happiness: fac.Happiness,
+            MyReputation: fac.MyReputation,
+            PendingStates: fac.PendingStates,
+            RecoveringStates: fac.RecoveringStates,
           }))
 
           systems.push({
             StarSystem: parsed.StarSystem,
-            SystemAddress: parsed.SystemAddress ?? null,
-            Timestamp: parsed.timestamp ?? null,
+            SystemAddress: parsed.SystemAddress,
+            Timestamp: parsed.timestamp,
             Factions: factions,
           })
         }
