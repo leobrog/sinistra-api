@@ -39,13 +39,13 @@ interface ConflictEntry {
 
 /**
  * Parse raw_json for each event in the given tick, extract conflicts
- * where our faction appears as Faction1 or Faction2. Deduplicates by
- * system, keeping the most recent jump entry.
+ * where any of our tracked factions appears as Faction1 or Faction2.
+ * Deduplicates by system, keeping the most recent jump entry.
  */
 const extractConflicts = async (
   client: Client,
   tickId: string,
-  factionName: string
+  factionNames: Set<string>
 ): Promise<Map<string, ConflictEntry>> => {
   const result = await client.execute({
     sql: "SELECT raw_json, timestamp FROM event WHERE tickid = ? AND raw_json IS NOT NULL",
@@ -74,7 +74,7 @@ const extractConflicts = async (
     for (const c of rawConflicts) {
       const f1: string = c?.Faction1?.Name ?? ""
       const f2: string = c?.Faction2?.Name ?? ""
-      if (f1 !== factionName && f2 !== factionName) continue
+      if (!factionNames.has(f1) && !factionNames.has(f2)) continue
 
       const existing = raw.get(system)
       if (!existing || timestamp > existing.detectedAt) {
@@ -200,9 +200,9 @@ const formatDayScored = (
 const formatConflictResolved = (
   system: string,
   entry: ConflictEntry,
-  factionName: string
+  factionNames: Set<string>
 ): string => {
-  const ourSide = entry.faction1 === factionName ? 1 : 2
+  const ourSide = factionNames.has(entry.faction1) ? 1 : 2
   const winner = entry.wonDays1 >= 4 ? 1 : 2
   const weWon = ourSide === winner
   const winScore = winner === 1 ? entry.wonDays1 : entry.wonDays2
@@ -254,16 +254,36 @@ const postToDiscord = (webhookUrl: string, content: string): Effect.Effect<void>
 
 export const runConflictCheck = (
   client: Client,
-  factionName: string,
   webhookUrl: string | null,
-  tickId: string
+  previousTick: string,
+  currentTick: string
 ): Effect.Effect<void> =>
   Effect.gen(function* () {
-    yield* Effect.logInfo(`Conflict scheduler: processing tick ${tickId}`)
+    yield* Effect.logInfo(`Conflict scheduler: processing tick ${currentTick} (data from ${previousTick})`)
+
+    // Load all tracked faction names fresh each tick so changes via dashboard take effect immediately
+    const factionNames = yield* Effect.tryPromise({
+      try: async () => {
+        const result = await client.execute("SELECT name FROM protected_faction")
+        return new Set(result.rows.map((r) => String(r.name)))
+      },
+      catch: (e) => new Error(`Load protected factions failed: ${e}`),
+    }).pipe(
+      Effect.catchAll((e) =>
+        Effect.logWarning(`${e}`).pipe(Effect.as(new Set<string>()))
+      )
+    )
+
+    if (factionNames.size === 0) {
+      yield* Effect.logWarning("Conflict scheduler: no protected factions found, skipping")
+      return
+    }
+
+    yield* Effect.logInfo(`Conflict scheduler: tracking ${factionNames.size} faction(s): ${[...factionNames].join(", ")}`)
 
     const [currentConflicts, prevState] = yield* Effect.all([
       Effect.tryPromise({
-        try: () => extractConflicts(client, tickId, factionName),
+        try: () => extractConflicts(client, previousTick, factionNames),
         catch: (e) => new Error(`Conflict extraction failed: ${e}`),
       }).pipe(
         Effect.catchAll((e) =>
@@ -287,7 +307,7 @@ export const runConflictCheck = (
       if (!prev) {
         // New conflict — insert state, notify
         yield* Effect.tryPromise({
-          try: () => upsertConflictState(client, system, current, tickId),
+          try: () => upsertConflictState(client, system, current, currentTick),
           catch: (e) => new Error(`Upsert failed: ${e}`),
         }).pipe(Effect.catchAll((e) => Effect.logWarning(`${e}`)))
 
@@ -308,7 +328,7 @@ export const runConflictCheck = (
         if (webhookUrl) {
           yield* postToDiscord(
             webhookUrl,
-            formatConflictResolved(system, current, factionName)
+            formatConflictResolved(system, current, factionNames)
           )
         }
         yield* Effect.logInfo(`Conflict scheduler: conflict resolved in ${system}`)
@@ -318,7 +338,7 @@ export const runConflictCheck = (
       // Day scored?
       if (current.wonDays1 > prev.wonDays1 || current.wonDays2 > prev.wonDays2) {
         yield* Effect.tryPromise({
-          try: () => upsertConflictState(client, system, current, tickId),
+          try: () => upsertConflictState(client, system, current, currentTick),
           catch: (e) => new Error(`Upsert failed: ${e}`),
         }).pipe(Effect.catchAll((e) => Effect.logWarning(`${e}`)))
 
@@ -331,7 +351,7 @@ export const runConflictCheck = (
 
       // Unchanged — just refresh the tick reference
       yield* Effect.tryPromise({
-        try: () => upsertConflictState(client, system, current, tickId),
+        try: () => upsertConflictState(client, system, current, currentTick),
         catch: (e) => new Error(`Upsert failed: ${e}`),
       }).pipe(Effect.catchAll((e) => Effect.logWarning(`${e}`)))
     }
@@ -350,7 +370,7 @@ export const runConflictCheck = (
     }
 
     yield* Effect.logInfo(
-      `Conflict scheduler: tick ${tickId} processed — ` +
+      `Conflict scheduler: tick ${currentTick} processed — ` +
         `${currentConflicts.size} active conflict(s)`
     )
   })
@@ -367,8 +387,7 @@ export const runConflictScheduler: Effect.Effect<
   const config = yield* AppConfig
   const client = yield* TursoClient
   const bus = yield* TickBus
-  const factionName = config.faction.name
-  const webhookUrl = Option.getOrNull(config.discord.webhooks.bgs)
+  const webhookUrl = Option.getOrNull(config.discord.webhooks.conflict)
 
   yield* Effect.logInfo("Conflict scheduler started (event-driven, subscribed to TickBus)")
 
@@ -377,8 +396,27 @@ export const runConflictScheduler: Effect.Effect<
       const sub = yield* PubSub.subscribe(bus)
       return yield* Effect.forever(
         Effect.gen(function* () {
-          const tickId = yield* Queue.take(sub)
-          yield* runConflictCheck(client, factionName, webhookUrl, tickId)
+          const currentTick = yield* Queue.take(sub)
+          // Look up the Zoy hash tickid for events submitted before this tick's ISO timestamp.
+          // Events carry hash IDs (e.g. "zoy-XXXX"), not ISO timestamps.
+          const completedTickHash = yield* Effect.tryPromise({
+            try: async () => {
+              const result = await client.execute({
+                sql: "SELECT DISTINCT tickid FROM event WHERE tickid IS NOT NULL AND timestamp < ? ORDER BY timestamp DESC LIMIT 1",
+                args: [currentTick],
+              })
+              return result.rows[0]?.tickid as string | undefined
+            },
+            catch: (e) => new Error(`Tick hash lookup failed: ${e}`),
+          }).pipe(Effect.catchAll((e) => Effect.logWarning(`${e}`).pipe(Effect.as(undefined))))
+
+          if (!completedTickHash) {
+            yield* Effect.logInfo(
+              `Conflict scheduler: skipping ${currentTick} — no events found before this tick`
+            )
+            return
+          }
+          yield* runConflictCheck(client, webhookUrl, completedTickHash, currentTick)
         })
       )
     })
