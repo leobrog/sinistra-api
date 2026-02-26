@@ -13,7 +13,7 @@
  * Discord notifications are only sent when something actually changes.
  */
 
-import { Effect, Duration, Option } from "effect"
+import { Effect, Option, Duration } from "effect"
 import type { Client } from "@libsql/client"
 import { AppConfig } from "../lib/config.js"
 import { TursoClient } from "../database/client.js"
@@ -76,7 +76,6 @@ export const runEddnConflictScan: Effect.Effect<never, never, AppConfig | TursoC
     yield* Effect.logInfo("EDDN conflict scan started (hourly)")
 
     const scanOnce = Effect.gen(function* () {
-      yield* Effect.sleep(Duration.hours(1))
 
       const factionNames = yield* Effect.tryPromise({
         try: async () => {
@@ -116,6 +115,8 @@ export const runEddnConflictScan: Effect.Effect<never, never, AppConfig | TursoC
         new Date().toISOString(),
         "EDDN conflict scan"
       )
+
+      yield* Effect.sleep(Duration.hours(1))
     })
 
     return yield* Effect.forever(scanOnce)
