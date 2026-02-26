@@ -6,8 +6,8 @@ CREATE TABLE IF NOT EXISTS flask_users (
   password_hash TEXT NOT NULL,
   discord_id TEXT UNIQUE,
   discord_username TEXT,
-  is_admin INTEGER NOT NULL DEFAULT 0,
-  active INTEGER NOT NULL DEFAULT 1,
+  is_admin BOOLEAN NOT NULL DEFAULT FALSE,
+  active BOOLEAN NOT NULL DEFAULT TRUE,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );

@@ -1,156 +1,19 @@
+import { SQL } from 'bun'
 import { describe, it, expect } from "bun:test";
 import { Effect, Layer, Option } from "effect";
 import { ActivityRepository } from "../../domain/repositories.ts";
 import { ActivityRepositoryLive } from "./ActivityRepository.ts";
-import { TursoClient } from "../client.ts";
-import { createClient } from "@libsql/client";
+import { PgClient } from "../client.ts";
+;
 import { ActivityId, SystemId, FactionId } from "../../domain/ids.ts";
 import { Activity, System, Faction } from "../../domain/models.ts";
 
 // Helper to provide a fresh Test Layer for each test
 const ClientLayer = Layer.effect(
-  TursoClient,
+  PgClient,
   Effect.gen(function* () {
-    const client = createClient({
-      url: "file::memory:",
-    });
-
-    // Initialize Schema
-    yield* Effect.tryPromise(() =>
-      client.executeMultiple(`
-        CREATE TABLE activity (
-          id TEXT PRIMARY KEY,
-          tickid TEXT NOT NULL,
-          ticktime TEXT NOT NULL,
-          timestamp TEXT NOT NULL,
-          cmdr TEXT
-        );
-
-        CREATE INDEX idx_activity_tickid ON activity(tickid);
-        CREATE INDEX idx_activity_timestamp ON activity(timestamp);
-        CREATE INDEX idx_activity_cmdr ON activity(cmdr);
-
-        CREATE TABLE system (
-          id TEXT PRIMARY KEY,
-          name TEXT NOT NULL,
-          address INTEGER NOT NULL,
-          activity_id TEXT NOT NULL,
-          twreactivate INTEGER,
-          twkills_cyclops INTEGER,
-          twkills_basilisk INTEGER,
-          twkills_medusa INTEGER,
-          twkills_hydra INTEGER,
-          twkills_orthrus INTEGER,
-          twkills_scout INTEGER,
-          twkills_revenant INTEGER,
-          twkills_banshee INTEGER,
-          twkills_scythe_glaive INTEGER,
-          twsandr_blackboxes INTEGER,
-          twsandr_damagedpods INTEGER,
-          twsandr_occupiedpods INTEGER,
-          twsandr_tissuesamples INTEGER,
-          twsandr_thargoidpods INTEGER,
-          FOREIGN KEY (activity_id) REFERENCES activity(id) ON DELETE CASCADE
-        );
-
-        CREATE INDEX idx_system_activity_id ON system(activity_id);
-
-        CREATE TABLE faction (
-          id TEXT PRIMARY KEY,
-          name TEXT NOT NULL,
-          state TEXT NOT NULL,
-          system_id TEXT NOT NULL,
-          bvs INTEGER,
-          cbs INTEGER,
-          exobiology INTEGER,
-          exploration INTEGER,
-          scenarios INTEGER,
-          infprimary INTEGER,
-          infsecondary INTEGER,
-          missionfails INTEGER,
-          murdersground INTEGER,
-          murdersspace INTEGER,
-          tradebm INTEGER,
-          czspace_low INTEGER,
-          czspace_medium INTEGER,
-          czspace_high INTEGER,
-          czground_low INTEGER,
-          czground_medium INTEGER,
-          czground_high INTEGER,
-          sandr_blackboxes INTEGER,
-          sandr_damagedpods INTEGER,
-          sandr_occupiedpods INTEGER,
-          sandr_thargoidpods INTEGER,
-          sandr_wreckagecomponents INTEGER,
-          sandr_personaleffects INTEGER,
-          sandr_politicalprisoners INTEGER,
-          sandr_hostages INTEGER,
-          tradebuy_high_items INTEGER,
-          tradebuy_high_value INTEGER,
-          tradebuy_low_items INTEGER,
-          tradebuy_low_value INTEGER,
-          tradebuy_zero_items INTEGER,
-          tradebuy_zero_value INTEGER,
-          tradesell_high_items INTEGER,
-          tradesell_high_value INTEGER,
-          tradesell_high_profit INTEGER,
-          tradesell_low_items INTEGER,
-          tradesell_low_value INTEGER,
-          tradesell_low_profit INTEGER,
-          tradesell_zero_items INTEGER,
-          tradesell_zero_value INTEGER,
-          tradesell_zero_profit INTEGER,
-          FOREIGN KEY (system_id) REFERENCES system(id) ON DELETE CASCADE
-        );
-
-        CREATE INDEX idx_faction_system_id ON faction(system_id);
-
-        CREATE TABLE faction_settlement (
-          id TEXT PRIMARY KEY,
-          faction_id TEXT NOT NULL,
-          name TEXT NOT NULL,
-          type TEXT NOT NULL,
-          count INTEGER NOT NULL,
-          FOREIGN KEY (faction_id) REFERENCES faction(id) ON DELETE CASCADE
-        );
-
-        CREATE TABLE faction_station (
-          id TEXT PRIMARY KEY,
-          faction_id TEXT NOT NULL,
-          name TEXT NOT NULL,
-          twreactivate INTEGER,
-          twcargo_sum INTEGER,
-          twcargo_count INTEGER,
-          twescapepods_low_sum INTEGER,
-          twescapepods_low_count INTEGER,
-          twescapepods_medium_sum INTEGER,
-          twescapepods_medium_count INTEGER,
-          twescapepods_high_sum INTEGER,
-          twescapepods_high_count INTEGER,
-          twpassengers_low_sum INTEGER,
-          twpassengers_low_count INTEGER,
-          twpassengers_medium_sum INTEGER,
-          twpassengers_medium_count INTEGER,
-          twpassengers_high_sum INTEGER,
-          twpassengers_high_count INTEGER,
-          twmassacre_cyclops_sum INTEGER,
-          twmassacre_cyclops_count INTEGER,
-          twmassacre_basilisk_sum INTEGER,
-          twmassacre_basilisk_count INTEGER,
-          twmassacre_medusa_sum INTEGER,
-          twmassacre_medusa_count INTEGER,
-          twmassacre_hydra_sum INTEGER,
-          twmassacre_hydra_count INTEGER,
-          twmassacre_orthrus_sum INTEGER,
-          twmassacre_orthrus_count INTEGER,
-          twmassacre_scout_sum INTEGER,
-          twmassacre_scout_count INTEGER,
-          FOREIGN KEY (faction_id) REFERENCES faction(id) ON DELETE CASCADE
-        );
-      `)
-    );
-
-    return client;
+    const client = new SQL("postgres://postgres:password@localhost:5432/sinistra");
+    return PgClient.of(client);
   })
 );
 

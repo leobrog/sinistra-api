@@ -6,9 +6,9 @@
  */
 
 import { Effect, Option, Ref, Duration, PubSub } from "effect"
-import type { Client } from "@libsql/client"
+import { SQL } from 'bun'
 import { AppConfig } from "../lib/config.js"
-import { TursoClient } from "../database/client.js"
+import { PgClient } from "../database/client.js"
 import { TickBus } from "../services/TickBus.js"
 
 // ---------------------------------------------------------------------------
@@ -37,17 +37,14 @@ const fetchCurrentTick = (apiUrl: string): Effect.Effect<string | null> =>
     )
   )
 
-const saveTick = (client: Client, tickid: string): Effect.Effect<void> =>
+const saveTick = (client: SQL, tickid: string): Effect.Effect<void> =>
   Effect.tryPromise({
     try: () =>
-      client.execute({
-        sql: `INSERT INTO tick_state (id, tickid, ticktime, last_updated)
-              VALUES (?, ?, ?, ?)
+      client`INSERT INTO tick_state (id, tickid, ticktime, last_updated)
+              VALUES (${crypto.randomUUID()}, ${tickid}, ${tickid}, ${new Date().toISOString()})
               ON CONFLICT(tickid) DO UPDATE SET
                 ticktime = excluded.ticktime,
                 last_updated = excluded.last_updated`,
-        args: [crypto.randomUUID(), tickid, tickid, new Date().toISOString()],
-      }),
     catch: (e) => new Error(`Failed to save tick: ${e}`),
   }).pipe(
     Effect.asVoid,
@@ -75,10 +72,10 @@ const notifyDiscord = (webhookUrl: string, tickid: string): Effect.Effect<void> 
 // Main fiber
 // ---------------------------------------------------------------------------
 
-export const runTickMonitor: Effect.Effect<never, never, AppConfig | TursoClient | TickBus> = Effect.gen(
+export const runTickMonitor: Effect.Effect<never, never, AppConfig | PgClient | TickBus> = Effect.gen(
   function* () {
     const config = yield* AppConfig
-    const client = yield* TursoClient
+    const client = yield* PgClient
     const bus = yield* TickBus
 
     yield* Effect.logInfo("Tick monitor started")
@@ -86,7 +83,7 @@ export const runTickMonitor: Effect.Effect<never, never, AppConfig | TursoClient
     // Seed from DB so we don't re-notify on restart
     const initResult = yield* Effect.tryPromise({
       try: () =>
-        client.execute("SELECT tickid FROM tick_state ORDER BY last_updated DESC LIMIT 1"),
+        client`SELECT tickid FROM tick_state ORDER BY last_updated DESC LIMIT 1`,
       catch: () => ({ rows: [] as any[] }),
     }).pipe(Effect.orElse(() => Effect.succeed({ rows: [] as any[] })))
 
@@ -125,4 +122,4 @@ export const runTickMonitor: Effect.Effect<never, never, AppConfig | TursoClient
   }
 ).pipe(
   Effect.catchAll((e) => Effect.logError(`Tick monitor fatal error: ${e}`))
-) as Effect.Effect<never, never, AppConfig | TursoClient | TickBus>
+) as Effect.Effect<never, never, AppConfig | PgClient | TickBus>

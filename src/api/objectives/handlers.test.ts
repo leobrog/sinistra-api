@@ -1,7 +1,8 @@
+import { SQL } from 'bun'
 import { describe, it, expect } from "bun:test"
 import { Effect, Layer, Option } from "effect"
-import { createClient } from "@libsql/client"
-import { TursoClient } from "../../database/client.js"
+
+import { PgClient } from "../../database/client.js"
 import { ObjectiveRepository } from "../../domain/repositories.js"
 import { ObjectiveRepositoryLive } from "../../database/repositories/ObjectiveRepository.js"
 import { AppConfig } from "../../lib/config.js"
@@ -72,15 +73,13 @@ describe("Objectives API Integration", () => {
 
   // Helper to create a fresh test database for each test
   const ClientLayer = Layer.effect(
-    TursoClient,
+    PgClient,
     Effect.gen(function* () {
-      const client = createClient({
-        url: "file::memory:",
-      })
+      const client = new SQL('postgres://postgres:password@localhost:5432/sinistra')
 
       // Initialize schema
       yield* Effect.tryPromise(() =>
-        client.executeMultiple(`
+        client(`
           CREATE TABLE IF NOT EXISTS objective (
             id TEXT PRIMARY KEY,
             title TEXT,
@@ -327,7 +326,7 @@ describe("Objectives API Integration", () => {
     await runTest(
       Effect.gen(function* () {
         const objectiveRepo = yield* ObjectiveRepository
-        const client = yield* TursoClient
+        const client = yield* PgClient
 
         // Create 3 objectives
         const objectives = [
@@ -375,11 +374,11 @@ describe("Objectives API Integration", () => {
 
         // Query all objectives
         const result = yield* Effect.tryPromise({
-          try: () => client.execute({ sql: "SELECT id FROM objective", args: [] }),
+          try: () => client`SELECT id FROM objective`,
           catch: () => new Error("Query failed"),
         })
 
-        expect(result.rows.length).toBe(3)
+        expect((result as any).length).toBe(3)
       })
     )
   })
@@ -392,7 +391,7 @@ describe("Objectives API Integration", () => {
     await runTest(
       Effect.gen(function* () {
         const objectiveRepo = yield* ObjectiveRepository
-        const client = yield* TursoClient
+        const client = yield* PgClient
 
         // Create objectives in different systems
         const objective1 = new Objective({
@@ -427,14 +426,11 @@ describe("Objectives API Integration", () => {
         // Query objectives in Sol
         const result = yield* Effect.tryPromise({
           try: () =>
-            client.execute({
-              sql: "SELECT id FROM objective WHERE system = ?",
-              args: ["Sol"],
-            }),
+            client`SELECT id FROM objective WHERE system = ${"Sol"}`,
           catch: () => new Error("Query failed"),
         })
 
-        expect(result.rows.length).toBe(1)
+        expect((result as any).length).toBe(1)
       })
     )
   })
@@ -447,7 +443,7 @@ describe("Objectives API Integration", () => {
     await runTest(
       Effect.gen(function* () {
         const objectiveRepo = yield* ObjectiveRepository
-        const client = yield* TursoClient
+        const client = yield* PgClient
 
         const objectives = [
           new Objective({
@@ -494,14 +490,11 @@ describe("Objectives API Integration", () => {
 
         const result = yield* Effect.tryPromise({
           try: () =>
-            client.execute({
-              sql: "SELECT id FROM objective WHERE faction = ?",
-              args: ["Federation Navy"],
-            }),
+            client`SELECT id FROM objective WHERE faction = ${"Federation Navy"}`,
           catch: () => new Error("Query failed"),
         })
 
-        expect(result.rows.length).toBe(2)
+        expect((result as any).length).toBe(2)
       })
     )
   })
@@ -514,7 +507,7 @@ describe("Objectives API Integration", () => {
     await runTest(
       Effect.gen(function* () {
         const objectiveRepo = yield* ObjectiveRepository
-        const client = yield* TursoClient
+        const client = yield* PgClient
 
         const now = new Date("2026-02-17T12:00:00Z").toISOString()
 
@@ -567,15 +560,12 @@ describe("Objectives API Integration", () => {
         // Query active objectives
         const result = yield* Effect.tryPromise({
           try: () =>
-            client.execute({
-              sql: "SELECT id FROM objective WHERE startdate <= ? AND enddate >= ?",
-              args: [now, now],
-            }),
+            client`SELECT id FROM objective WHERE startdate <= ${now} AND enddate >= ${now}`,
           catch: () => new Error("Query failed"),
         })
 
-        expect(result.rows.length).toBe(1)
-        expect(String(result.rows[0]![0])).toBe(activeObjective.id)
+        expect((result as any).length).toBe(1)
+        expect(String((result as any)[0]![0])).toBe(activeObjective.id)
       })
     )
   })
@@ -727,7 +717,7 @@ describe("Objectives API Integration", () => {
     await runTest(
       Effect.gen(function* () {
         const objectiveRepo = yield* ObjectiveRepository
-        const client = yield* TursoClient
+        const client = yield* PgClient
 
         const objectiveId = uuid() as ObjectiveId
         const targetId = uuid() as ObjectiveTargetId
@@ -784,10 +774,7 @@ describe("Objectives API Integration", () => {
         // Verify targets also deleted (cascade)
         const targetsResult = yield* Effect.tryPromise({
           try: () =>
-            client.execute({
-              sql: "SELECT id FROM objective_target WHERE objective_id = ?",
-              args: [objectiveId],
-            }),
+            client`SELECT id FROM objective_target WHERE objective_id = ${objectiveId}`,
           catch: () => new Error("Query failed"),
         })
         expect(targetsResult.rows.length).toBe(0)
@@ -795,10 +782,7 @@ describe("Objectives API Integration", () => {
         // Verify settlements also deleted (cascade)
         const settlementsResult = yield* Effect.tryPromise({
           try: () =>
-            client.execute({
-              sql: "SELECT id FROM objective_target_settlement WHERE target_id = ?",
-              args: [targetId],
-            }),
+            client`SELECT id FROM objective_target_settlement WHERE target_id = ${targetId}`,
           catch: () => new Error("Query failed"),
         })
         expect(settlementsResult.rows.length).toBe(0)
@@ -814,7 +798,7 @@ describe("Objectives API Integration", () => {
     await runTest(
       Effect.gen(function* () {
         const objectiveRepo = yield* ObjectiveRepository
-        const client = yield* TursoClient
+        const client = yield* PgClient
 
         const now = new Date("2026-02-17T12:00:00Z").toISOString()
 
@@ -867,21 +851,18 @@ describe("Objectives API Integration", () => {
         // Query with all filters
         const result = yield* Effect.tryPromise({
           try: () =>
-            client.execute({
-              sql: `
+            client`
                 SELECT id FROM objective
-                WHERE system = ?
-                  AND faction = ?
-                  AND startdate <= ?
-                  AND enddate >= ?
+                WHERE system = ${"Sol"}
+                  AND faction = ${"Federation Navy"}
+                  AND startdate <= ${now}
+                  AND enddate >= ${now}
               `,
-              args: ["Sol", "Federation Navy", now, now],
-            }),
           catch: () => new Error("Query failed"),
         })
 
-        expect(result.rows.length).toBe(1)
-        expect(String(result.rows[0]![0])).toBe(matching.id)
+        expect((result as any).length).toBe(1)
+        expect(String((result as any)[0]![0])).toBe(matching.id)
       })
     )
   })
@@ -893,19 +874,16 @@ describe("Objectives API Integration", () => {
   it("should return empty array when no objectives match filters", async () => {
     await runTest(
       Effect.gen(function* () {
-        const client = yield* TursoClient
+        const client = yield* PgClient
 
         // Query non-existent system
         const result = yield* Effect.tryPromise({
           try: () =>
-            client.execute({
-              sql: "SELECT id FROM objective WHERE system = ?",
-              args: ["NonExistentSystem"],
-            }),
+            client`SELECT id FROM objective WHERE system = ${"NonExistentSystem"}`,
           catch: () => new Error("Query failed"),
         })
 
-        expect(result.rows.length).toBe(0)
+        expect((result as any).length).toBe(0)
       })
     )
   })

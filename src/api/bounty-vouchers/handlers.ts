@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import { HttpApiBuilder } from "@effect/platform"
 import { Api } from "../index.js"
-import { TursoClient } from "../../database/client.js"
+import { PgClient } from "../../database/client.js"
 import { DatabaseError } from "../../domain/errors.js"
 import { buildDateFilter, type DateFilter } from "../../services/date-filters.js"
 import type { BountyVoucherQueryParams } from "./dtos.js"
@@ -30,7 +30,7 @@ const buildDateFilterParam = (
  */
 export const handleGetVouchers = (params: BountyVoucherQueryParams) =>
   Effect.gen(function* () {
-    const client = yield* TursoClient
+    const client = yield* PgClient
 
     // Build date filter
     const dateFilter = params.period
@@ -84,11 +84,11 @@ export const handleGetVouchers = (params: BountyVoucherQueryParams) =>
     `
 
     const result = yield* Effect.tryPromise({
-      try: () => client.execute({ sql, args }),
+      try: () => client.unsafe(sql as any),
       catch: (error) => new DatabaseError({ operation: "getVouchers", error }),
     })
 
-    const vouchers = result.rows.map((row: any) =>
+    const vouchers = (result as any[]).map((row: any) =>
       new VoucherEntry({
         cmdr: row.cmdr,
         squadron_rank: row.squadron_rank ?? undefined,

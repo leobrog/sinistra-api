@@ -2,8 +2,8 @@ import { describe, it, expect } from "bun:test";
 import { Effect, Layer, Option } from "effect";
 import { ObjectiveRepository } from "../../domain/repositories.ts";
 import { ObjectiveRepositoryLive } from "./ObjectiveRepository.ts";
-import { TursoClient } from "../client.ts";
-import { createClient } from "@libsql/client";
+import { PgClient } from "../client.ts";
+import { SQL } from 'bun';
 import {
   ObjectiveId,
   ObjectiveTargetId,
@@ -17,59 +17,10 @@ import {
 
 // Helper to provide a fresh Test Layer for each test
 const ClientLayer = Layer.effect(
-  TursoClient,
+  PgClient,
   Effect.gen(function* () {
-    const client = createClient({
-      url: "file::memory:",
-    });
-
-    // Initialize Schema
-    yield* Effect.tryPromise(() =>
-      client.executeMultiple(`
-        CREATE TABLE objective (
-          id TEXT PRIMARY KEY,
-          title TEXT,
-          priority INTEGER,
-          type TEXT,
-          system TEXT,
-          faction TEXT,
-          description TEXT,
-          startdate TEXT,
-          enddate TEXT
-        );
-
-        CREATE INDEX idx_objective_priority ON objective(priority);
-
-        CREATE TABLE objective_target (
-          id TEXT PRIMARY KEY,
-          objective_id TEXT NOT NULL,
-          type TEXT,
-          station TEXT,
-          system TEXT,
-          faction TEXT,
-          progress INTEGER,
-          targetindividual INTEGER,
-          targetoverall INTEGER,
-          FOREIGN KEY (objective_id) REFERENCES objective(id) ON DELETE CASCADE
-        );
-
-        CREATE INDEX idx_objective_target_objective_id ON objective_target(objective_id);
-
-        CREATE TABLE objective_target_settlement (
-          id TEXT PRIMARY KEY,
-          target_id TEXT NOT NULL,
-          name TEXT,
-          targetindividual INTEGER,
-          targetoverall INTEGER,
-          progress INTEGER,
-          FOREIGN KEY (target_id) REFERENCES objective_target(id) ON DELETE CASCADE
-        );
-
-        CREATE INDEX idx_objective_target_settlement_target_id ON objective_target_settlement(target_id);
-      `)
-    );
-
-    return client;
+    const client = new SQL("postgres://postgres:password@localhost:5432/sinistra");
+    return PgClient.of(client);
   })
 );
 

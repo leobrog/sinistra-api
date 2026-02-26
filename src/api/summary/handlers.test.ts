@@ -1,7 +1,8 @@
+import { SQL } from 'bun'
 import { describe, it, expect } from "bun:test"
 import { Effect, Layer, Option } from "effect"
-import { createClient } from "@libsql/client"
-import { TursoClient } from "../../database/client.js"
+
+import { PgClient } from "../../database/client.js"
 import { AppConfig } from "../../lib/config.js"
 import { v4 as uuid } from "uuid"
 
@@ -68,15 +69,13 @@ describe("Summary API Integration", () => {
 
   // Helper to create a fresh test database for each test
   const ClientLayer = Layer.effect(
-    TursoClient,
+    PgClient,
     Effect.gen(function* () {
-      const client = createClient({
-        url: "file::memory:",
-      })
+      const client = new SQL('postgres://postgres:password@localhost:5432/sinistra')
 
       // Initialize full schema from migrations
       yield* Effect.tryPromise(() =>
-        client.executeMultiple(`
+        client(`
           -- Event Table
           CREATE TABLE IF NOT EXISTS event (
             id TEXT PRIMARY KEY,
@@ -250,7 +249,7 @@ describe("Summary API Integration", () => {
   it("should return market events summary with trade volume", async () => {
     await runTest(
       Effect.gen(function* () {
-        const client = yield* TursoClient
+        const client = yield* PgClient
 
         // Create test data: 2 commanders trading
         const event1Id = uuid()
@@ -259,55 +258,36 @@ describe("Summary API Integration", () => {
 
         // CMDR Alpha - Buy and Sell
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
-                  VALUES (?, 'MarketBuy', '2026-02-17T10:00:00Z', 'tick_100', '2026-02-17T00:00:00Z', 'CMDR Alpha', 'Sol', 10477373803)`,
-            args: [event1Id],
-          })
+          client`INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
+                  VALUES (${event1Id}, 'MarketBuy', '2026-02-17T10:00:00Z', 'tick_100', '2026-02-17T00:00:00Z', 'CMDR Alpha', 'Sol', 10477373803)`
         )
 
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO market_buy_event (id, event_id, stock, stock_bracket, value, count) VALUES (?, ?, 100, 2, 50000, 10)`,
-            args: [uuid(), event1Id],
-          })
+          client`INSERT INTO market_buy_event (id, event_id, stock, stock_bracket, value, count) VALUES (${uuid()}, ${event1Id}, 100, 2, 50000, 10)`
         )
 
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
-                  VALUES (?, 'MarketSell', '2026-02-17T11:00:00Z', 'tick_100', '2026-02-17T00:00:00Z', 'CMDR Alpha', 'Sol', 10477373803)`,
-            args: [event2Id],
-          })
+          client`INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
+                  VALUES (${event2Id}, 'MarketSell', '2026-02-17T11:00:00Z', 'tick_100', '2026-02-17T00:00:00Z', 'CMDR Alpha', 'Sol', 10477373803)`
         )
 
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO market_sell_event (id, event_id, demand, demand_bracket, profit, value, count) VALUES (?, ?, 80, 1, 5000, 55000, 10)`,
-            args: [uuid(), event2Id],
-          })
+          client`INSERT INTO market_sell_event (id, event_id, demand, demand_bracket, profit, value, count) VALUES (${uuid()}, ${event2Id}, 80, 1, 5000, 55000, 10)`
         )
 
         // CMDR Beta - Only Buy
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
-                  VALUES (?, 'MarketBuy', '2026-02-17T12:00:00Z', 'tick_100', '2026-02-17T00:00:00Z', 'CMDR Beta', 'Achenar', 3932277478106)`,
-            args: [event3Id],
-          })
+          client`INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
+                  VALUES (${event3Id}, 'MarketBuy', '2026-02-17T12:00:00Z', 'tick_100', '2026-02-17T00:00:00Z', 'CMDR Beta', 'Achenar', 3932277478106)`
         )
 
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO market_buy_event (id, event_id, stock, stock_bracket, value, count) VALUES (?, ?, 200, 3, 100000, 20)`,
-            args: [uuid(), event3Id],
-          })
+          client`INSERT INTO market_buy_event (id, event_id, stock, stock_bracket, value, count) VALUES (${uuid()}, ${event3Id}, 200, 3, 100000, 20)`
         )
 
         // Query market-events summary
         const result = yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `
+          client`
               SELECT e.cmdr,
                      SUM(COALESCE(mb.value, 0)) AS total_buy,
                      SUM(COALESCE(ms.value, 0)) AS total_sell,
@@ -320,15 +300,13 @@ describe("Summary API Integration", () => {
               GROUP BY e.cmdr
               HAVING total_transaction_volume > 0
               ORDER BY total_trade_quantity DESC
-            `,
-            args: [],
-          })
+            `
         )
 
-        expect(result.rows.length).toBe(2)
+        expect((result as any).length).toBe(2)
 
         // CMDR Beta should be first (20 total quantity)
-        const betaRow = result.rows[0]!
+        const betaRow = (result as any)[0]!
         expect(betaRow[0]).toBe("CMDR Beta")
         expect(Number(betaRow[1])).toBe(100000) // total_buy
         expect(Number(betaRow[2])).toBe(0) // total_sell
@@ -336,7 +314,7 @@ describe("Summary API Integration", () => {
         expect(Number(betaRow[4])).toBe(20) // total_trade_quantity
 
         // CMDR Alpha should be second (20 total quantity: 10 buy + 10 sell)
-        const alphaRow = result.rows[1]!
+        const alphaRow = (result as any)[1]!
         expect(alphaRow[0]).toBe("CMDR Alpha")
         expect(Number(alphaRow[1])).toBe(50000) // total_buy
         expect(Number(alphaRow[2])).toBe(55000) // total_sell
@@ -353,24 +331,18 @@ describe("Summary API Integration", () => {
   it("should filter missions completed by period (current tick)", async () => {
     await runTest(
       Effect.gen(function* () {
-        const client = yield* TursoClient
+        const client = yield* PgClient
 
         // Create missions for different ticks
         // Tick 100 (old tick)
         const event1Id = uuid()
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
-                  VALUES (?, 'MissionCompleted', '2026-02-16T10:00:00Z', 'tick_100', '2026-02-16T00:00:00Z', 'CMDR Old', 'Sol', 10477373803)`,
-            args: [event1Id],
-          })
+          client`INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
+                  VALUES (${event1Id}, 'MissionCompleted', '2026-02-16T10:00:00Z', 'tick_100', '2026-02-16T00:00:00Z', 'CMDR Old', 'Sol', 10477373803)`
         )
 
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO mission_completed_event (id, event_id, awarding_faction, mission_name, reward) VALUES (?, ?, 'Federation Navy', 'Delivery Mission', 50000)`,
-            args: [uuid(), event1Id],
-          })
+          client`INSERT INTO mission_completed_event (id, event_id, awarding_faction, mission_name, reward) VALUES (${uuid()}, ${event1Id}, 'Federation Navy', 'Delivery Mission', 50000)`
         )
 
         // Tick 101 (current tick) - multiple commanders
@@ -379,74 +351,53 @@ describe("Summary API Integration", () => {
         const event4Id = uuid()
 
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
-                  VALUES (?, 'MissionCompleted', '2026-02-17T10:00:00Z', 'tick_101', '2026-02-17T00:00:00Z', 'CMDR Alpha', 'Sol', 10477373803)`,
-            args: [event2Id],
-          })
+          client`INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
+                  VALUES (${event2Id}, 'MissionCompleted', '2026-02-17T10:00:00Z', 'tick_101', '2026-02-17T00:00:00Z', 'CMDR Alpha', 'Sol', 10477373803)`
         )
 
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO mission_completed_event (id, event_id, awarding_faction, mission_name, reward) VALUES (?, ?, 'Federation Navy', 'Massacre Mission', 1000000)`,
-            args: [uuid(), event2Id],
-          })
+          client`INSERT INTO mission_completed_event (id, event_id, awarding_faction, mission_name, reward) VALUES (${uuid()}, ${event2Id}, 'Federation Navy', 'Massacre Mission', 1000000)`
         )
 
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
-                  VALUES (?, 'MissionCompleted', '2026-02-17T11:00:00Z', 'tick_101', '2026-02-17T00:00:00Z', 'CMDR Alpha', 'Sol', 10477373803)`,
-            args: [event3Id],
-          })
+          client`INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
+                  VALUES (${event3Id}, 'MissionCompleted', '2026-02-17T11:00:00Z', 'tick_101', '2026-02-17T00:00:00Z', 'CMDR Alpha', 'Sol', 10477373803)`
         )
 
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO mission_completed_event (id, event_id, awarding_faction, mission_name, reward) VALUES (?, ?, 'Mother Gaia', 'Source Mission', 200000)`,
-            args: [uuid(), event3Id],
-          })
+          client`INSERT INTO mission_completed_event (id, event_id, awarding_faction, mission_name, reward) VALUES (${uuid()}, ${event3Id}, 'Mother Gaia', 'Source Mission', 200000)`
         )
 
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
-                  VALUES (?, 'MissionCompleted', '2026-02-17T12:00:00Z', 'tick_101', '2026-02-17T00:00:00Z', 'CMDR Beta', 'Achenar', 3932277478106)`,
-            args: [event4Id],
-          })
+          client`INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
+                  VALUES (${event4Id}, 'MissionCompleted', '2026-02-17T12:00:00Z', 'tick_101', '2026-02-17T00:00:00Z', 'CMDR Beta', 'Achenar', 3932277478106)`
         )
 
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO mission_completed_event (id, event_id, awarding_faction, mission_name, reward) VALUES (?, ?, 'Empire Assembly', 'Courier Mission', 75000)`,
-            args: [uuid(), event4Id],
-          })
+          client`INSERT INTO mission_completed_event (id, event_id, awarding_faction, mission_name, reward) VALUES (${uuid()}, ${event4Id}, 'Empire Assembly', 'Courier Mission', 75000)`
         )
 
         // Query missions completed for tick_101 only
         const result = yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `
+          client`
               SELECT e.cmdr, COUNT(*) AS missions_completed
               FROM mission_completed_event mc
               JOIN event e ON e.id = mc.event_id
               WHERE e.cmdr IS NOT NULL AND e.tickid = 'tick_101'
               GROUP BY e.cmdr
               ORDER BY missions_completed DESC
-            `,
-            args: [],
-          })
+            `
         )
 
-        expect(result.rows.length).toBe(2)
+        expect((result as any).length).toBe(2)
 
         // CMDR Alpha should be first (2 missions)
-        const alphaRow = result.rows[0]!
+        const alphaRow = (result as any)[0]!
         expect(alphaRow[0]).toBe("CMDR Alpha")
         expect(Number(alphaRow[1])).toBe(2)
 
         // CMDR Beta should be second (1 mission)
-        const betaRow = result.rows[1]!
+        const betaRow = (result as any)[1]!
         expect(betaRow[0]).toBe("CMDR Beta")
         expect(Number(betaRow[1])).toBe(1)
       })
@@ -460,7 +411,7 @@ describe("Summary API Integration", () => {
   it("should filter bounty vouchers by system", async () => {
     await runTest(
       Effect.gen(function* () {
-        const client = yield* TursoClient
+        const client = yield* PgClient
 
         // Create bounty vouchers in different systems
         const event1Id = uuid()
@@ -469,78 +420,57 @@ describe("Summary API Integration", () => {
 
         // CMDR Alpha in Sol
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
-                  VALUES (?, 'RedeemVoucher', '2026-02-17T10:00:00Z', 'tick_100', '2026-02-17T00:00:00Z', 'CMDR Alpha', 'Sol', 10477373803)`,
-            args: [event1Id],
-          })
+          client`INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
+                  VALUES (${event1Id}, 'RedeemVoucher', '2026-02-17T10:00:00Z', 'tick_100', '2026-02-17T00:00:00Z', 'CMDR Alpha', 'Sol', 10477373803)`
         )
 
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO redeem_voucher_event (id, event_id, amount, faction, type) VALUES (?, ?, 500000, 'Federation Navy', 'bounty')`,
-            args: [uuid(), event1Id],
-          })
+          client`INSERT INTO redeem_voucher_event (id, event_id, amount, faction, type) VALUES (${uuid()}, ${event1Id}, 500000, 'Federation Navy', 'bounty')`
         )
 
         // CMDR Beta in Sol
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
-                  VALUES (?, 'RedeemVoucher', '2026-02-17T11:00:00Z', 'tick_100', '2026-02-17T00:00:00Z', 'CMDR Beta', 'Sol', 10477373803)`,
-            args: [event2Id],
-          })
+          client`INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
+                  VALUES (${event2Id}, 'RedeemVoucher', '2026-02-17T11:00:00Z', 'tick_100', '2026-02-17T00:00:00Z', 'CMDR Beta', 'Sol', 10477373803)`
         )
 
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO redeem_voucher_event (id, event_id, amount, faction, type) VALUES (?, ?, 750000, 'Mother Gaia', 'bounty')`,
-            args: [uuid(), event2Id],
-          })
+          client`INSERT INTO redeem_voucher_event (id, event_id, amount, faction, type) VALUES (${uuid()}, ${event2Id}, 750000, 'Mother Gaia', 'bounty')`
         )
 
         // CMDR Gamma in Achenar (should be filtered out)
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
-                  VALUES (?, 'RedeemVoucher', '2026-02-17T12:00:00Z', 'tick_100', '2026-02-17T00:00:00Z', 'CMDR Gamma', 'Achenar', 3932277478106)`,
-            args: [event3Id],
-          })
+          client`INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
+                  VALUES (${event3Id}, 'RedeemVoucher', '2026-02-17T12:00:00Z', 'tick_100', '2026-02-17T00:00:00Z', 'CMDR Gamma', 'Achenar', 3932277478106)`
         )
 
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO redeem_voucher_event (id, event_id, amount, faction, type) VALUES (?, ?, 300000, 'Empire Assembly', 'bounty')`,
-            args: [uuid(), event3Id],
-          })
+          client`INSERT INTO redeem_voucher_event (id, event_id, amount, faction, type) VALUES (${uuid()}, ${event3Id}, 300000, 'Empire Assembly', 'bounty')`
         )
 
         // Query bounty vouchers for Sol system only
         const result = yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `
+          client`
               SELECT e.cmdr, e.starsystem, rv.faction, SUM(rv.amount) AS bounty_vouchers
               FROM redeem_voucher_event rv
               JOIN event e ON e.id = rv.event_id
-              WHERE e.cmdr IS NOT NULL AND rv.type = 'bounty' AND e.starsystem = ?
+              WHERE e.cmdr IS NOT NULL AND rv.type = 'bounty' AND e.starsystem = ${"Sol"}
               GROUP BY e.cmdr, e.starsystem, rv.faction
               ORDER BY bounty_vouchers DESC
-            `,
-            args: ["Sol"],
-          })
+            `
         )
 
-        expect(result.rows.length).toBe(2)
+        expect((result as any).length).toBe(2)
 
         // CMDR Beta should be first (750000)
-        const betaRow = result.rows[0]!
+        const betaRow = (result as any)[0]!
         expect(betaRow[0]).toBe("CMDR Beta")
         expect(betaRow[1]).toBe("Sol")
         expect(betaRow[2]).toBe("Mother Gaia")
         expect(Number(betaRow[3])).toBe(750000)
 
         // CMDR Alpha should be second (500000)
-        const alphaRow = result.rows[1]!
+        const alphaRow = (result as any)[1]!
         expect(alphaRow[0]).toBe("CMDR Alpha")
         expect(alphaRow[1]).toBe("Sol")
         expect(alphaRow[2]).toBe("Federation Navy")
@@ -556,43 +486,34 @@ describe("Summary API Integration", () => {
   it("should limit top5 endpoint to 5 results", async () => {
     await runTest(
       Effect.gen(function* () {
-        const client = yield* TursoClient
+        const client = yield* PgClient
 
         // Create 7 commanders with missions
         for (let i = 1; i <= 7; i++) {
           const eventId = uuid()
           yield* Effect.tryPromise(() =>
-            client.execute({
-              sql: `INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
-                    VALUES (?, 'MissionCompleted', '2026-02-17T10:00:00Z', 'tick_100', '2026-02-17T00:00:00Z', ?, 'Sol', 10477373803)`,
-              args: [eventId, `CMDR ${i}`],
-            })
+            client`INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
+                    VALUES (${eventId}, 'MissionCompleted', '2026-02-17T10:00:00Z', 'tick_100', '2026-02-17T00:00:00Z', ${`CMDR ${i}`}, 'Sol', 10477373803)`
           )
 
           yield* Effect.tryPromise(() =>
-            client.execute({
-              sql: `INSERT INTO mission_completed_event (id, event_id, awarding_faction, mission_name, reward) VALUES (?, ?, 'Test Faction', 'Test Mission', 10000)`,
-              args: [uuid(), eventId],
-            })
+            client`INSERT INTO mission_completed_event (id, event_id, awarding_faction, mission_name, reward) VALUES (${uuid()}, ${eventId}, 'Test Faction', 'Test Mission', 10000)`
           )
         }
 
         // Query with LIMIT 5 (simulating top5 endpoint)
         const result = yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `
+          client`
               SELECT e.cmdr, COUNT(*) AS missions_completed
               FROM mission_completed_event mc
               JOIN event e ON e.id = mc.event_id
               WHERE e.cmdr IS NOT NULL AND e.tickid = 'tick_100'
               GROUP BY e.cmdr
               ORDER BY missions_completed DESC LIMIT 5
-            `,
-            args: [],
-          })
+            `
         )
 
-        expect(result.rows.length).toBe(5)
+        expect((result as any).length).toBe(5)
       })
     )
   })
@@ -604,15 +525,12 @@ describe("Summary API Integration", () => {
   it("should aggregate comprehensive leaderboard statistics", async () => {
     await runTest(
       Effect.gen(function* () {
-        const client = yield* TursoClient
+        const client = yield* PgClient
 
         // Create commander
         const cmdrId = uuid()
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO cmdr (id, name, squadron_rank, squadron_name) VALUES (?, 'CMDR Alpha', 'Captain', 'East India Company')`,
-            args: [cmdrId],
-          })
+          client`INSERT INTO cmdr (id, name, squadron_rank, squadron_name) VALUES (${cmdrId}, 'CMDR Alpha', 'Captain', 'East India Company')`
         )
 
         // Create various events for this commander
@@ -623,119 +541,79 @@ describe("Summary API Integration", () => {
         // Market buy event
         const buyEventId = uuid()
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
-                  VALUES (?, 'MarketBuy', ?, ?, ?, 'CMDR Alpha', 'Sol', 10477373803)`,
-            args: [buyEventId, timestamp, tickid, ticktime],
-          })
+          client`INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
+                  VALUES (${buyEventId}, 'MarketBuy', ${timestamp}, ${tickid}, ${ticktime}, 'CMDR Alpha', 'Sol', 10477373803)`
         )
 
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO market_buy_event (id, event_id, stock, stock_bracket, value, count) VALUES (?, ?, 100, 2, 100000, 50)`,
-            args: [uuid(), buyEventId],
-          })
+          client`INSERT INTO market_buy_event (id, event_id, stock, stock_bracket, value, count) VALUES (${uuid()}, ${buyEventId}, 100, 2, 100000, 50)`
         )
 
         // Market sell event
         const sellEventId = uuid()
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
-                  VALUES (?, 'MarketSell', ?, ?, ?, 'CMDR Alpha', 'Sol', 10477373803)`,
-            args: [sellEventId, timestamp, tickid, ticktime],
-          })
+          client`INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
+                  VALUES (${sellEventId}, 'MarketSell', ${timestamp}, ${tickid}, ${ticktime}, 'CMDR Alpha', 'Sol', 10477373803)`
         )
 
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO market_sell_event (id, event_id, demand, demand_bracket, profit, value, count) VALUES (?, ?, 80, 1, 20000, 120000, 50)`,
-            args: [uuid(), sellEventId],
-          })
+          client`INSERT INTO market_sell_event (id, event_id, demand, demand_bracket, profit, value, count) VALUES (${uuid()}, ${sellEventId}, 80, 1, 20000, 120000, 50)`
         )
 
         // Mission completed
         const missionEventId = uuid()
         const missionCompletedId = uuid()
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
-                  VALUES (?, 'MissionCompleted', ?, ?, ?, 'CMDR Alpha', 'Sol', 10477373803)`,
-            args: [missionEventId, timestamp, tickid, ticktime],
-          })
+          client`INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
+                  VALUES (${missionEventId}, 'MissionCompleted', ${timestamp}, ${tickid}, ${ticktime}, 'CMDR Alpha', 'Sol', 10477373803)`
         )
 
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO mission_completed_event (id, event_id, awarding_faction, mission_name, reward) VALUES (?, ?, 'Federation Navy', 'Test Mission', 500000)`,
-            args: [missionCompletedId, missionEventId],
-          })
+          client`INSERT INTO mission_completed_event (id, event_id, awarding_faction, mission_name, reward) VALUES (${missionCompletedId}, ${missionEventId}, 'Federation Navy', 'Test Mission', 500000)`
         )
 
         // Mission influence for EIC faction
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO mission_completed_influence (id, mission_id, system, influence, trend, faction_name, reputation, reputation_trend, effect, effect_trend)
-                  VALUES (?, ?, 'Sol', '+++++', 'UpGood', 'East India Company', '++', 'UpGood', 'Boom', 'UpGood')`,
-            args: [uuid(), missionCompletedId],
-          })
+          client`INSERT INTO mission_completed_influence (id, mission_id, system, influence, trend, faction_name, reputation, reputation_trend, effect, effect_trend)
+                  VALUES (${uuid()}, ${missionCompletedId}, 'Sol', '+++++', 'UpGood', 'East India Company', '++', 'UpGood', 'Boom', 'UpGood')`
         )
 
         // Bounty voucher
         const bountyEventId = uuid()
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
-                  VALUES (?, 'RedeemVoucher', ?, ?, ?, 'CMDR Alpha', 'Sol', 10477373803)`,
-            args: [bountyEventId, timestamp, tickid, ticktime],
-          })
+          client`INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
+                  VALUES (${bountyEventId}, 'RedeemVoucher', ${timestamp}, ${tickid}, ${ticktime}, 'CMDR Alpha', 'Sol', 10477373803)`
         )
 
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO redeem_voucher_event (id, event_id, amount, faction, type) VALUES (?, ?, 250000, 'Federation Navy', 'bounty')`,
-            args: [uuid(), bountyEventId],
-          })
+          client`INSERT INTO redeem_voucher_event (id, event_id, amount, faction, type) VALUES (${uuid()}, ${bountyEventId}, 250000, 'Federation Navy', 'bounty')`
         )
 
         // Combat bond
         const combatEventId = uuid()
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
-                  VALUES (?, 'RedeemVoucher', ?, ?, ?, 'CMDR Alpha', 'Sol', 10477373803)`,
-            args: [combatEventId, timestamp, tickid, ticktime],
-          })
+          client`INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
+                  VALUES (${combatEventId}, 'RedeemVoucher', ${timestamp}, ${tickid}, ${ticktime}, 'CMDR Alpha', 'Sol', 10477373803)`
         )
 
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO redeem_voucher_event (id, event_id, amount, faction, type) VALUES (?, ?, 500000, 'Federation Navy', 'CombatBond')`,
-            args: [uuid(), combatEventId],
-          })
+          client`INSERT INTO redeem_voucher_event (id, event_id, amount, faction, type) VALUES (${uuid()}, ${combatEventId}, 500000, 'Federation Navy', 'CombatBond')`
         )
 
         // Exploration data
         const explorationEventId = uuid()
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
-                  VALUES (?, 'SellExplorationData', ?, ?, ?, 'CMDR Alpha', 'Sol', 10477373803)`,
-            args: [explorationEventId, timestamp, tickid, ticktime],
-          })
+          client`INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
+                  VALUES (${explorationEventId}, 'SellExplorationData', ${timestamp}, ${tickid}, ${ticktime}, 'CMDR Alpha', 'Sol', 10477373803)`
         )
 
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO sell_exploration_data_event (id, event_id, earnings) VALUES (?, ?, 150000)`,
-            args: [uuid(), explorationEventId],
-          })
+          client`INSERT INTO sell_exploration_data_event (id, event_id, earnings) VALUES (${uuid()}, ${explorationEventId}, 150000)`
         )
 
         // Query leaderboard
         const result = yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `
+          client`
               SELECT e.cmdr,
                      c.squadron_rank AS rank,
                      SUM(CASE WHEN mb.event_id IS NOT NULL THEN mb.value ELSE 0 END) AS total_buy,
@@ -747,14 +625,12 @@ describe("Summary API Integration", () => {
               WHERE e.cmdr IS NOT NULL AND e.tickid = 'tick_100'
               GROUP BY e.cmdr
               ORDER BY e.cmdr
-            `,
-            args: [],
-          })
+            `
         )
 
-        expect(result.rows.length).toBe(1)
+        expect((result as any).length).toBe(1)
 
-        const row = result.rows[0]!
+        const row = (result as any)[0]!
         expect(row[0]).toBe("CMDR Alpha")
         expect(row[1]).toBe("Captain")
         expect(Number(row[2])).toBe(100000) // total_buy
@@ -770,7 +646,7 @@ describe("Summary API Integration", () => {
   it("should filter recruits by squadron rank and calculate progression", async () => {
     await runTest(
       Effect.gen(function* () {
-        const client = yield* TursoClient
+        const client = yield* PgClient
 
         // Create commanders with different ranks
         const recruit1Id = uuid()
@@ -778,81 +654,53 @@ describe("Summary API Integration", () => {
         const captainId = uuid()
 
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO cmdr (id, name, squadron_rank, squadron_name) VALUES (?, 'CMDR Recruit1', 'Recruit', 'East India Company')`,
-            args: [recruit1Id],
-          })
+          client`INSERT INTO cmdr (id, name, squadron_rank, squadron_name) VALUES (${recruit1Id}, 'CMDR Recruit1', 'Recruit', 'East India Company')`
         )
 
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO cmdr (id, name, squadron_rank, squadron_name) VALUES (?, 'CMDR Recruit2', 'Recruit', 'East India Company')`,
-            args: [recruit2Id],
-          })
+          client`INSERT INTO cmdr (id, name, squadron_rank, squadron_name) VALUES (${recruit2Id}, 'CMDR Recruit2', 'Recruit', 'East India Company')`
         )
 
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO cmdr (id, name, squadron_rank, squadron_name) VALUES (?, 'CMDR Captain', 'Captain', 'East India Company')`,
-            args: [captainId],
-          })
+          client`INSERT INTO cmdr (id, name, squadron_rank, squadron_name) VALUES (${captainId}, 'CMDR Captain', 'Captain', 'East India Company')`
         )
 
         // Create events for recruits
         const event1Id = uuid()
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
-                  VALUES (?, 'MarketBuy', '2026-02-10T10:00:00Z', 'tick_95', '2026-02-10T00:00:00Z', 'CMDR Recruit1', 'Sol', 10477373803)`,
-            args: [event1Id],
-          })
+          client`INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
+                  VALUES (${event1Id}, 'MarketBuy', '2026-02-10T10:00:00Z', 'tick_95', '2026-02-10T00:00:00Z', 'CMDR Recruit1', 'Sol', 10477373803)`
         )
 
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO market_buy_event (id, event_id, stock, stock_bracket, value, count) VALUES (?, ?, 100, 2, 50000, 100)`,
-            args: [uuid(), event1Id],
-          })
+          client`INSERT INTO market_buy_event (id, event_id, stock, stock_bracket, value, count) VALUES (${uuid()}, ${event1Id}, 100, 2, 50000, 100)`
         )
 
         const event2Id = uuid()
         const missionId = uuid()
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
-                  VALUES (?, 'MissionCompleted', '2026-02-17T10:00:00Z', 'tick_100', '2026-02-17T00:00:00Z', 'CMDR Recruit1', 'Sol', 10477373803)`,
-            args: [event2Id],
-          })
+          client`INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
+                  VALUES (${event2Id}, 'MissionCompleted', '2026-02-17T10:00:00Z', 'tick_100', '2026-02-17T00:00:00Z', 'CMDR Recruit1', 'Sol', 10477373803)`
         )
 
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO mission_completed_event (id, event_id, awarding_faction, mission_name, reward) VALUES (?, ?, 'Federation Navy', 'Test Mission', 100000)`,
-            args: [missionId, event2Id],
-          })
+          client`INSERT INTO mission_completed_event (id, event_id, awarding_faction, mission_name, reward) VALUES (${missionId}, ${event2Id}, 'Federation Navy', 'Test Mission', 100000)`
         )
 
         // Create event for captain (should be filtered out)
         const event3Id = uuid()
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
-                  VALUES (?, 'MarketBuy', '2026-02-17T10:00:00Z', 'tick_100', '2026-02-17T00:00:00Z', 'CMDR Captain', 'Sol', 10477373803)`,
-            args: [event3Id],
-          })
+          client`INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
+                  VALUES (${event3Id}, 'MarketBuy', '2026-02-17T10:00:00Z', 'tick_100', '2026-02-17T00:00:00Z', 'CMDR Captain', 'Sol', 10477373803)`
         )
 
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO market_buy_event (id, event_id, stock, stock_bracket, value, count) VALUES (?, ?, 100, 2, 50000, 50)`,
-            args: [uuid(), event3Id],
-          })
+          client`INSERT INTO market_buy_event (id, event_id, stock, stock_bracket, value, count) VALUES (${uuid()}, ${event3Id}, 100, 2, 50000, 50)`
         )
 
         // Query recruits only
         const result = yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `
+          client`
               SELECT e.cmdr AS commander,
                      CASE WHEN COUNT(e.id) > 0 THEN 'Yes' ELSE 'No' END AS has_data,
                      MAX(e.timestamp) AS last_active,
@@ -869,14 +717,12 @@ describe("Summary API Integration", () => {
               WHERE e.cmdr IS NOT NULL AND c.squadron_rank = 'Recruit'
               GROUP BY e.cmdr
               ORDER BY e.cmdr
-            `,
-            args: [],
-          })
+            `
         )
 
-        expect(result.rows.length).toBe(1) // Only CMDR Recruit1 has events
+        expect((result as any).length).toBe(1) // Only CMDR Recruit1 has events
 
-        const row = result.rows[0]!
+        const row = (result as any)[0]!
         expect(row[0]).toBe("CMDR Recruit1")
         expect(row[1]).toBe("Yes")
         expect(row[2]).toBe("2026-02-17T10:00:00Z") // last_active
@@ -893,46 +739,33 @@ describe("Summary API Integration", () => {
   it("should combine single and multi exploration sales", async () => {
     await runTest(
       Effect.gen(function* () {
-        const client = yield* TursoClient
+        const client = yield* PgClient
 
         // Create single exploration sale
         const event1Id = uuid()
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
-                  VALUES (?, 'SellExplorationData', '2026-02-17T10:00:00Z', 'tick_100', '2026-02-17T00:00:00Z', 'CMDR Explorer', 'Sol', 10477373803)`,
-            args: [event1Id],
-          })
+          client`INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
+                  VALUES (${event1Id}, 'SellExplorationData', '2026-02-17T10:00:00Z', 'tick_100', '2026-02-17T00:00:00Z', 'CMDR Explorer', 'Sol', 10477373803)`
         )
 
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO sell_exploration_data_event (id, event_id, earnings) VALUES (?, ?, 50000)`,
-            args: [uuid(), event1Id],
-          })
+          client`INSERT INTO sell_exploration_data_event (id, event_id, earnings) VALUES (${uuid()}, ${event1Id}, 50000)`
         )
 
         // Create multi exploration sale
         const event2Id = uuid()
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
-                  VALUES (?, 'MultiSellExplorationData', '2026-02-17T11:00:00Z', 'tick_100', '2026-02-17T00:00:00Z', 'CMDR Explorer', 'Sol', 10477373803)`,
-            args: [event2Id],
-          })
+          client`INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
+                  VALUES (${event2Id}, 'MultiSellExplorationData', '2026-02-17T11:00:00Z', 'tick_100', '2026-02-17T00:00:00Z', 'CMDR Explorer', 'Sol', 10477373803)`
         )
 
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO multi_sell_exploration_data_event (id, event_id, total_earnings) VALUES (?, ?, 150000)`,
-            args: [uuid(), event2Id],
-          })
+          client`INSERT INTO multi_sell_exploration_data_event (id, event_id, total_earnings) VALUES (${uuid()}, ${event2Id}, 150000)`
         )
 
         // Query exploration sales (UNION query)
         const result = yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `
+          client`
               SELECT cmdr, SUM(total_sales) AS total_exploration_sales
               FROM (
                 SELECT e.cmdr, se.earnings AS total_sales
@@ -947,14 +780,12 @@ describe("Summary API Integration", () => {
               )
               GROUP BY cmdr
               ORDER BY total_exploration_sales DESC
-            `,
-            args: [],
-          })
+            `
         )
 
-        expect(result.rows.length).toBe(1)
+        expect((result as any).length).toBe(1)
 
-        const row = result.rows[0]!
+        const row = (result as any)[0]!
         expect(row[0]).toBe("CMDR Explorer")
         expect(Number(row[1])).toBe(200000) // 50000 + 150000
       })
@@ -968,62 +799,43 @@ describe("Summary API Integration", () => {
   it("should filter murder crimes and group by system and faction", async () => {
     await runTest(
       Effect.gen(function* () {
-        const client = yield* TursoClient
+        const client = yield* PgClient
 
         // Create murder events
         const event1Id = uuid()
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
-                  VALUES (?, 'CommitCrime', '2026-02-17T10:00:00Z', 'tick_100', '2026-02-17T00:00:00Z', 'CMDR Pirate', 'Sol', 10477373803)`,
-            args: [event1Id],
-          })
+          client`INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
+                  VALUES (${event1Id}, 'CommitCrime', '2026-02-17T10:00:00Z', 'tick_100', '2026-02-17T00:00:00Z', 'CMDR Pirate', 'Sol', 10477373803)`
         )
 
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO commit_crime_event (id, event_id, crime_type, faction, victim, victim_faction, bounty) VALUES (?, ?, 'murder', 'Federation', 'CMDR Victim1', 'Federation Navy', 10000)`,
-            args: [uuid(), event1Id],
-          })
+          client`INSERT INTO commit_crime_event (id, event_id, crime_type, faction, victim, victim_faction, bounty) VALUES (${uuid()}, ${event1Id}, 'murder', 'Federation', 'CMDR Victim1', 'Federation Navy', 10000)`
         )
 
         const event2Id = uuid()
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
-                  VALUES (?, 'CommitCrime', '2026-02-17T11:00:00Z', 'tick_100', '2026-02-17T00:00:00Z', 'CMDR Pirate', 'Sol', 10477373803)`,
-            args: [event2Id],
-          })
+          client`INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
+                  VALUES (${event2Id}, 'CommitCrime', '2026-02-17T11:00:00Z', 'tick_100', '2026-02-17T00:00:00Z', 'CMDR Pirate', 'Sol', 10477373803)`
         )
 
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO commit_crime_event (id, event_id, crime_type, faction, victim, victim_faction, bounty) VALUES (?, ?, 'Murder', 'Federation', 'CMDR Victim2', 'Federation Navy', 15000)`,
-            args: [uuid(), event2Id],
-          })
+          client`INSERT INTO commit_crime_event (id, event_id, crime_type, faction, victim, victim_faction, bounty) VALUES (${uuid()}, ${event2Id}, 'Murder', 'Federation', 'CMDR Victim2', 'Federation Navy', 15000)`
         )
 
         // Non-murder crime (should be filtered out)
         const event3Id = uuid()
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
-                  VALUES (?, 'CommitCrime', '2026-02-17T12:00:00Z', 'tick_100', '2026-02-17T00:00:00Z', 'CMDR Pirate', 'Sol', 10477373803)`,
-            args: [event3Id],
-          })
+          client`INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
+                  VALUES (${event3Id}, 'CommitCrime', '2026-02-17T12:00:00Z', 'tick_100', '2026-02-17T00:00:00Z', 'CMDR Pirate', 'Sol', 10477373803)`
         )
 
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO commit_crime_event (id, event_id, crime_type, faction, victim, victim_faction, bounty) VALUES (?, ?, 'assault', 'Federation', 'CMDR Victim3', 'Federation Navy', 5000)`,
-            args: [uuid(), event3Id],
-          })
+          client`INSERT INTO commit_crime_event (id, event_id, crime_type, faction, victim, victim_faction, bounty) VALUES (${uuid()}, ${event3Id}, 'assault', 'Federation', 'CMDR Victim3', 'Federation Navy', 5000)`
         )
 
         // Query murder count only
         const result = yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `
+          client`
               SELECT e.cmdr, e.starsystem, cc.victim_faction AS faction, COUNT(*) AS murder_count
               FROM commit_crime_event cc
               JOIN event e ON e.id = cc.event_id
@@ -1032,14 +844,12 @@ describe("Summary API Integration", () => {
                 AND e.tickid = 'tick_100'
               GROUP BY e.cmdr, e.starsystem, cc.victim_faction
               ORDER BY murder_count DESC
-            `,
-            args: [],
-          })
+            `
         )
 
-        expect(result.rows.length).toBe(1)
+        expect((result as any).length).toBe(1)
 
-        const row = result.rows[0]!
+        const row = (result as any)[0]!
         expect(row[0]).toBe("CMDR Pirate")
         expect(row[1]).toBe("Sol")
         expect(row[2]).toBe("Federation Navy")
@@ -1055,65 +865,50 @@ describe("Summary API Integration", () => {
   it("should filter influence by EIC faction pattern", async () => {
     await runTest(
       Effect.gen(function* () {
-        const client = yield* TursoClient
+        const client = yield* PgClient
 
         // Create missions with different faction influences
         const event1Id = uuid()
         const mission1Id = uuid()
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
-                  VALUES (?, 'MissionCompleted', '2026-02-17T10:00:00Z', 'tick_100', '2026-02-17T00:00:00Z', 'CMDR Alpha', 'Sol', 10477373803)`,
-            args: [event1Id],
-          })
+          client`INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
+                  VALUES (${event1Id}, 'MissionCompleted', '2026-02-17T10:00:00Z', 'tick_100', '2026-02-17T00:00:00Z', 'CMDR Alpha', 'Sol', 10477373803)`
         )
 
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO mission_completed_event (id, event_id, awarding_faction, mission_name, reward) VALUES (?, ?, 'Federation Navy', 'Test Mission', 100000)`,
-            args: [mission1Id, event1Id],
-          })
+          client`INSERT INTO mission_completed_event (id, event_id, awarding_faction, mission_name, reward) VALUES (${mission1Id}, ${event1Id}, 'Federation Navy', 'Test Mission', 100000)`
         )
 
         // Influence for EIC (should be included)
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO mission_completed_influence (id, mission_id, system, influence, trend, faction_name, reputation, reputation_trend, effect, effect_trend)
-                  VALUES (?, ?, 'Sol', '+++++', 'UpGood', 'East India Company', '++', 'UpGood', 'Boom', 'UpGood')`,
-            args: [uuid(), mission1Id],
-          })
+          client`INSERT INTO mission_completed_influence (id, mission_id, system, influence, trend, faction_name, reputation, reputation_trend, effect, effect_trend)
+                  VALUES (${uuid()}, ${mission1Id}, 'Sol', '+++++', 'UpGood', 'East India Company', '++', 'UpGood', 'Boom', 'UpGood')`
         )
 
         // Influence for non-EIC faction (should be filtered out)
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO mission_completed_influence (id, mission_id, system, influence, trend, faction_name, reputation, reputation_trend, effect, effect_trend)
-                  VALUES (?, ?, 'Sol', '+++', 'UpGood', 'Federation Navy', '+', 'UpGood', 'None', 'None')`,
-            args: [uuid(), mission1Id],
-          })
+          client`INSERT INTO mission_completed_influence (id, mission_id, system, influence, trend, faction_name, reputation, reputation_trend, effect, effect_trend)
+                  VALUES (${uuid()}, ${mission1Id}, 'Sol', '+++', 'UpGood', 'Federation Navy', '+', 'UpGood', 'None', 'None')`
         )
 
         // Query influence for EIC only
         const result = yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `
+          client`
               SELECT e.cmdr, mci.faction_name, SUM(LENGTH(mci.influence)) AS influence
               FROM mission_completed_influence mci
               JOIN mission_completed_event mce ON mce.id = mci.mission_id
               JOIN event e ON e.id = mce.event_id
               WHERE e.cmdr IS NOT NULL
-                AND mci.faction_name LIKE ?
+                AND mci.faction_name LIKE ${"%East India Company%"}
                 AND e.tickid = 'tick_100'
               GROUP BY e.cmdr, mci.faction_name
               ORDER BY influence DESC, e.cmdr
-            `,
-            args: ["%East India Company%"],
-          })
+            `
         )
 
-        expect(result.rows.length).toBe(1)
+        expect((result as any).length).toBe(1)
 
-        const row = result.rows[0]!
+        const row = (result as any)[0]!
         expect(row[0]).toBe("CMDR Alpha")
         expect(row[1]).toBe("East India Company")
         expect(Number(row[2])).toBe(5) // LENGTH('+++++')
@@ -1128,41 +923,32 @@ describe("Summary API Integration", () => {
   it("should return empty array when no data matches filters", async () => {
     await runTest(
       Effect.gen(function* () {
-        const client = yield* TursoClient
+        const client = yield* PgClient
 
         // Create some data for a different tick
         const eventId = uuid()
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
-                  VALUES (?, 'MarketBuy', '2026-02-17T10:00:00Z', 'tick_100', '2026-02-17T00:00:00Z', 'CMDR Test', 'Sol', 10477373803)`,
-            args: [eventId],
-          })
+          client`INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
+                  VALUES (${eventId}, 'MarketBuy', '2026-02-17T10:00:00Z', 'tick_100', '2026-02-17T00:00:00Z', 'CMDR Test', 'Sol', 10477373803)`
         )
 
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO market_buy_event (id, event_id, stock, stock_bracket, value, count) VALUES (?, ?, 100, 2, 50000, 10)`,
-            args: [uuid(), eventId],
-          })
+          client`INSERT INTO market_buy_event (id, event_id, stock, stock_bracket, value, count) VALUES (${uuid()}, ${eventId}, 100, 2, 50000, 10)`
         )
 
         // Query for non-existent tick
         const result = yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `
+          client`
               SELECT e.cmdr,
                      SUM(COALESCE(mb.value, 0)) AS total_buy
               FROM event e
               LEFT JOIN market_buy_event mb ON mb.event_id = e.id
               WHERE e.cmdr IS NOT NULL AND e.tickid = 'tick_999'
               GROUP BY e.cmdr
-            `,
-            args: [],
-          })
+            `
         )
 
-        expect(result.rows.length).toBe(0)
+        expect((result as any).length).toBe(0)
       })
     )
   })
@@ -1174,59 +960,44 @@ describe("Summary API Integration", () => {
   it("should track combat bonds by system and faction", async () => {
     await runTest(
       Effect.gen(function* () {
-        const client = yield* TursoClient
+        const client = yield* PgClient
 
         // Create combat bond events
         const event1Id = uuid()
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
-                  VALUES (?, 'RedeemVoucher', '2026-02-17T10:00:00Z', 'tick_100', '2026-02-17T00:00:00Z', 'CMDR Soldier', 'Sol', 10477373803)`,
-            args: [event1Id],
-          })
+          client`INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
+                  VALUES (${event1Id}, 'RedeemVoucher', '2026-02-17T10:00:00Z', 'tick_100', '2026-02-17T00:00:00Z', 'CMDR Soldier', 'Sol', 10477373803)`
         )
 
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO redeem_voucher_event (id, event_id, amount, faction, type) VALUES (?, ?, 1000000, 'Federation Navy', 'CombatBond')`,
-            args: [uuid(), event1Id],
-          })
+          client`INSERT INTO redeem_voucher_event (id, event_id, amount, faction, type) VALUES (${uuid()}, ${event1Id}, 1000000, 'Federation Navy', 'CombatBond')`
         )
 
         const event2Id = uuid()
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
-                  VALUES (?, 'RedeemVoucher', '2026-02-17T11:00:00Z', 'tick_100', '2026-02-17T00:00:00Z', 'CMDR Soldier', 'Sol', 10477373803)`,
-            args: [event2Id],
-          })
+          client`INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
+                  VALUES (${event2Id}, 'RedeemVoucher', '2026-02-17T11:00:00Z', 'tick_100', '2026-02-17T00:00:00Z', 'CMDR Soldier', 'Sol', 10477373803)`
         )
 
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO redeem_voucher_event (id, event_id, amount, faction, type) VALUES (?, ?, 500000, 'Federation Navy', 'CombatBond')`,
-            args: [uuid(), event2Id],
-          })
+          client`INSERT INTO redeem_voucher_event (id, event_id, amount, faction, type) VALUES (${uuid()}, ${event2Id}, 500000, 'Federation Navy', 'CombatBond')`
         )
 
         // Query combat bonds
         const result = yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `
+          client`
               SELECT e.cmdr, e.starsystem, rv.faction, SUM(rv.amount) AS combat_bonds
               FROM redeem_voucher_event rv
               JOIN event e ON e.id = rv.event_id
               WHERE e.cmdr IS NOT NULL AND rv.type = 'CombatBond' AND e.tickid = 'tick_100'
               GROUP BY e.cmdr, e.starsystem, rv.faction
               ORDER BY combat_bonds DESC
-            `,
-            args: [],
-          })
+            `
         )
 
-        expect(result.rows.length).toBe(1)
+        expect((result as any).length).toBe(1)
 
-        const row = result.rows[0]!
+        const row = (result as any)[0]!
         expect(row[0]).toBe("CMDR Soldier")
         expect(row[1]).toBe("Sol")
         expect(row[2]).toBe("Federation Navy")
@@ -1242,59 +1013,44 @@ describe("Summary API Integration", () => {
   it("should track failed missions by commander", async () => {
     await runTest(
       Effect.gen(function* () {
-        const client = yield* TursoClient
+        const client = yield* PgClient
 
         // Create failed mission events
         const event1Id = uuid()
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
-                  VALUES (?, 'MissionFailed', '2026-02-17T10:00:00Z', 'tick_100', '2026-02-17T00:00:00Z', 'CMDR Unlucky', 'Sol', 10477373803)`,
-            args: [event1Id],
-          })
+          client`INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
+                  VALUES (${event1Id}, 'MissionFailed', '2026-02-17T10:00:00Z', 'tick_100', '2026-02-17T00:00:00Z', 'CMDR Unlucky', 'Sol', 10477373803)`
         )
 
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO mission_failed_event (id, event_id, mission_name, awarding_faction, fine) VALUES (?, ?, 'Courier Mission', 'Federation Navy', 50000)`,
-            args: [uuid(), event1Id],
-          })
+          client`INSERT INTO mission_failed_event (id, event_id, mission_name, awarding_faction, fine) VALUES (${uuid()}, ${event1Id}, 'Courier Mission', 'Federation Navy', 50000)`
         )
 
         const event2Id = uuid()
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
-                  VALUES (?, 'MissionFailed', '2026-02-17T11:00:00Z', 'tick_100', '2026-02-17T00:00:00Z', 'CMDR Unlucky', 'Sol', 10477373803)`,
-            args: [event2Id],
-          })
+          client`INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
+                  VALUES (${event2Id}, 'MissionFailed', '2026-02-17T11:00:00Z', 'tick_100', '2026-02-17T00:00:00Z', 'CMDR Unlucky', 'Sol', 10477373803)`
         )
 
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO mission_failed_event (id, event_id, mission_name, awarding_faction, fine) VALUES (?, ?, 'Delivery Mission', 'Mother Gaia', 25000)`,
-            args: [uuid(), event2Id],
-          })
+          client`INSERT INTO mission_failed_event (id, event_id, mission_name, awarding_faction, fine) VALUES (${uuid()}, ${event2Id}, 'Delivery Mission', 'Mother Gaia', 25000)`
         )
 
         // Query failed missions
         const result = yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `
+          client`
               SELECT e.cmdr, COUNT(*) AS missions_failed
               FROM mission_failed_event mf
               JOIN event e ON e.id = mf.event_id
               WHERE e.cmdr IS NOT NULL AND e.tickid = 'tick_100'
               GROUP BY e.cmdr
               ORDER BY missions_failed DESC
-            `,
-            args: [],
-          })
+            `
         )
 
-        expect(result.rows.length).toBe(1)
+        expect((result as any).length).toBe(1)
 
-        const row = result.rows[0]!
+        const row = (result as any)[0]!
         expect(row[0]).toBe("CMDR Unlucky")
         expect(Number(row[1])).toBe(2)
       })
@@ -1308,59 +1064,44 @@ describe("Summary API Integration", () => {
   it("should sum bounty fines from commit crime events", async () => {
     await runTest(
       Effect.gen(function* () {
-        const client = yield* TursoClient
+        const client = yield* PgClient
 
         // Create crime events with bounties
         const event1Id = uuid()
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
-                  VALUES (?, 'CommitCrime', '2026-02-17T10:00:00Z', 'tick_100', '2026-02-17T00:00:00Z', 'CMDR Outlaw', 'Sol', 10477373803)`,
-            args: [event1Id],
-          })
+          client`INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
+                  VALUES (${event1Id}, 'CommitCrime', '2026-02-17T10:00:00Z', 'tick_100', '2026-02-17T00:00:00Z', 'CMDR Outlaw', 'Sol', 10477373803)`
         )
 
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO commit_crime_event (id, event_id, crime_type, faction, victim, victim_faction, bounty) VALUES (?, ?, 'assault', 'Federation', 'NPC Guard', 'Federation Navy', 5000)`,
-            args: [uuid(), event1Id],
-          })
+          client`INSERT INTO commit_crime_event (id, event_id, crime_type, faction, victim, victim_faction, bounty) VALUES (${uuid()}, ${event1Id}, 'assault', 'Federation', 'NPC Guard', 'Federation Navy', 5000)`
         )
 
         const event2Id = uuid()
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
-                  VALUES (?, 'CommitCrime', '2026-02-17T11:00:00Z', 'tick_100', '2026-02-17T00:00:00Z', 'CMDR Outlaw', 'Sol', 10477373803)`,
-            args: [event2Id],
-          })
+          client`INSERT INTO event (id, event, timestamp, tickid, ticktime, cmdr, starsystem, systemaddress)
+                  VALUES (${event2Id}, 'CommitCrime', '2026-02-17T11:00:00Z', 'tick_100', '2026-02-17T00:00:00Z', 'CMDR Outlaw', 'Sol', 10477373803)`
         )
 
         yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `INSERT INTO commit_crime_event (id, event_id, crime_type, faction, victim, victim_faction, bounty) VALUES (?, ?, 'murder', 'Federation', 'CMDR Victim', 'Federation Navy', 15000)`,
-            args: [uuid(), event2Id],
-          })
+          client`INSERT INTO commit_crime_event (id, event_id, crime_type, faction, victim, victim_faction, bounty) VALUES (${uuid()}, ${event2Id}, 'murder', 'Federation', 'CMDR Victim', 'Federation Navy', 15000)`
         )
 
         // Query bounty fines
         const result = yield* Effect.tryPromise(() =>
-          client.execute({
-            sql: `
+          client`
               SELECT e.cmdr, SUM(cc.bounty) AS bounty_fines
               FROM commit_crime_event cc
               JOIN event e ON e.id = cc.event_id
               WHERE e.cmdr IS NOT NULL AND e.tickid = 'tick_100'
               GROUP BY e.cmdr
               ORDER BY bounty_fines DESC
-            `,
-            args: [],
-          })
+            `
         )
 
-        expect(result.rows.length).toBe(1)
+        expect((result as any).length).toBe(1)
 
-        const row = result.rows[0]!
+        const row = (result as any)[0]!
         expect(row[0]).toBe("CMDR Outlaw")
         expect(Number(row[1])).toBe(20000) // 5000 + 15000
       })

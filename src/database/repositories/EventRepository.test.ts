@@ -1,9 +1,10 @@
+import { SQL } from 'bun'
 import { describe, it, expect } from "bun:test";
 import { Effect, Layer, Option } from "effect";
 import { EventRepository } from "../../domain/repositories.ts";
 import { EventRepositoryLive } from "./EventRepository.ts";
-import { TursoClient } from "../client.ts";
-import { createClient } from "@libsql/client";
+import { PgClient } from "../client.ts";
+;
 import {
   EventId,
   MarketBuyEventId,
@@ -19,137 +20,10 @@ import {
 
 // Helper to provide a fresh Test Layer for each test
 const ClientLayer = Layer.effect(
-  TursoClient,
+  PgClient,
   Effect.gen(function* () {
-    const client = createClient({
-      url: "file::memory:",
-    });
-
-    // Initialize Schema - Main event table + all sub-event tables
-    yield* Effect.tryPromise(() =>
-      client.executeMultiple(`
-        CREATE TABLE event (
-          id TEXT PRIMARY KEY,
-          event TEXT NOT NULL,
-          timestamp TEXT NOT NULL,
-          tickid TEXT NOT NULL,
-          ticktime TEXT NOT NULL,
-          cmdr TEXT,
-          starsystem TEXT,
-          systemaddress INTEGER,
-          raw_json TEXT
-        );
-
-        CREATE INDEX idx_event_tickid ON event(tickid);
-        CREATE INDEX idx_event_timestamp ON event(timestamp);
-
-        CREATE TABLE market_buy_event (
-          id TEXT PRIMARY KEY,
-          event_id TEXT NOT NULL,
-          stock INTEGER,
-          stock_bracket INTEGER,
-          value INTEGER,
-          count INTEGER,
-          FOREIGN KEY (event_id) REFERENCES event(id) ON DELETE CASCADE
-        );
-
-        CREATE TABLE market_sell_event (
-          id TEXT PRIMARY KEY,
-          event_id TEXT NOT NULL,
-          demand INTEGER,
-          demand_bracket INTEGER,
-          profit INTEGER,
-          value INTEGER,
-          count INTEGER,
-          FOREIGN KEY (event_id) REFERENCES event(id) ON DELETE CASCADE
-        );
-
-        CREATE TABLE mission_completed_event (
-          id TEXT PRIMARY KEY,
-          event_id TEXT NOT NULL,
-          awarding_faction TEXT,
-          mission_name TEXT,
-          reward INTEGER,
-          FOREIGN KEY (event_id) REFERENCES event(id) ON DELETE CASCADE
-        );
-
-        CREATE TABLE faction_kill_bond_event (
-          id TEXT PRIMARY KEY,
-          event_id TEXT NOT NULL,
-          killer_ship TEXT,
-          awarding_faction TEXT,
-          victim_faction TEXT,
-          reward INTEGER,
-          FOREIGN KEY (event_id) REFERENCES event(id) ON DELETE CASCADE
-        );
-
-        CREATE TABLE mission_failed_event (
-          id TEXT PRIMARY KEY,
-          event_id TEXT NOT NULL,
-          mission_name TEXT,
-          awarding_faction TEXT,
-          fine INTEGER,
-          FOREIGN KEY (event_id) REFERENCES event(id) ON DELETE CASCADE
-        );
-
-        CREATE TABLE multi_sell_exploration_data_event (
-          id TEXT PRIMARY KEY,
-          event_id TEXT NOT NULL,
-          total_earnings INTEGER,
-          FOREIGN KEY (event_id) REFERENCES event(id) ON DELETE CASCADE
-        );
-
-        CREATE TABLE redeem_voucher_event (
-          id TEXT PRIMARY KEY,
-          event_id TEXT NOT NULL,
-          amount INTEGER,
-          faction TEXT,
-          type TEXT,
-          FOREIGN KEY (event_id) REFERENCES event(id) ON DELETE CASCADE
-        );
-
-        CREATE TABLE sell_exploration_data_event (
-          id TEXT PRIMARY KEY,
-          event_id TEXT NOT NULL,
-          earnings INTEGER,
-          FOREIGN KEY (event_id) REFERENCES event(id) ON DELETE CASCADE
-        );
-
-        CREATE TABLE commit_crime_event (
-          id TEXT PRIMARY KEY,
-          event_id TEXT NOT NULL,
-          crime_type TEXT,
-          faction TEXT,
-          victim TEXT,
-          victim_faction TEXT,
-          bounty INTEGER,
-          FOREIGN KEY (event_id) REFERENCES event(id) ON DELETE CASCADE
-        );
-
-        CREATE TABLE synthetic_ground_cz (
-          id TEXT PRIMARY KEY,
-          event_id TEXT NOT NULL,
-          cz_type TEXT,
-          settlement TEXT,
-          faction TEXT,
-          cmdr TEXT,
-          station_faction_name TEXT,
-          FOREIGN KEY (event_id) REFERENCES event(id) ON DELETE CASCADE
-        );
-
-        CREATE TABLE synthetic_cz (
-          id TEXT PRIMARY KEY,
-          event_id TEXT NOT NULL,
-          cz_type TEXT,
-          faction TEXT,
-          cmdr TEXT,
-          station_faction_name TEXT,
-          FOREIGN KEY (event_id) REFERENCES event(id) ON DELETE CASCADE
-        );
-      `)
-    );
-
-    return client;
+    const client = new SQL("postgres://postgres:password@localhost:5432/sinistra");
+    return PgClient.of(client);
   })
 );
 

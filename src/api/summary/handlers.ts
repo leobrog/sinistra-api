@@ -3,7 +3,7 @@ import { HttpApiBuilder } from "@effect/platform";
 import { Api } from "../index.js";
 import type { SummaryKey, SummaryQueryParams } from "./dtos.js";
 import { RecruitsResponseSchema, LeaderboardResponseSchema } from "./dtos.js";
-import { TursoClient } from "../../database/client.js";
+import { PgClient } from "../../database/client.js";
 import { DatabaseError } from "../../domain/errors.js";
 import { buildDateFilter, type DateFilter } from "../../services/date-filters.js";
 import { AppConfig } from "../../lib/config.js";
@@ -159,9 +159,9 @@ const executeSummaryQuery = (
   key: SummaryKey,
   queryParams: SummaryQueryParams,
   isTop5: boolean
-): Effect.Effect<unknown[], DatabaseError, TursoClient | AppConfig> =>
+): Effect.Effect<unknown[], DatabaseError, PgClient | AppConfig> =>
   Effect.gen(function* () {
-    const client = yield* TursoClient;
+    const client = yield* PgClient;
     const config = yield* AppConfig;
 
     // Get query template
@@ -217,7 +217,7 @@ const executeSummaryQuery = (
 
     // Execute query
     const result = yield* Effect.tryPromise({
-      try: () => client.execute({ sql, args }),
+      try: () => client.unsafe(sql as any),
       catch: (error) =>
         new DatabaseError({
           operation: "execute summary query",
@@ -225,7 +225,7 @@ const executeSummaryQuery = (
         }),
     });
 
-    return result.rows;
+    return result;
   }).pipe(
     Effect.catchAll((error) => {
       // Map generic Error from buildDateFilter to DatabaseError
@@ -266,7 +266,7 @@ export const getSummaryTop5 = HttpApiBuilder.handler(Api, "summary", "getSummary
  */
 export const getLeaderboard = HttpApiBuilder.handler(Api, "summary", "getLeaderboard", ({ urlParams }) =>
   Effect.gen(function* () {
-    const client = yield* TursoClient;
+    const client = yield* PgClient;
     const config = yield* AppConfig;
 
     // Build date filter
@@ -403,7 +403,7 @@ export const getLeaderboard = HttpApiBuilder.handler(Api, "summary", "getLeaderb
     ];
 
     const result = yield* Effect.tryPromise({
-      try: () => client.execute({ sql, args: finalArgs }),
+      try: () => client.unsafe(sql as any),
       catch: (error) =>
         new DatabaseError({
           operation: "execute leaderboard query",
@@ -412,7 +412,7 @@ export const getLeaderboard = HttpApiBuilder.handler(Api, "summary", "getLeaderb
     });
 
     // Decode and validate the rows using the schema
-    return yield* Schema.decodeUnknown(LeaderboardResponseSchema)(result.rows);
+    return yield* Schema.decodeUnknown(LeaderboardResponseSchema)(result);
   }).pipe(
     Effect.catchTag("ParseError", (error) =>
       Effect.fail(
@@ -442,7 +442,7 @@ export const getLeaderboard = HttpApiBuilder.handler(Api, "summary", "getLeaderb
  */
 export const getRecruits = HttpApiBuilder.handler(Api, "summary", "getRecruits", () =>
   Effect.gen(function* () {
-    const client = yield* TursoClient;
+    const client = yield* PgClient;
 
     const sql = `
       SELECT e.cmdr AS commander,
@@ -497,7 +497,7 @@ export const getRecruits = HttpApiBuilder.handler(Api, "summary", "getRecruits",
     `;
 
     const result = yield* Effect.tryPromise({
-      try: () => client.execute({ sql, args: [] as Array<string | number | null> }),
+      try: () => client.unsafe(sql as any),
       catch: (error) =>
         new DatabaseError({
           operation: "execute recruits query",
@@ -506,7 +506,7 @@ export const getRecruits = HttpApiBuilder.handler(Api, "summary", "getRecruits",
     });
 
     // Decode and validate the rows using the schema
-    return yield* Schema.decodeUnknown(RecruitsResponseSchema)(result.rows);
+    return yield* Schema.decodeUnknown(RecruitsResponseSchema)(result);
   }).pipe(
     Effect.catchTag("ParseError", (error) =>
       Effect.fail(

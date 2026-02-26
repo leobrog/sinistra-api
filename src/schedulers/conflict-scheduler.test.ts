@@ -1,3 +1,4 @@
+import { SQL } from 'bun'
 /**
  * Conflict Scheduler — runConflictCheck integration tests
  *
@@ -13,7 +14,7 @@
 
 import { describe, it, expect, mock, beforeEach } from "bun:test"
 import { Effect } from "effect"
-import { createClient } from "@libsql/client"
+
 import { runConflictCheck } from "./conflict-scheduler.js"
 
 // ---------------------------------------------------------------------------
@@ -66,64 +67,46 @@ const SCHEMA = `
 `
 
 const makeClient = async () => {
-  const client = createClient({ url: "file::memory:" })
-  await client.executeMultiple(SCHEMA)
+  const client = new SQL('postgres://postgres:password@localhost:5432/sinistra')
+  await client(SCHEMA)
   // Seed the tracked faction so runConflictCheck finds it in protected_faction
-  await client.execute({
-    sql: "INSERT INTO protected_faction (id, name, protected) VALUES (?, ?, 1)",
-    args: [crypto.randomUUID(), FACTION],
-  })
+  await client`INSERT INTO protected_faction (id, name, protected) VALUES (${crypto.randomUUID()}, ${FACTION}, 1)`
   return client
 }
 
 const insertEvent = (
-  client: ReturnType<typeof createClient>,
+  client: SQL,
   system: string,
   wonDays1: number,
   wonDays2: number,
   tickId = TICK
 ) =>
-  client.execute({
-    sql: `INSERT INTO event (id, event, timestamp, tickid, ticktime, raw_json)
-          VALUES (?, 'FSDJump', ?, ?, ?, ?)`,
-    args: [
-      crypto.randomUUID(),
-      new Date().toISOString(),
-      tickId,
-      tickId,
-      JSON.stringify({
-        event: "FSDJump",
-        StarSystem: system,
-        Conflicts: [
-          {
-            WarType: "war",
-            Faction1: { Name: FACTION, Stake: "Our Station", WonDays: wonDays1 },
+  client`INSERT INTO event (id, event, timestamp, tickid, ticktime, raw_json)
+          VALUES (${crypto.randomUUID()}, 'FSDJump', ${new Date().toISOString()}, ${tickId}, ${tickId}, ${JSON.stringify({
+            event: "FSDJump",
+            StarSystem: system,
+            Conflicts: [
+              {
+                WarType: "war",
+                Faction1: { Name: FACTION, Stake: "Our Station", WonDays: wonDays1 },
             Faction2: { Name: RIVAL, Stake: "Their Outpost", WonDays: wonDays2 },
           },
         ],
-      }),
-    ],
-  })
+      })})`
 
 const insertPrevState = (
-  client: ReturnType<typeof createClient>,
+  client: SQL,
   system: string,
   wonDays1: number,
   wonDays2: number
 ) =>
-  client.execute({
-    sql: `INSERT INTO conflict_state
+  client`INSERT INTO conflict_state
             (system, faction1, faction2, war_type, won_days1, won_days2, stake1, stake2, last_tick_id, updated_at)
-          VALUES (?, ?, ?, 'war', ?, ?, 'Our Station', 'Their Outpost', 'prev-tick', datetime('now'))`,
-    args: [system, FACTION, RIVAL, wonDays1, wonDays2],
-  })
+          VALUES (${system}, ${FACTION}, ${RIVAL}, 'war', ${wonDays1}, ${wonDays2}, 'Our Station', 'Their Outpost', 'prev-tick', datetime('now'))`
 
-const loadState = async (client: ReturnType<typeof createClient>, system: string) => {
-  const result = await client.execute({
-    sql: "SELECT * FROM conflict_state WHERE system = ?",
-    args: [system],
-  })
-  return result.rows[0] ?? null
+const loadState = async (client: SQL, system: string) => {
+  const result = await client`SELECT * FROM conflict_state WHERE system = ${system}`
+  return (result as any)[0] ?? null
 }
 
 // ---------------------------------------------------------------------------

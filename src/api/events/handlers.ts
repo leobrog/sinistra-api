@@ -3,7 +3,7 @@ import { HttpApiBuilder } from "@effect/platform"
 import { v4 as uuid } from "uuid"
 import { Api } from "../index.js"
 import { EventRepository } from "../../domain/repositories.js"
-import { TursoClient } from "../../database/client.js"
+import { PgClient } from "../../database/client.js"
 import { AppConfig } from "../../lib/config.js"
 import { runConflictDiff, parseConflictsFromEntries } from "../../schedulers/conflict-scheduler.js"
 import type { EventData } from "./dtos.js"
@@ -323,7 +323,7 @@ export const EventsApiLive = HttpApiBuilder.group(Api, "events", (handlers) =>
       )
 
       if (conflictEvents.length > 0) {
-        const client = yield* TursoClient
+        const client = yield* PgClient
         const config = yield* AppConfig
         const webhookUrl = Option.getOrNull(config.discord.webhooks.conflict)
 
@@ -331,8 +331,8 @@ export const EventsApiLive = HttpApiBuilder.group(Api, "events", (handlers) =>
           Effect.gen(function* () {
             const factionNames = yield* Effect.tryPromise({
               try: async () => {
-                const result = await client.execute("SELECT name FROM protected_faction")
-                return new Set(result.rows.map((r) => String(r.name)))
+                const result = await client`SELECT name FROM protected_faction`
+                return new Set((result as any[]).map((r) => String(r.name)))
               },
               catch: (e) => new Error(`${e}`),
             })

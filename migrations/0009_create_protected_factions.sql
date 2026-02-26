@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS protected_faction (
   name TEXT NOT NULL UNIQUE,
   webhook_url TEXT,
   description TEXT,
-  protected INTEGER NOT NULL DEFAULT 1  -- Boolean: 0 = false, 1 = true
+  protected BOOLEAN NOT NULL DEFAULT TRUE
 );
 
 CREATE INDEX IF NOT EXISTS idx_protected_faction_name ON protected_faction(name);

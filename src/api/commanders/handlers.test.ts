@@ -1,7 +1,8 @@
+import { SQL } from 'bun'
 import { describe, it, expect } from "bun:test"
 import { Effect, Layer, Option } from "effect"
-import { createClient } from "@libsql/client"
-import { TursoClient } from "../../database/client.js"
+
+import { PgClient } from "../../database/client.js"
 import { EventRepository, CmdrRepository } from "../../domain/repositories.js"
 import { EventRepositoryLive } from "../../database/repositories/EventRepository.js"
 import { CmdrRepositoryLive } from "../../database/repositories/CmdrRepository.js"
@@ -74,16 +75,13 @@ describe("CommandersApi", () => {
 
   // Helper to create a fresh test database for each test
   const ClientLayer = Layer.effect(
-    TursoClient,
+    PgClient,
     Effect.gen(function* () {
-      const client = createClient({
-        url: "file::memory:",
-        intMode: "bigint",
-      })
+      const client = new SQL('postgres://postgres:password@localhost:5432/sinistra')
 
       // Initialize schema for cmdr table
       yield* Effect.tryPromise(() =>
-        client.executeMultiple(`
+        client(`
           CREATE TABLE IF NOT EXISTS cmdr (
             id TEXT PRIMARY KEY,
             name TEXT NOT NULL UNIQUE,

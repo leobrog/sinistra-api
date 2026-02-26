@@ -1,26 +1,26 @@
 import { Effect } from "effect"
-import { TursoClient, TursoClientLive } from "./client.ts"
+import { PgClient, PgClientLive } from "./client.ts"
 import * as fs from "node:fs/promises"
 import * as path from "node:path"
 
 const runMigrations = Effect.gen(function* () {
-  const client = yield* TursoClient
+  const client = yield* PgClient
   console.log("🚀 Starting database migrations...")
 
   // 1. Create the migrations tracking table
   yield* Effect.tryPromise(() =>
-    client.execute(`
+    client`
       CREATE TABLE IF NOT EXISTS _migrations (
         id INTEGER PRIMARY KEY,
         name TEXT NOT NULL,
         applied_at INTEGER NOT NULL
       );
-    `)
+    `
   )
 
   // 2. Get list of applied migrations
   const existingMigrationsResult = yield* Effect.tryPromise(() =>
-    client.execute("SELECT name FROM _migrations")
+    client`SELECT name FROM _migrations`
   )
   const appliedMigrationNames = new Set(
     existingMigrationsResult.rows.map((row) => row.name as string)
@@ -54,15 +54,12 @@ const runMigrations = Effect.gen(function* () {
         .filter((s) => s.length > 0);
 
     for (const statement of statements) {
-        yield* Effect.tryPromise(() => client.execute(statement))
+        yield* Effect.tryPromise(() => client(statement))
     }
 
     // Record the migration
     yield* Effect.tryPromise(() =>
-      client.execute({
-        sql: "INSERT INTO _migrations (name, applied_at) VALUES (?, ?)",
-        args: [file, Date.now()],
-      })
+      client`INSERT INTO _migrations (name, applied_at) VALUES (${file}, ${Date.now()})`
     )
     console.log(`✅ Applied: ${file}`)
   }
@@ -72,7 +69,7 @@ const runMigrations = Effect.gen(function* () {
 
 // Run the effect
 const program = runMigrations.pipe(
-  Effect.provide(TursoClientLive),
+  Effect.provide(PgClientLive),
   Effect.catchAll((error) => {
     console.error("❌ Migration failed:", error)
     return Effect.fail(error)

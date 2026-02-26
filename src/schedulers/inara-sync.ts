@@ -6,16 +6,16 @@
  * by sleeping 60 seconds between each request. Aborts the batch if
  * rate-limited (same behaviour as cmdr_sync_inara.py).
  *
- * Uses TursoClient directly rather than CmdrRepository to keep
+ * Uses PgClient directly rather than CmdrRepository to keep
  * consistent with the other schedulers and avoid the full domain stack.
  *
  * Based on VALKFlaskServer/cmdr_sync_inara.py
  */
 
 import { Effect, Duration } from "effect"
-import type { Client, InStatement } from "@libsql/client"
+import { SQL } from 'bun'
 import { AppConfig } from "../lib/config.js"
-import { TursoClient } from "../database/client.js"
+import { PgClient } from "../database/client.js"
 import { fetchCmdrProfile, profileToDbValues, InaraRateLimitError } from "../services/inara.js"
 
 // ---------------------------------------------------------------------------
@@ -37,7 +37,7 @@ const msUntilUtcTime = (hour: number, minute = 0): number => {
 const buildUpdateStatement = (
   cmdrId: string,
   vals: ReturnType<typeof profileToDbValues>
-): InStatement => ({
+): any => ({
   sql: `UPDATE cmdr
         SET rank_combat = ?, rank_trade = ?, rank_explore = ?, rank_cqc = ?,
             rank_empire = ?, rank_federation = ?, rank_power = ?,
@@ -59,13 +59,13 @@ const buildUpdateStatement = (
 })
 
 const flushUpdates = (
-  client: Client,
-  statements: InStatement[]
+  client: SQL,
+  statements: any[]
 ): Effect.Effect<void, Error> =>
   statements.length === 0
     ? Effect.void
     : Effect.tryPromise({
-        try: () => client.batch(statements, "write"),
+        try: () => Promise.all(statements.map(stmt => client(stmt.sql as any, stmt.args))),
         catch: (e) => new Error(`Batch DB update failed: ${e}`),
       }).pipe(Effect.asVoid)
 
@@ -73,10 +73,10 @@ const flushUpdates = (
 // Main fiber
 // ---------------------------------------------------------------------------
 
-export const runInaraSync: Effect.Effect<never, never, AppConfig | TursoClient> = Effect.gen(
+export const runInaraSync: Effect.Effect<never, never, AppConfig | PgClient> = Effect.gen(
   function* () {
     const config = yield* AppConfig
-    const client = yield* TursoClient
+    const client = yield* PgClient
 
     yield* Effect.logInfo("Inara sync scheduler started")
 
@@ -89,7 +89,7 @@ export const runInaraSync: Effect.Effect<never, never, AppConfig | TursoClient> 
 
       // Fetch all CMDRs
       const cmdrResult = yield* Effect.tryPromise({
-        try: () => client.execute("SELECT id, name FROM cmdr ORDER BY name"),
+        try: () => client`SELECT id, name FROM cmdr ORDER BY name`,
         catch: (e) => new Error(`Failed to fetch CMDRs: ${e}`),
       }).pipe(
         Effect.catchAll((e) =>
@@ -104,7 +104,7 @@ export const runInaraSync: Effect.Effect<never, never, AppConfig | TursoClient> 
 
       let skipped = 0
       let rateLimited = false
-      const pendingUpdates: InStatement[] = []
+      const pendingUpdates: any[] = []
       const syncedNames: string[] = []
 
       for (const row of cmdrs) {
@@ -156,4 +156,4 @@ export const runInaraSync: Effect.Effect<never, never, AppConfig | TursoClient> 
   }
 ).pipe(
   Effect.catchAll((e) => Effect.logError(`Inara sync fatal: ${e}`))
-) as Effect.Effect<never, never, AppConfig | TursoClient>
+) as Effect.Effect<never, never, AppConfig | PgClient>

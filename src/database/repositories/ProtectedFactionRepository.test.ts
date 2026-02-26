@@ -1,34 +1,19 @@
+import { SQL } from 'bun'
 import { describe, it, expect } from "bun:test"
 import { Effect, Layer, Option } from "effect"
 import { ProtectedFactionRepository } from "../../domain/repositories.ts"
 import { ProtectedFactionRepositoryLive } from "./ProtectedFactionRepository.ts"
-import { TursoClient } from "../client.ts"
-import { createClient } from "@libsql/client"
+import { PgClient } from "../client.ts"
+
 import { ProtectedFactionId } from "../../domain/ids.ts"
 import { ProtectedFaction } from "../../domain/models.ts"
 
 // Helper to provide a fresh Test Layer for each test
 const ClientLayer = Layer.effect(
-  TursoClient,
+  PgClient,
   Effect.gen(function* () {
-    const client = createClient({
-      url: "file::memory:",
-    })
-
-    // Initialize Schema
-    yield* Effect.tryPromise(() =>
-      client.executeMultiple(`
-        CREATE TABLE IF NOT EXISTS protected_faction (
-          id TEXT PRIMARY KEY,
-          name TEXT NOT NULL UNIQUE,
-          webhook_url TEXT,
-          description TEXT,
-          protected INTEGER NOT NULL DEFAULT 1
-        );
-      `)
-    )
-
-    return client
+    const client = new SQL("postgres://postgres:password@localhost:5432/sinistra");
+    return PgClient.of(client);
   })
 )
 
@@ -116,7 +101,7 @@ describe("ProtectedFactionRepository", () => {
         yield* repo.create(faction2)
 
         const result = yield* repo.findAll()
-        expect(result.length).toBeGreaterThanOrEqual(2)
+        expect((result as any).length).toBeGreaterThanOrEqual(2)
         const names = result.map(f => f.name)
         expect(names).toContain("Alpha Faction")
         expect(names).toContain("Beta Faction")

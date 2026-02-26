@@ -1,9 +1,10 @@
+import { SQL } from 'bun'
 import { describe, it, expect } from "bun:test"
 import { Effect, Layer, Option } from "effect"
 import { EddnRepository } from "../../domain/repositories.ts"
 import { EddnRepositoryLive } from "./EddnRepository.ts"
-import { TursoClient } from "../client.ts"
-import { createClient } from "@libsql/client"
+import { PgClient } from "../client.ts"
+
 import {
     EddnMessageId,
     EddnSystemInfoId,
@@ -14,86 +15,10 @@ import {
 
 // Helper to provide a fresh Test Layer for each test
 const ClientLayer = Layer.effect(
-  TursoClient,
+  PgClient,
   Effect.gen(function* () {
-    const client = createClient({
-      url: "file::memory:",
-    })
-
-    // Initialize Schema - All EDDN tables
-    yield* Effect.tryPromise(() =>
-      client.executeMultiple(`
-        CREATE TABLE IF NOT EXISTS eddn_message (
-          id TEXT PRIMARY KEY,
-          schema_ref TEXT NOT NULL,
-          header_gateway_timestamp TEXT,
-          message_type TEXT,
-          message_json TEXT NOT NULL,
-          timestamp TEXT NOT NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS eddn_system_info (
-          id TEXT PRIMARY KEY,
-          eddn_message_id TEXT,
-          system_name TEXT NOT NULL,
-          controlling_faction TEXT,
-          controlling_power TEXT,
-          population INTEGER,
-          security TEXT,
-          government TEXT,
-          allegiance TEXT,
-          updated_at TEXT NOT NULL,
-          FOREIGN KEY (eddn_message_id) REFERENCES eddn_message(id) ON DELETE SET NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS eddn_faction (
-          id TEXT PRIMARY KEY,
-          eddn_message_id TEXT,
-          system_name TEXT NOT NULL,
-          name TEXT NOT NULL,
-          influence REAL,
-          state TEXT,
-          allegiance TEXT,
-          government TEXT,
-          recovering_states TEXT,
-          active_states TEXT,
-          pending_states TEXT,
-          updated_at TEXT NOT NULL,
-          FOREIGN KEY (eddn_message_id) REFERENCES eddn_message(id) ON DELETE SET NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS eddn_conflict (
-          id TEXT PRIMARY KEY,
-          eddn_message_id TEXT,
-          system_name TEXT NOT NULL,
-          faction1 TEXT,
-          faction2 TEXT,
-          stake1 TEXT,
-          stake2 TEXT,
-          won_days1 INTEGER,
-          won_days2 INTEGER,
-          status TEXT,
-          war_type TEXT,
-          updated_at TEXT NOT NULL,
-          FOREIGN KEY (eddn_message_id) REFERENCES eddn_message(id) ON DELETE SET NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS eddn_powerplay (
-          id TEXT PRIMARY KEY,
-          eddn_message_id TEXT,
-          system_name TEXT NOT NULL,
-          power TEXT,
-          powerplay_state TEXT,
-          control_progress INTEGER,
-          reinforcement INTEGER,
-          undermining INTEGER,
-          updated_at TEXT NOT NULL,
-          FOREIGN KEY (eddn_message_id) REFERENCES eddn_message(id) ON DELETE SET NULL
-        );
-      `)
-    )
-
-    return client
+    const client = new SQL("postgres://postgres:password@localhost:5432/sinistra");
+    return PgClient.of(client);
   })
 )
 
@@ -234,7 +159,7 @@ describe("EddnRepository", () => {
         yield* repo.upsertFaction(faction2)
 
         const result = yield* repo.findFactionsInSystem("LHS 3447")
-        expect(result.length).toBe(2)
+        expect((result as any).length).toBe(2)
         const names = result.map(f => f.name)
         expect(names).toContain("Faction A")
         expect(names).toContain("Faction B")
@@ -272,9 +197,9 @@ describe("EddnRepository", () => {
         yield* repo.upsertConflict(conflict)
 
         const result = yield* repo.findConflictsInSystem("Conflict System")
-        expect(result.length).toBe(1)
-        expect(Option.getOrNull(result[0]!.faction1)).toBe("Red Faction")
-        expect(Option.getOrNull(result[0]!.wonDays1)).toBe(2)
+        expect((result as any).length).toBe(1)
+        expect(Option.getOrNull((result as any)[0]!.faction1)).toBe("Red Faction")
+        expect(Option.getOrNull((result as any)[0]!.wonDays1)).toBe(2)
       })
     )
   })
@@ -339,7 +264,7 @@ describe("EddnRepository", () => {
       Effect.gen(function* () {
         const repo = yield* EddnRepository
         const result = yield* repo.findFactionsInSystem("Empty System")
-        expect(result.length).toBe(0)
+        expect((result as any).length).toBe(0)
       })
     )
   })

@@ -1,7 +1,8 @@
+import { SQL } from 'bun'
 import { describe, it, expect } from "bun:test"
 import { Effect, Layer, Option } from "effect"
-import { createClient } from "@libsql/client"
-import { TursoClient } from "../../database/client.js"
+
+import { PgClient } from "../../database/client.js"
 import { FlaskUserRepository } from "../../domain/repositories.js"
 import { FlaskUserRepositoryLive } from "../../database/repositories/FlaskUserRepository.js"
 import { CmdrRepository } from "../../domain/repositories.js"
@@ -13,60 +14,10 @@ import { UserId, HashedPassword, CmdrId, EventId } from "../../domain/ids.js"
 import { v4 as uuid } from "uuid"
 
 const ClientLayer = Layer.effect(
-  TursoClient,
+  PgClient,
   Effect.gen(function* () {
-    const client = createClient({ url: "file::memory:" })
-
-    yield* Effect.tryPromise(() =>
-      client.executeMultiple(`
-        CREATE TABLE IF NOT EXISTS flask_users (
-          id TEXT PRIMARY KEY,
-          username TEXT NOT NULL UNIQUE,
-          password_hash TEXT NOT NULL,
-          discord_id TEXT UNIQUE,
-          discord_username TEXT,
-          is_admin INTEGER NOT NULL DEFAULT 0,
-          active INTEGER NOT NULL DEFAULT 1,
-          cmdr_id TEXT,
-          created_at TEXT NOT NULL,
-          updated_at TEXT NOT NULL
-        );
-
-        CREATE INDEX IF NOT EXISTS idx_flask_users_username ON flask_users(username);
-        CREATE INDEX IF NOT EXISTS idx_flask_users_discord_id ON flask_users(discord_id);
-
-        CREATE TABLE IF NOT EXISTS cmdr (
-          id TEXT PRIMARY KEY,
-          name TEXT NOT NULL UNIQUE,
-          rank_combat TEXT,
-          rank_trade TEXT,
-          rank_explore TEXT,
-          rank_cqc TEXT,
-          rank_empire TEXT,
-          rank_federation TEXT,
-          rank_power TEXT,
-          credits INTEGER,
-          assets INTEGER,
-          inara_url TEXT,
-          squadron_name TEXT,
-          squadron_rank TEXT
-        );
-
-        CREATE TABLE IF NOT EXISTS event (
-          id TEXT PRIMARY KEY,
-          event TEXT NOT NULL,
-          timestamp TEXT NOT NULL,
-          tickid TEXT NOT NULL,
-          ticktime TEXT NOT NULL,
-          cmdr TEXT,
-          starsystem TEXT,
-          systemaddress INTEGER,
-          raw_json TEXT
-        );
-      `)
-    )
-
-    return client
+    const client = new SQL("postgres://postgres:password@localhost:5432/sinistra");
+    return PgClient.of(client);
   })
 )
 
@@ -237,7 +188,7 @@ describe("cmdr_system - uses cmdrId to find location", () => {
         const flaskUserRepo = yield* FlaskUserRepository
         const cmdrRepo = yield* CmdrRepository
         const eventRepo = yield* EventRepository
-        const client = yield* TursoClient
+        const client = yield* PgClient
 
         // Create a cmdr
         const cmdrId = uuid() as CmdrId
@@ -310,15 +261,12 @@ describe("cmdr_system - uses cmdrId to find location", () => {
 
         // Query last event starsystem
         const result = yield* Effect.tryPromise({
-          try: () => client.execute({
-            sql: "SELECT starsystem, timestamp FROM event WHERE cmdr = ? AND starsystem IS NOT NULL ORDER BY timestamp DESC LIMIT 1",
-            args: [cmdrName],
-          }),
+          try: () => client`SELECT starsystem, timestamp FROM event WHERE cmdr = ${cmdrName} AND starsystem IS NOT NULL ORDER BY timestamp DESC LIMIT 1`,
           catch: (e) => e,
         })
 
-        expect(result.rows.length).toBe(1)
-        const row = result.rows[0]
+        expect((result as any).length).toBe(1)
+        const row = (result as any)[0]
         expect(row).toBeDefined()
         if (row) {
           expect(row["starsystem"]).toBe("Colonia")

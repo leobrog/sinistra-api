@@ -1,32 +1,18 @@
+import { SQL } from 'bun'
 import { describe, it, expect } from "bun:test"
 import { Effect, Layer, Option } from "effect"
 import { TickRepository } from "../../domain/repositories.ts"
 import { TickRepositoryLive } from "./TickRepository.ts"
-import { TursoClient } from "../client.ts"
-import { createClient } from "@libsql/client"
+import { PgClient } from "../client.ts"
+
 import { TickId } from "../../domain/ids.ts"
 
 // Helper to provide a fresh Test Layer for each test
 const ClientLayer = Layer.effect(
-  TursoClient,
+  PgClient,
   Effect.gen(function* () {
-    const client = createClient({
-      url: "file::memory:",
-    })
-
-    // Initialize Schema
-    yield* Effect.tryPromise(() =>
-      client.executeMultiple(`
-        CREATE TABLE IF NOT EXISTS tick_state (
-          id TEXT PRIMARY KEY,
-          tickid TEXT NOT NULL UNIQUE,
-          ticktime TEXT NOT NULL,
-          last_updated TEXT NOT NULL
-        );
-      `)
-    )
-
-    return client
+    const client = new SQL("postgres://postgres:password@localhost:5432/sinistra");
+    return PgClient.of(client);
   })
 )
 

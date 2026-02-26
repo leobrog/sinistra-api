@@ -1,5 +1,5 @@
 import { Effect, Layer, Option, Schema } from "effect";
-import { TursoClient } from "../client.ts";
+import { PgClient } from "../client.ts";
 import { ColonyRepository } from "../../domain/repositories.ts";
 import { Colony } from "../../domain/models.ts";
 import { DatabaseError, ColonyNotFoundError } from "../../domain/errors.ts";
@@ -8,22 +8,13 @@ import { mapRowToColony } from "../../lib/utils.ts";
 export const ColonyRepositoryLive = Layer.effect(
     ColonyRepository,
     Effect.gen(function* () {
-        const client = yield* TursoClient
+        const client = yield* PgClient
         const decodeColony = Schema.decodeUnknown(Colony)
 
         return ColonyRepository.of({
             create: (colony) => Effect.tryPromise({
-                try: () => client.execute({
-                    sql: `INSERT INTO colony (id, cmdr, starsystem, ravenurl, priority)
-                          VALUES (?, ?, ?, ?, ?)`,
-                    args: [
-                        colony.id,
-                        Option.getOrNull(colony.cmdr),
-                        Option.getOrNull(colony.starsystem),
-                        Option.getOrNull(colony.ravenurl),
-                        colony.priority,
-                    ],
-                }),
+                try: () => client`INSERT INTO colony (id, cmdr, starsystem, ravenurl, priority)
+                          VALUES (${colony.id}, ${Option.getOrNull(colony.cmdr)}, ${Option.getOrNull(colony.starsystem)}, ${Option.getOrNull(colony.ravenurl)}, ${colony.priority})`,
                 catch: (error: any) => new DatabaseError({
                     operation: 'create.colony', error
                 })
@@ -31,16 +22,13 @@ export const ColonyRepositoryLive = Layer.effect(
 
             findById: (id) => Effect.gen(function* () {
                 const result = yield* Effect.tryPromise({
-                    try: () => client.execute({
-                        sql: "SELECT * FROM colony WHERE id = ?",
-                        args: [id]
-                    }),
+                    try: () => client`SELECT * FROM colony WHERE id = ${id}`,
                     catch: (error) => new DatabaseError({
                         operation: 'findById.colony', error
                     })
                 })
 
-                const row = result.rows[0]
+                const row = (result as any)[0]
                 if (!row) return Option.none()
 
                 const colony = yield* decodeColony(mapRowToColony(row)).pipe(
@@ -54,13 +42,13 @@ export const ColonyRepositoryLive = Layer.effect(
 
             findAll: () => Effect.gen(function* () {
                 const result = yield* Effect.tryPromise({
-                    try: () => client.execute("SELECT * FROM colony ORDER BY priority DESC, cmdr"),
+                    try: () => client`SELECT * FROM colony ORDER BY priority DESC, cmdr`,
                     catch: (error) => new DatabaseError({
                         operation: 'findAll.colony', error
                     })
                 })
 
-                const rawColonies = result.rows.map(mapRowToColony)
+                const rawColonies = result.map(mapRowToColony)
 
                 const colonies = yield* Effect.forEach(rawColonies, (raw) =>
                     decodeColony(raw).pipe(
@@ -75,16 +63,13 @@ export const ColonyRepositoryLive = Layer.effect(
 
             findByCmdr: (cmdr) => Effect.gen(function* () {
                 const result = yield* Effect.tryPromise({
-                    try: () => client.execute({
-                        sql: "SELECT * FROM colony WHERE cmdr = ? ORDER BY priority DESC",
-                        args: [cmdr]
-                    }),
+                    try: () => client`SELECT * FROM colony WHERE cmdr = ${cmdr} ORDER BY priority DESC`,
                     catch: (error) => new DatabaseError({
                         operation: 'findByCmdr.colony', error
                     })
                 })
 
-                const rawColonies = result.rows.map(mapRowToColony)
+                const rawColonies = result.map(mapRowToColony)
 
                 const colonies = yield* Effect.forEach(rawColonies, (raw) =>
                     decodeColony(raw).pipe(
@@ -99,16 +84,13 @@ export const ColonyRepositoryLive = Layer.effect(
 
             findBySystem: (system) => Effect.gen(function* () {
                 const result = yield* Effect.tryPromise({
-                    try: () => client.execute({
-                        sql: "SELECT * FROM colony WHERE starsystem = ? ORDER BY priority DESC",
-                        args: [system]
-                    }),
+                    try: () => client`SELECT * FROM colony WHERE starsystem = ${system} ORDER BY priority DESC`,
                     catch: (error) => new DatabaseError({
                         operation: 'findBySystem.colony', error
                     })
                 })
 
-                const rawColonies = result.rows.map(mapRowToColony)
+                const rawColonies = result.map(mapRowToColony)
 
                 const colonies = yield* Effect.forEach(rawColonies, (raw) =>
                     decodeColony(raw).pipe(
@@ -123,13 +105,13 @@ export const ColonyRepositoryLive = Layer.effect(
 
             findPriority: () => Effect.gen(function* () {
                 const result = yield* Effect.tryPromise({
-                    try: () => client.execute("SELECT * FROM colony WHERE priority > 0 ORDER BY priority DESC"),
+                    try: () => client`SELECT * FROM colony WHERE priority > 0 ORDER BY priority DESC`,
                     catch: (error) => new DatabaseError({
                         operation: 'findPriority.colony', error
                     })
                 })
 
-                const rawColonies = result.rows.map(mapRowToColony)
+                const rawColonies = result.map(mapRowToColony)
 
                 const colonies = yield* Effect.forEach(rawColonies, (raw) =>
                     decodeColony(raw).pipe(
@@ -144,33 +126,21 @@ export const ColonyRepositoryLive = Layer.effect(
 
             update: (colony) => Effect.gen(function* () {
                 const result = yield* Effect.tryPromise({
-                    try: () => client.execute({
-                        sql: `UPDATE colony
-                              SET cmdr = ?, starsystem = ?, ravenurl = ?, priority = ?
-                              WHERE id = ?`,
-                        args: [
-                            Option.getOrNull(colony.cmdr),
-                            Option.getOrNull(colony.starsystem),
-                            Option.getOrNull(colony.ravenurl),
-                            colony.priority,
-                            colony.id
-                        ]
-                    }),
+                    try: () => client`UPDATE colony
+                              SET cmdr = ${Option.getOrNull(colony.cmdr)}, starsystem = ${Option.getOrNull(colony.starsystem)}, ravenurl = ${Option.getOrNull(colony.ravenurl)}, priority = ${colony.priority}
+                              WHERE id = ${colony.id}`,
                     catch: (error) => new DatabaseError({
                         operation: "update.colony", error
                     })
                 })
 
-                if(result.rowsAffected === 0) {
+                if((result as any).length === 0) {
                     return yield* Effect.fail(new ColonyNotFoundError({ id: colony.id }))
                 }
             }),
 
             delete: (id) => Effect.tryPromise({
-                try: () => client.execute({
-                    sql: "DELETE FROM colony WHERE id = ?",
-                    args: [id]
-                }),
+                try: () => client`DELETE FROM colony WHERE id = ${id}`,
                 catch: (error) => new DatabaseError({ operation: 'delete.colony', error })
             }).pipe(Effect.asVoid)
         })

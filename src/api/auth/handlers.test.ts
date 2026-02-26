@@ -1,7 +1,8 @@
+import { SQL } from 'bun'
 import { describe, it, expect } from "bun:test"
 import { Effect, Layer, Option } from "effect"
-import { createClient } from "@libsql/client"
-import { TursoClient } from "../../database/client.js"
+
+import { PgClient } from "../../database/client.js"
 import { FlaskUserRepository } from "../../domain/repositories.js"
 import { FlaskUserRepositoryLive } from "../../database/repositories/FlaskUserRepository.js"
 import { AppConfig } from "../../lib/config.js"
@@ -62,12 +63,12 @@ describe("Auth API Integration", () => {
   }
 
   const ClientLayer = Layer.effect(
-    TursoClient,
+    PgClient,
     Effect.gen(function* () {
-      const client = createClient({ url: "file::memory:" })
+      const client = new SQL('postgres://postgres:password@localhost:5432/sinistra')
 
       yield* Effect.tryPromise(() =>
-        client.executeMultiple(`
+        client(`
           CREATE TABLE IF NOT EXISTS flask_users (
             id TEXT PRIMARY KEY,
             username TEXT NOT NULL UNIQUE,

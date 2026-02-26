@@ -11,8 +11,8 @@ CREATE TABLE IF NOT EXISTS cmdr (
   rank_empire TEXT,
   rank_federation TEXT,
   rank_power TEXT,
-  credits INTEGER,  -- SQLite doesn't have BIGINT, but can store large integers
-  assets INTEGER,
+  credits BIGINT,
+  assets BIGINT,
   inara_url TEXT,
   squadron_name TEXT,
   squadron_rank TEXT

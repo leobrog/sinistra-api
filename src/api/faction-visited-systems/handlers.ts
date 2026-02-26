@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import { HttpApiBuilder } from "@effect/platform"
 import { Api } from "../index.js"
-import { TursoClient } from "../../database/client.js"
+import { PgClient } from "../../database/client.js"
 import { DatabaseError } from "../../domain/errors.js"
 
 interface RawFaction {
@@ -29,12 +29,11 @@ export const FactionVisitedSystemsApiLive = HttpApiBuilder.group(
   (handlers) =>
     handlers.handle("getFactionVisitedSystems", () =>
       Effect.gen(function* () {
-        const client = yield* TursoClient
+        const client = yield* PgClient
 
         const result = yield* Effect.tryPromise({
           try: () =>
-            client.execute({
-              sql: `
+            client`
                 WITH latest AS (
                   SELECT starsystem, MAX(timestamp) AS max_ts
                   FROM event
@@ -50,8 +49,6 @@ export const FactionVisitedSystemsApiLive = HttpApiBuilder.group(
                 WHERE e.event = 'FSDJump'
                   AND e.raw_json IS NOT NULL
               `,
-              args: [],
-            }),
           catch: (error) => new DatabaseError({ operation: "getFactionVisitedSystems.query", error }),
         })
 
@@ -72,7 +69,7 @@ export const FactionVisitedSystemsApiLive = HttpApiBuilder.group(
           }[]
         }[] = []
 
-        for (const row of result.rows) {
+        for (const row of result as any[]) {
           const rawStr = row["raw_json"] as string | null
           if (!rawStr) continue
 

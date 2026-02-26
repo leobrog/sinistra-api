@@ -1,3 +1,4 @@
+import { SQL } from 'bun'
 /**
  * Date filter service - Port of Flask's _date_filters.py
  *
@@ -6,7 +7,7 @@
  */
 
 import { Effect, Schema } from "effect"
-import type { Client } from "@libsql/client"
+
 
 /**
  * Schema for valid date filter period strings
@@ -178,10 +179,10 @@ const buildDateBasedFilter = (period: string): DateFilter | null => {
 /**
  * Get current tick ID from database
  */
-const getCurrentTickId = (db: Client) =>
+const getCurrentTickId = (db: SQL) =>
   Effect.tryPromise({
     try: async () => {
-      const result = await db.execute(
+      const result = await db(
         "SELECT tickid FROM event WHERE tickid IS NOT NULL ORDER BY timestamp DESC LIMIT 1"
       )
       return result.rows[0]?.tickid as string | undefined
@@ -192,10 +193,10 @@ const getCurrentTickId = (db: Client) =>
 /**
  * Get last tick ID (second most recent) from database
  */
-const getLastTickId = (db: Client) =>
+const getLastTickId = (db: SQL) =>
   Effect.tryPromise({
     try: async () => {
-      const result = await db.execute(
+      const result = await db(
         "SELECT DISTINCT tickid FROM event WHERE tickid IS NOT NULL ORDER BY timestamp DESC LIMIT 2"
       )
       const rows = result.rows
@@ -212,7 +213,7 @@ const getLastTickId = (db: Client) =>
  */
 const buildTickBasedFilter = (
   period: string,
-  db: Client
+  db: SQL
 ): Effect.Effect<DateFilter, Error> => {
   if (period === "ct") {
     // Current tick
@@ -273,7 +274,7 @@ const buildTickBasedFilter = (
  */
 export const buildDateFilter = (
   period: string,
-  db?: Client
+  db?: SQL
 ): Effect.Effect<DateFilter, Error> => {
   // Handle "all" period (no filter)
   if (period === "all") {

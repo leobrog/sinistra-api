@@ -1,49 +1,18 @@
+import { SQL } from 'bun'
 import { describe, it, expect } from "bun:test"
 import { Effect, Layer, Option } from "effect"
 import { ApiKeyRepository } from "../../domain/repositories.ts"
 import { ApiKeyRepositoryLive } from "./ApiKeyRepository.ts"
-import { TursoClient } from "../client.ts"
-import { createClient } from "@libsql/client"
+import { PgClient } from "../client.ts"
+
 import { UserId, ApiKeyId, ApiKey } from "../../domain/ids.ts"
 
 // Helper to provide a fresh Test Layer for each test
 const ClientLayer = Layer.effect(
-  TursoClient,
+  PgClient,
   Effect.gen(function* () {
-    const client = createClient({
-      url: "file::memory:",
-    })
-
-    // Initialize Schema
-    yield* Effect.tryPromise(() =>
-      client.executeMultiple(`
-        CREATE TABLE users (
-          id TEXT PRIMARY KEY,
-          email TEXT NOT NULL UNIQUE,
-          name TEXT NOT NULL,
-          password TEXT NOT NULL,
-          company TEXT,
-          plan_tier TEXT NOT NULL DEFAULT 'free',
-          created_at INTEGER NOT NULL,
-          updated_at INTEGER NOT NULL
-        );
-
-        CREATE TABLE api_keys (
-            id TEXT PRIMARY KEY,
-            user_id TEXT NOT NULL,
-            key TEXT NOT NULL UNIQUE,
-            name TEXT NOT NULL,
-            last_used_at INTEGER,
-            expires_at INTEGER,
-            created_at INTEGER NOT NULL,
-            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-        );
-
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_api_keys_user_id_name ON api_keys(user_id, name);
-      `)
-    )
-
-    return client
+    const client = new SQL("postgres://postgres:password@localhost:5432/sinistra");
+    return PgClient.of(client);
   })
 )
 
@@ -53,7 +22,7 @@ const TestLayer = Layer.mergeAll(
 )
 
 describe("ApiKeyRepository", () => {
-  const runTest = <E>(effect: Effect.Effect<any, E, ApiKeyRepository | TursoClient>) =>
+  const runTest = <E>(effect: Effect.Effect<any, E, ApiKeyRepository | PgClient>) =>
     Effect.runPromise(Effect.provide(effect, TestLayer))
 
   it("should create and list api keys by user", async () => {
@@ -70,12 +39,9 @@ describe("ApiKeyRepository", () => {
 
     await runTest(
       Effect.gen(function* () {
-        const client = yield* TursoClient
+        const client = yield* PgClient
         // Create user first
-        yield* Effect.tryPromise(() => client.execute({
-            sql: "INSERT INTO users (id, email, name, password, company, plan_tier, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            args: ["user_123", "test@test.com", "Test", "pass", null, "free", Date.now(), Date.now()]
-        }))
+        yield* Effect.tryPromise(() => client`INSERT INTO users (id, email, name, password, company, plan_tier, created_at, updated_at) VALUES (${"user_123"}, ${"test@test.com"}, ${"Test"}, ${"pass"}, ${null}, ${"free"}, ${Date.now()}, ${Date.now()})`)
 
         const repo = yield* ApiKeyRepository
         
@@ -105,12 +71,9 @@ describe("ApiKeyRepository", () => {
 
     await runTest(
       Effect.gen(function* () {
-        const client = yield* TursoClient
+        const client = yield* PgClient
         
-        yield* Effect.tryPromise(() => client.execute({
-            sql: "INSERT INTO users (id, email, name, password, company, plan_tier, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            args: ["user_123", "test2@test.com", "Test2", "pass", null, "free", Date.now(), Date.now()]
-        }))
+        yield* Effect.tryPromise(() => client`INSERT INTO users (id, email, name, password, company, plan_tier, created_at, updated_at) VALUES (${"user_123"}, ${"test2@test.com"}, ${"Test2"}, ${"pass"}, ${null}, ${"free"}, ${Date.now()}, ${Date.now()})`)
 
         const repo = yield* ApiKeyRepository
         yield* repo.create(apiKey)
@@ -152,11 +115,8 @@ describe("ApiKeyRepository", () => {
 
     await runTest(
       Effect.gen(function* () {
-        const client = yield* TursoClient
-        yield* Effect.tryPromise(() => client.execute({
-            sql: "INSERT INTO users (id, email, name, password, company, plan_tier, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            args: ["user_duplicate_test", "dup@test.com", "Dup User", "pass", null, "free", Date.now(), Date.now()]
-        }))
+        const client = yield* PgClient
+        yield* Effect.tryPromise(() => client`INSERT INTO users (id, email, name, password, company, plan_tier, created_at, updated_at) VALUES (${"user_duplicate_test"}, ${"dup@test.com"}, ${"Dup User"}, ${"pass"}, ${null}, ${"free"}, ${Date.now()}, ${Date.now()})`)
 
         const repo = yield* ApiKeyRepository
         

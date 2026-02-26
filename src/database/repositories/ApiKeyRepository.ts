@@ -1,5 +1,5 @@
 import { Effect, Layer, Option, Schema } from "effect";
-import { TursoClient } from "../client.ts";
+import { PgClient } from "../client.ts";
 import { ApiKeyRepository } from "../../domain/repositories.ts";
 import { UserApiKey } from "../../domain/models.ts";
 import { DatabaseError, ApiKeyNameAlreadyExistsError } from "../../domain/errors.ts";
@@ -7,23 +7,12 @@ import { DatabaseError, ApiKeyNameAlreadyExistsError } from "../../domain/errors
 export const ApiKeyRepositoryLive = Layer.effect(
     ApiKeyRepository,
     Effect.gen(function* () {
-        const client = yield* TursoClient
+        const client = yield* PgClient
         const decodeApiKey = Schema.decodeUnknown(UserApiKey)
 
         return ApiKeyRepository.of({
             create: (apiKey) => Effect.tryPromise({
-                try: () => client.execute({
-                    sql: "INSERT INTO api_keys (id, user_id, key, name, last_used_at, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    args: [
-                        apiKey.id,
-                        apiKey.userId,
-                        apiKey.key,
-                        apiKey.name,
-                        Option.getOrNull(apiKey.lastUsedAt)?.getTime() ?? null,
-                        Option.getOrNull(apiKey.expiresAt)?.getTime() ?? null,
-                        apiKey.createdAt.getTime(),
-                    ],
-                }),
+                try: () => client`INSERT INTO api_keys (id, user_id, key, name, last_used_at, expires_at, created_at) VALUES (${apiKey.id}, ${apiKey.userId}, ${apiKey.key}, ${apiKey.name}, ${Option.getOrNull(apiKey.lastUsedAt)?.getTime() ?? null}, ${Option.getOrNull(apiKey.expiresAt)?.getTime() ?? null}, ${apiKey.createdAt.getTime()})`,
                 catch: (error: any) => {
                     if (error?.message?.includes("UNIQUE constraint failed: api_keys.user_id, api_keys.name")) {
                         return new ApiKeyNameAlreadyExistsError({ name: apiKey.name })
@@ -36,16 +25,13 @@ export const ApiKeyRepositoryLive = Layer.effect(
 
             find: (apiKey) => Effect.gen(function* () {
                 const result = yield* Effect.tryPromise({
-                    try: () => client.execute({
-                        sql: "SELECT * FROM api_keys WHERE key = ?",
-                        args: [apiKey]
-                    }),
+                    try: () => client`SELECT * FROM api_keys WHERE key = ${apiKey}`,
                     catch: (error) => new DatabaseError({
                         operation: 'find.apikey', error
                     })
                 })
 
-                const row = result.rows[0]
+                const row = (result as any)[0]
                 if (!row) return Option.none()
 
                 const foundApiKey = yield* decodeApiKey({
@@ -65,17 +51,14 @@ export const ApiKeyRepositoryLive = Layer.effect(
 
             findByUserId: (userId) => Effect.gen(function* () {
                 const result = yield* Effect.tryPromise({
-                    try: () => client.execute({
-                        sql: "SELECT * FROM api_keys WHERE user_id = ?",
-                        args: [userId]
-                    }),
+                    try: () => client`SELECT * FROM api_keys WHERE user_id = ${userId}`,
                     catch: (error) => new DatabaseError({
                         operation: 'findByUserId.apiKey', error
                     })
                 })
 
                 const apiKeys = []
-                for (const row of result.rows) {
+                for (const row of result as any[]) {
                     const apiKey = yield* decodeApiKey({
                         ...row,
                         userId: row.user_id,
@@ -94,10 +77,7 @@ export const ApiKeyRepositoryLive = Layer.effect(
             }),
 
             delete: (id) => Effect.tryPromise({
-                try: () => client.execute({
-                    sql: "DELETE FROM api_keys WHERE id = ?",
-                    args: [id]
-                }),
+                try: () => client`DELETE FROM api_keys WHERE id = ${id}`,
                 catch: (error) => new DatabaseError({ operation: 'delete.apiKey', error })
             }).pipe(Effect.asVoid)
         })

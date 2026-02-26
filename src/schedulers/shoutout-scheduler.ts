@@ -13,9 +13,9 @@
  */
 
 import { Effect, Duration, Option, PubSub, Queue } from "effect"
-import type { Client } from "@libsql/client"
+import { SQL } from 'bun'
 import { AppConfig } from "../lib/config.js"
-import { TursoClient } from "../database/client.js"
+import { PgClient } from "../database/client.js"
 import { TickBus } from "../services/TickBus.js"
 
 // ---------------------------------------------------------------------------
@@ -68,16 +68,13 @@ export const postEmbedsToDiscord = async (webhookUrl: string, embeds: DiscordEmb
 
 /** Fetch our faction's influence % and active states per system. */
 const getOurFactionBySystem = async (
-  client: Client,
+  client: SQL,
   factionName: string
 ): Promise<Map<string, { influence: number | null; states: string[] }>> => {
-  const result = await client.execute({
-    sql: "SELECT system_name, influence, active_states FROM eddn_faction WHERE name = ?",
-    args: [factionName],
-  })
+  const result = await client`SELECT system_name, influence, active_states FROM eddn_faction WHERE name = ${factionName}`
 
   const map = new Map<string, { influence: number | null; states: string[] }>()
-  for (const row of result.rows) {
+  for (const row of result as any[]) {
     const system = String(row.system_name)
     const influence = row.influence != null ? Number(row.influence) : null
     let states: string[] = []
@@ -128,41 +125,31 @@ const groupHeader = (label: string): string => `${DIVIDER}\n**${label}**`
 // ---------------------------------------------------------------------------
 
 export const buildTickSummary = async (
-  client: Client,
+  client: SQL,
   tickId: string,
   factionName: string
 ): Promise<DiscordEmbed[]> => {
   const [influenceRows, missionsRows, czRows, marketRows, eddnCtx] = await Promise.all([
-    client.execute({
-      sql: `SELECT e.starsystem, mci.faction_name, e.cmdr, SUM(LENGTH(mci.influence)) AS influence
+    client`SELECT e.starsystem, mci.faction_name, e.cmdr, SUM(LENGTH(mci.influence)) AS influence
             FROM mission_completed_influence mci
             JOIN mission_completed_event mce ON mce.id = mci.mission_id
             JOIN event e ON e.id = mce.event_id
-            WHERE e.starsystem IS NOT NULL AND e.tickid = ?
+            WHERE e.starsystem IS NOT NULL AND e.tickid = ${tickId}
             GROUP BY e.starsystem, mci.faction_name, e.cmdr
             ORDER BY influence DESC, e.starsystem LIMIT 5`,
-      args: [tickId],
-    }),
-    client.execute({
-      sql: `SELECT e.starsystem, mc.awarding_faction, e.cmdr, COUNT(*) AS missions_completed
+    client`SELECT e.starsystem, mc.awarding_faction, e.cmdr, COUNT(*) AS missions_completed
             FROM mission_completed_event mc
             JOIN event e ON e.id = mc.event_id
-            WHERE e.starsystem IS NOT NULL AND e.tickid = ?
+            WHERE e.starsystem IS NOT NULL AND e.tickid = ${tickId}
             GROUP BY e.starsystem, mc.awarding_faction, e.cmdr
             ORDER BY missions_completed DESC LIMIT 5`,
-      args: [tickId],
-    }),
-    client.execute({
-      sql: `SELECT scz.faction, e.starsystem, scz.cz_type, e.cmdr, COUNT(*) AS cz_count
+    client`SELECT scz.faction, e.starsystem, scz.cz_type, e.cmdr, COUNT(*) AS cz_count
             FROM synthetic_cz scz
             JOIN event e ON e.id = scz.event_id
-            WHERE e.starsystem IS NOT NULL AND e.tickid = ?
+            WHERE e.starsystem IS NOT NULL AND e.tickid = ${tickId}
             GROUP BY e.starsystem, scz.faction, scz.cz_type, e.cmdr
             ORDER BY cz_count DESC LIMIT 5`,
-      args: [tickId],
-    }),
-    client.execute({
-      sql: `SELECT e.starsystem, e.cmdr,
+    client`SELECT e.starsystem, e.cmdr,
                    SUM(COALESCE(mb.value, 0)) AS total_buy,
                    SUM(COALESCE(ms.value, 0)) AS total_sell,
                    SUM(COALESCE(mb.value, 0)) + SUM(COALESCE(ms.value, 0)) AS total_volume,
@@ -170,12 +157,10 @@ export const buildTickSummary = async (
             FROM event e
             LEFT JOIN market_buy_event mb ON mb.event_id = e.id
             LEFT JOIN market_sell_event ms ON ms.event_id = e.id
-            WHERE e.starsystem IS NOT NULL AND e.tickid = ?
+            WHERE e.starsystem IS NOT NULL AND e.tickid = ${tickId}
             GROUP BY e.starsystem, e.cmdr
             HAVING total_volume > 0
             ORDER BY quantity DESC LIMIT 5`,
-      args: [tickId],
-    }),
     getOurFactionBySystem(client, factionName),
   ])
 
@@ -229,22 +214,19 @@ export const buildTickSummary = async (
 // Job 2 — Space CZ summary (conflict webhook)
 // ---------------------------------------------------------------------------
 
-export const buildSpaceCzSummary = async (client: Client, tickId: string): Promise<DiscordEmbed[]> => {
-  const result = await client.execute({
-    sql: `SELECT e.starsystem AS system, scz.cz_type, e.cmdr, COUNT(*) AS cz_count
+export const buildSpaceCzSummary = async (client: SQL, tickId: string): Promise<DiscordEmbed[]> => {
+  const result = await client`SELECT e.starsystem AS system, scz.cz_type, e.cmdr, COUNT(*) AS cz_count
           FROM synthetic_cz scz
           JOIN event e ON e.id = scz.event_id
-          WHERE e.tickid = ?
+          WHERE e.tickid = ${tickId}
           GROUP BY e.starsystem, scz.cz_type, e.cmdr
-          ORDER BY e.starsystem, scz.cz_type, cz_count DESC`,
-    args: [tickId],
-  })
+          ORDER BY e.starsystem, scz.cz_type, cz_count DESC`
 
-  if (result.rows.length === 0) return []
+  if ((result as any).length === 0) return []
 
   // Group: system → type → cmdr list
   const bySystem = new Map<string, Map<string, Array<{ cmdr: string; count: number }>>>()
-  for (const r of result.rows) {
+  for (const r of result) {
     const system = String(r.system)
     const type = String(r.cz_type ?? "unknown")
     if (!bySystem.has(system)) bySystem.set(system, new Map())
@@ -269,22 +251,19 @@ export const buildSpaceCzSummary = async (client: Client, tickId: string): Promi
 // Job 3 — Ground CZ summary (shoutout webhook)
 // ---------------------------------------------------------------------------
 
-export const buildGroundCzSummary = async (client: Client, tickId: string): Promise<DiscordEmbed[]> => {
-  const result = await client.execute({
-    sql: `SELECT e.starsystem AS system, sgcz.settlement, sgcz.cz_type, e.cmdr, COUNT(*) AS cz_count
+export const buildGroundCzSummary = async (client: SQL, tickId: string): Promise<DiscordEmbed[]> => {
+  const result = await client`SELECT e.starsystem AS system, sgcz.settlement, sgcz.cz_type, e.cmdr, COUNT(*) AS cz_count
           FROM synthetic_ground_cz sgcz
           JOIN event e ON e.id = sgcz.event_id
-          WHERE e.tickid = ? AND sgcz.settlement IS NOT NULL
+          WHERE e.tickid = ${tickId} AND sgcz.settlement IS NOT NULL
           GROUP BY e.starsystem, sgcz.settlement, sgcz.cz_type, e.cmdr
-          ORDER BY e.starsystem, sgcz.settlement, sgcz.cz_type, cz_count DESC`,
-    args: [tickId],
-  })
+          ORDER BY e.starsystem, sgcz.settlement, sgcz.cz_type, cz_count DESC`
 
-  if (result.rows.length === 0) return []
+  if ((result as any).length === 0) return []
 
   // Group: "system — settlement" → type → cmdr list
   const bySysSettl = new Map<string, Map<string, Array<{ cmdr: string; count: number }>>>()
-  for (const r of result.rows) {
+  for (const r of result) {
     const key = `${r.system} — ${r.settlement}`
     const type = String(r.cz_type ?? "unknown")
     if (!bySysSettl.has(key)) bySysSettl.set(key, new Map())
@@ -312,10 +291,10 @@ export const buildGroundCzSummary = async (client: Client, tickId: string): Prom
 export const runShoutoutScheduler: Effect.Effect<
   never,
   never,
-  AppConfig | TursoClient | TickBus
+  AppConfig | PgClient | TickBus
 > = Effect.gen(function* () {
   const config = yield* AppConfig
-  const client = yield* TursoClient
+  const client = yield* PgClient
   const bus = yield* TickBus
   const factionName = config.faction.name
 
@@ -338,11 +317,8 @@ export const runShoutoutScheduler: Effect.Effect<
           // new tick's ISO timestamp — that is the completed tick's hash.
           const completedTickHash = yield* Effect.tryPromise({
             try: async () => {
-              const result = await client.execute({
-                sql: "SELECT DISTINCT tickid FROM event WHERE tickid IS NOT NULL AND timestamp < ? ORDER BY timestamp DESC LIMIT 1",
-                args: [currentTick],
-              })
-              return result.rows[0]?.tickid as string | undefined
+              const result = await client`SELECT DISTINCT tickid FROM event WHERE tickid IS NOT NULL AND timestamp < ${currentTick} ORDER BY timestamp DESC LIMIT 1`
+              return (result as any)[0]?.tickid as string | undefined
             },
             catch: (e) => new Error(`Tick hash lookup failed: ${e}`),
           }).pipe(Effect.catchAll((e) => Effect.logWarning(`${e}`).pipe(Effect.as(undefined))))
@@ -435,4 +411,4 @@ export const runShoutoutScheduler: Effect.Effect<
   )
 }).pipe(
   Effect.catchAll((e) => Effect.logError(`Shoutout scheduler fatal: ${e}`))
-) as Effect.Effect<never, never, AppConfig | TursoClient | TickBus>
+) as Effect.Effect<never, never, AppConfig | PgClient | TickBus>

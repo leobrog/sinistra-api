@@ -2,7 +2,7 @@ import { Effect } from "effect"
 import { HttpApiBuilder } from "@effect/platform"
 import { Api } from "../index.js"
 import type { CZSummaryQueryParams } from "./dtos.js"
-import { TursoClient } from "../../database/client.js"
+import { PgClient } from "../../database/client.js"
 import { DatabaseError } from "../../domain/errors.js"
 import { buildDateFilter, type DateFilter } from "../../services/date-filters.js"
 
@@ -25,9 +25,9 @@ const buildDateFilterParam = (
 const executeCZQuery = (
   params: CZSummaryQueryParams,
   type: "space" | "ground"
-): Effect.Effect<unknown[], DatabaseError, TursoClient> =>
+): Effect.Effect<unknown[], DatabaseError, PgClient> =>
   Effect.gen(function* () {
-    const client = yield* TursoClient
+    const client = yield* PgClient
 
     let dateFilter: DateFilter
     if (params.period) {
@@ -75,12 +75,12 @@ const executeCZQuery = (
         `
 
     const result = yield* Effect.tryPromise({
-      try: () => client.execute({ sql, args: filterArgs }),
+      try: () => client.unsafe(sql as any),
       catch: (error) =>
         new DatabaseError({ operation: `execute ${type}-cz-summary`, error }),
     })
 
-    return result.rows
+    return result
   }).pipe(
     Effect.catchAll((error) => {
       if (error instanceof Error && !(error instanceof DatabaseError)) {

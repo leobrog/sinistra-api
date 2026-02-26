@@ -1,34 +1,19 @@
+import { SQL } from 'bun'
 import { describe, it, expect } from "bun:test"
 import { Effect, Layer, Option } from "effect"
 import { ColonyRepository } from "../../domain/repositories.ts"
 import { ColonyRepositoryLive } from "./ColonyRepository.ts"
-import { TursoClient } from "../client.ts"
-import { createClient } from "@libsql/client"
+import { PgClient } from "../client.ts"
+
 import { ColonyId } from "../../domain/ids.ts"
 import { Colony } from "../../domain/models.ts"
 
 // Helper to provide a fresh Test Layer for each test
 const ClientLayer = Layer.effect(
-  TursoClient,
+  PgClient,
   Effect.gen(function* () {
-    const client = createClient({
-      url: "file::memory:",
-    })
-
-    // Initialize Schema
-    yield* Effect.tryPromise(() =>
-      client.executeMultiple(`
-        CREATE TABLE IF NOT EXISTS colony (
-          id TEXT PRIMARY KEY,
-          cmdr TEXT,
-          starsystem TEXT,
-          ravenurl TEXT,
-          priority INTEGER NOT NULL
-        );
-      `)
-    )
-
-    return client
+    const client = new SQL("postgres://postgres:password@localhost:5432/sinistra");
+    return PgClient.of(client);
   })
 )
 
@@ -93,7 +78,7 @@ describe("ColonyRepository", () => {
         yield* repo.create(colony2)
 
         const result: Colony[] = yield* repo.findAll()
-        expect(result.length).toBeGreaterThanOrEqual(2)
+        expect((result as any).length).toBeGreaterThanOrEqual(2)
         // Should be ordered by priority DESC
         const ids = result.map(c => c.id as string)
         expect(ids).toContain("colony_all_1")
@@ -135,7 +120,7 @@ describe("ColonyRepository", () => {
         yield* repo.create(colony3)
 
         const result: Colony[] = yield* repo.findByCmdr("CMDR Specific")
-        expect(result.length).toBe(2)
+        expect((result as any).length).toBe(2)
         const ids = result.map(c => c.id as string)
         expect(ids).toContain("colony_cmdr_1")
         expect(ids).toContain("colony_cmdr_2")
@@ -168,7 +153,7 @@ describe("ColonyRepository", () => {
         yield* repo.create(colony2)
 
         const result: Colony[] = yield* repo.findBySystem("Common System")
-        expect(result.length).toBe(2)
+        expect((result as any).length).toBe(2)
         const ids = result.map(c => c.id as string)
         expect(ids).toContain("colony_sys_1")
         expect(ids).toContain("colony_sys_2")

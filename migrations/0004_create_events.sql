@@ -9,8 +9,8 @@ CREATE TABLE IF NOT EXISTS event (
   ticktime TEXT NOT NULL,
   cmdr TEXT,
   starsystem TEXT,
-  systemaddress INTEGER,
-  raw_json TEXT
+  systemaddress BIGINT,
+  raw_json JSONB
 );
 
 CREATE INDEX IF NOT EXISTS idx_event_tickid ON event(tickid);
@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS market_buy_event (
   event_id TEXT NOT NULL,
   stock INTEGER,
   stock_bracket INTEGER,
-  value INTEGER,
+  value BIGINT,
   count INTEGER,
   FOREIGN KEY (event_id) REFERENCES event(id) ON DELETE CASCADE
 );
@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS market_sell_event (
   demand INTEGER,
   demand_bracket INTEGER,
   profit INTEGER,
-  value INTEGER,
+  value BIGINT,
   count INTEGER,
   FOREIGN KEY (event_id) REFERENCES event(id) ON DELETE CASCADE
 );
@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS mission_completed_event (
   event_id TEXT NOT NULL,
   awarding_faction TEXT,
   mission_name TEXT,
-  reward INTEGER,
+  reward BIGINT,
   FOREIGN KEY (event_id) REFERENCES event(id) ON DELETE CASCADE
 );
 
@@ -81,7 +81,7 @@ CREATE TABLE IF NOT EXISTS faction_kill_bond_event (
   killer_ship TEXT,
   awarding_faction TEXT,
   victim_faction TEXT,
-  reward INTEGER,
+  reward BIGINT,
   FOREIGN KEY (event_id) REFERENCES event(id) ON DELETE CASCADE
 );
 
@@ -93,7 +93,7 @@ CREATE TABLE IF NOT EXISTS mission_failed_event (
   event_id TEXT NOT NULL,
   mission_name TEXT,
   awarding_faction TEXT,
-  fine INTEGER,
+  fine BIGINT,
   FOREIGN KEY (event_id) REFERENCES event(id) ON DELETE CASCADE
 );
 
@@ -103,7 +103,7 @@ CREATE INDEX IF NOT EXISTS idx_mission_failed_event_event_id ON mission_failed_e
 CREATE TABLE IF NOT EXISTS multi_sell_exploration_data_event (
   id TEXT PRIMARY KEY,
   event_id TEXT NOT NULL,
-  total_earnings INTEGER,
+  total_earnings BIGINT,
   FOREIGN KEY (event_id) REFERENCES event(id) ON DELETE CASCADE
 );
 
@@ -125,7 +125,7 @@ CREATE INDEX IF NOT EXISTS idx_redeem_voucher_event_event_id ON redeem_voucher_e
 CREATE TABLE IF NOT EXISTS sell_exploration_data_event (
   id TEXT PRIMARY KEY,
   event_id TEXT NOT NULL,
-  earnings INTEGER,
+  earnings BIGINT,
   FOREIGN KEY (event_id) REFERENCES event(id) ON DELETE CASCADE
 );
 
@@ -139,7 +139,7 @@ CREATE TABLE IF NOT EXISTS commit_crime_event (
   faction TEXT,
   victim TEXT,
   victim_faction TEXT,
-  bounty INTEGER,
+  bounty BIGINT,
   FOREIGN KEY (event_id) REFERENCES event(id) ON DELETE CASCADE
 );
 

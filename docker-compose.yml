@@ -1,4 +1,17 @@
 services:
+  postgres:
+    image: postgres:16
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: sinistra
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - sinistra_network
+
   backend:
     build:
       context: .
@@ -6,6 +19,8 @@ services:
       - .env
     ports:
       - "5000:3000"
+    depends_on:
+      - postgres
     volumes:
       - ./data:/app/data
     networks:
@@ -42,3 +57,5 @@ networks:
   sinistra_network:
     driver: bridge
 
+volumes:
+  pgdata:

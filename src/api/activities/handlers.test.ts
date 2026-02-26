@@ -1,7 +1,8 @@
+import { SQL } from 'bun'
 import { describe, it, expect } from "bun:test"
 import { Effect, Layer, Option } from "effect"
-import { createClient } from "@libsql/client"
-import { TursoClient } from "../../database/client.js"
+
+import { PgClient } from "../../database/client.js"
 import { ActivityRepository } from "../../domain/repositories.js"
 import { ActivityRepositoryLive } from "../../database/repositories/ActivityRepository.js"
 import { AppConfig } from "../../lib/config.js"
@@ -71,15 +72,13 @@ describe("Activities API Integration", () => {
 
   // Helper to create a fresh test database for each test
   const ClientLayer = Layer.effect(
-    TursoClient,
+    PgClient,
     Effect.gen(function* () {
-      const client = createClient({
-        url: "file::memory:",
-      })
+      const client = new SQL('postgres://postgres:password@localhost:5432/sinistra')
 
       // Initialize schema
       yield* Effect.tryPromise(() =>
-        client.executeMultiple(`
+        client(`
           CREATE TABLE IF NOT EXISTS activity (
             id TEXT PRIMARY KEY,
             tickid TEXT NOT NULL,
@@ -452,26 +451,20 @@ describe("Activities API Integration", () => {
         yield* activityRepo.upsert(act2)
 
         // Query current tick (should be tick_101, the most recent)
-        const client = yield* TursoClient
+        const client = yield* PgClient
         const result = yield* Effect.tryPromise({
           try: () =>
-            client.execute({
-              sql: "SELECT tickid FROM activity ORDER BY timestamp DESC LIMIT 1",
-              args: [],
-            }),
+            client`SELECT tickid FROM activity ORDER BY timestamp DESC LIMIT 1`,
           catch: () => new Error("Query failed"),
         })
 
-        expect(result.rows.length).toBe(1)
-        expect(String(result.rows[0]![0])).toBe("tick_101")
+        expect((result as any).length).toBe(1)
+        expect(String((result as any)[0]![0])).toBe("tick_101")
 
         // Now query activities with that tick
         const activities = yield* Effect.tryPromise({
           try: () =>
-            client.execute({
-              sql: "SELECT * FROM activity WHERE tickid = ? ORDER BY timestamp DESC",
-              args: ["tick_101"],
-            }),
+            client`SELECT * FROM activity WHERE tickid = ${"tick_101"} ORDER BY timestamp DESC`,
           catch: () => new Error("Query failed"),
         })
 
@@ -509,18 +502,15 @@ describe("Activities API Integration", () => {
         }
 
         // Query for last tick (should be tick_101, second most recent)
-        const client = yield* TursoClient
+        const client = yield* PgClient
         const result = yield* Effect.tryPromise({
           try: () =>
-            client.execute({
-              sql: "SELECT DISTINCT tickid FROM activity ORDER BY timestamp DESC LIMIT 2",
-              args: [],
-            }),
+            client`SELECT DISTINCT tickid FROM activity ORDER BY timestamp DESC LIMIT 2`,
           catch: () => new Error("Query failed"),
         })
 
-        expect(result.rows.length).toBe(2)
-        const lastTickId = String(result.rows[1]![0])
+        expect((result as any).length).toBe(2)
+        const lastTickId = String((result as any)[1]![0])
         expect(lastTickId).toBe("tick_101")
       })
     )
@@ -570,7 +560,7 @@ describe("Activities API Integration", () => {
     await runTest(
       Effect.gen(function* () {
         const activityRepo = yield* ActivityRepository
-        const client = yield* TursoClient
+        const client = yield* PgClient
 
         // Create activity with multiple systems
         const activityId = uuid() as ActivityId
@@ -611,19 +601,16 @@ describe("Activities API Integration", () => {
         // Query activities for Sol system
         const result = yield* Effect.tryPromise({
           try: () =>
-            client.execute({
-              sql: `
+            client`
                 SELECT DISTINCT a.id
                 FROM activity a
                 JOIN system s ON s.activity_id = a.id
-                WHERE s.name = ?
+                WHERE s.name = ${"Sol"}
               `,
-              args: ["Sol"],
-            }),
           catch: () => new Error("Query failed"),
         })
 
-        expect(result.rows.length).toBe(1)
+        expect((result as any).length).toBe(1)
       })
     )
   })
@@ -636,7 +623,7 @@ describe("Activities API Integration", () => {
     await runTest(
       Effect.gen(function* () {
         const activityRepo = yield* ActivityRepository
-        const client = yield* TursoClient
+        const client = yield* PgClient
 
         // Create activity with system containing multiple factions
         const activityId = uuid() as ActivityId
@@ -717,20 +704,17 @@ describe("Activities API Integration", () => {
         // Query activities containing Federation Navy
         const result = yield* Effect.tryPromise({
           try: () =>
-            client.execute({
-              sql: `
+            client`
                 SELECT DISTINCT a.id
                 FROM activity a
                 JOIN system s ON s.activity_id = a.id
                 JOIN faction f ON f.system_id = s.id
-                WHERE f.name = ?
+                WHERE f.name = ${"Federation Navy"}
               `,
-              args: ["Federation Navy"],
-            }),
           catch: () => new Error("Query failed"),
         })
 
-        expect(result.rows.length).toBe(1)
+        expect((result as any).length).toBe(1)
       })
     )
   })
@@ -816,7 +800,7 @@ describe("Activities API Integration", () => {
     await runTest(
       Effect.gen(function* () {
         const activityRepo = yield* ActivityRepository
-        const client = yield* TursoClient
+        const client = yield* PgClient
 
         const tickid = "tick_600"
 
@@ -887,23 +871,20 @@ describe("Activities API Integration", () => {
         // Query with all filters
         const result = yield* Effect.tryPromise({
           try: () =>
-            client.execute({
-              sql: `
+            client`
                 SELECT DISTINCT a.id
                 FROM activity a
                 JOIN system s ON s.activity_id = a.id
                 JOIN faction f ON f.system_id = s.id
-                WHERE a.tickid = ?
-                  AND s.name = ?
-                  AND f.name = ?
+                WHERE a.tickid = ${tickid}
+                  AND s.name = ${"Target System"}
+                  AND f.name = ${"Target Faction"}
               `,
-              args: [tickid, "Target System", "Target Faction"],
-            }),
           catch: () => new Error("Query failed"),
         })
 
-        expect(result.rows.length).toBe(1)
-        expect(String(result.rows[0]![0])).toBe(activityId1)
+        expect((result as any).length).toBe(1)
+        expect(String((result as any)[0]![0])).toBe(activityId1)
       })
     )
   })

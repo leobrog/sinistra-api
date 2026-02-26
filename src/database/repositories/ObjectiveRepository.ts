@@ -1,5 +1,5 @@
 import { Effect, Layer, Option, Schema } from "effect";
-import { TursoClient } from "../client.ts";
+import { PgClient } from "../client.ts";
 import { ObjectiveRepository } from "../../domain/repositories.ts";
 import { Objective } from "../../domain/models.ts";
 import { DatabaseError, ObjectiveNotFoundError } from "../../domain/errors.ts";
@@ -47,7 +47,7 @@ const mapRowToObjectiveTargetSettlement = (row: any): unknown => ({
 export const ObjectiveRepositoryLive = Layer.effect(
   ObjectiveRepository,
   Effect.gen(function* () {
-    const client = yield* TursoClient;
+    const client = yield* PgClient;
     const decodeObjective = Schema.decodeUnknown(Objective);
 
     const repo = ObjectiveRepository.of({
@@ -56,27 +56,14 @@ export const ObjectiveRepositoryLive = Layer.effect(
           // Insert main objective
           yield* Effect.tryPromise({
             try: () =>
-              client.execute({
-                sql: `INSERT INTO objective (id, title, priority, type, system, faction, description, startdate, enddate)
-                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                args: [
-                  objective.id,
-                  Option.getOrNull(objective.title),
-                  Option.getOrNull(objective.priority),
-                  Option.getOrNull(objective.type),
-                  Option.getOrNull(objective.system),
-                  Option.getOrNull(objective.faction),
-                  Option.getOrNull(objective.description),
-                  Option.match(objective.startdate, {
-                    onNone: () => null,
-                    onSome: (date) => date.toISOString(),
-                  }),
-                  Option.match(objective.enddate, {
-                    onNone: () => null,
-                    onSome: (date) => date.toISOString(),
-                  }),
-                ],
-              }),
+              client`INSERT INTO objective (id, title, priority, type, system, faction, description, startdate, enddate)
+                      VALUES (${objective.id}, ${Option.getOrNull(objective.title)}, ${Option.getOrNull(objective.priority)}, ${Option.getOrNull(objective.type)}, ${Option.getOrNull(objective.system)}, ${Option.getOrNull(objective.faction)}, ${Option.getOrNull(objective.description)}, ${Option.match(objective.startdate, {
+                                      onNone: () => null,
+                                      onSome: (date) => date.toISOString(),
+                                    })}, ${Option.match(objective.enddate, {
+                                      onNone: () => null,
+                                      onSome: (date) => date.toISOString(),
+                                    })})`,
             catch: (error) =>
               new DatabaseError({ operation: "create.objective", error }),
           });
@@ -85,21 +72,8 @@ export const ObjectiveRepositoryLive = Layer.effect(
           for (const target of objective.targets) {
             yield* Effect.tryPromise({
               try: () =>
-                client.execute({
-                  sql: `INSERT INTO objective_target (id, objective_id, type, station, system, faction, progress, targetindividual, targetoverall)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                  args: [
-                    target.id,
-                    target.objectiveId,
-                    Option.getOrNull(target.type),
-                    Option.getOrNull(target.station),
-                    Option.getOrNull(target.system),
-                    Option.getOrNull(target.faction),
-                    Option.getOrNull(target.progress),
-                    Option.getOrNull(target.targetindividual),
-                    Option.getOrNull(target.targetoverall),
-                  ],
-                }),
+                client`INSERT INTO objective_target (id, objective_id, type, station, system, faction, progress, targetindividual, targetoverall)
+                        VALUES (${target.id}, ${target.objectiveId}, ${Option.getOrNull(target.type)}, ${Option.getOrNull(target.station)}, ${Option.getOrNull(target.system)}, ${Option.getOrNull(target.faction)}, ${Option.getOrNull(target.progress)}, ${Option.getOrNull(target.targetindividual)}, ${Option.getOrNull(target.targetoverall)})`,
               catch: (error) =>
                 new DatabaseError({
                   operation: "create.objectiveTarget",
@@ -111,18 +85,8 @@ export const ObjectiveRepositoryLive = Layer.effect(
             for (const settlement of target.settlements) {
               yield* Effect.tryPromise({
                 try: () =>
-                  client.execute({
-                    sql: `INSERT INTO objective_target_settlement (id, target_id, name, targetindividual, targetoverall, progress)
-                          VALUES (?, ?, ?, ?, ?, ?)`,
-                    args: [
-                      settlement.id,
-                      settlement.targetId,
-                      Option.getOrNull(settlement.name),
-                      Option.getOrNull(settlement.targetindividual),
-                      Option.getOrNull(settlement.targetoverall),
-                      Option.getOrNull(settlement.progress),
-                    ],
-                  }),
+                  client`INSERT INTO objective_target_settlement (id, target_id, name, targetindividual, targetoverall, progress)
+                          VALUES (${settlement.id}, ${settlement.targetId}, ${Option.getOrNull(settlement.name)}, ${Option.getOrNull(settlement.targetindividual)}, ${Option.getOrNull(settlement.targetoverall)}, ${Option.getOrNull(settlement.progress)})`,
                 catch: (error) =>
                   new DatabaseError({
                     operation: "create.objectiveTargetSettlement",
@@ -138,10 +102,7 @@ export const ObjectiveRepositoryLive = Layer.effect(
           // Get objective
           const objectiveResult = yield* Effect.tryPromise({
             try: () =>
-              client.execute({
-                sql: "SELECT * FROM objective WHERE id = ?",
-                args: [id],
-              }),
+              client`SELECT * FROM objective WHERE id = ${id}`,
             catch: (error) =>
               new DatabaseError({ operation: "findById.objective", error }),
           });
@@ -152,10 +113,7 @@ export const ObjectiveRepositoryLive = Layer.effect(
           // Get targets for this objective
           const targetsResult = yield* Effect.tryPromise({
             try: () =>
-              client.execute({
-                sql: "SELECT * FROM objective_target WHERE objective_id = ?",
-                args: [id],
-              }),
+              client`SELECT * FROM objective_target WHERE objective_id = ${id}`,
             catch: (error) =>
               new DatabaseError({
                 operation: "findById.objective.targets",
@@ -169,10 +127,7 @@ export const ObjectiveRepositoryLive = Layer.effect(
             // Get settlements for this target
             const settlementsResult = yield* Effect.tryPromise({
               try: () =>
-                client.execute({
-                  sql: "SELECT * FROM objective_target_settlement WHERE target_id = ?",
-                  args: [targetRow.id as string],
-                }),
+                client`SELECT * FROM objective_target_settlement WHERE target_id = ${targetRow.id as string}`,
               catch: (error) =>
                 new DatabaseError({
                   operation: "findById.objective.settlements",
@@ -210,10 +165,7 @@ export const ObjectiveRepositoryLive = Layer.effect(
         Effect.gen(function* () {
           const objectivesResult = yield* Effect.tryPromise({
             try: () =>
-              client.execute({
-                sql: "SELECT id FROM objective ORDER BY priority DESC, startdate DESC",
-                args: [],
-              }),
+              client`SELECT id FROM objective ORDER BY priority DESC, startdate DESC`,
             catch: (error) =>
               new DatabaseError({ operation: "findAll.objective", error }),
           });
@@ -235,13 +187,10 @@ export const ObjectiveRepositoryLive = Layer.effect(
           const nowISO = now.toISOString();
           const objectivesResult = yield* Effect.tryPromise({
             try: () =>
-              client.execute({
-                sql: `SELECT id FROM objective
-                      WHERE (startdate IS NULL OR startdate <= ?)
-                        AND (enddate IS NULL OR enddate >= ?)
+              client`SELECT id FROM objective
+                      WHERE (startdate IS NULL OR startdate <= ${nowISO})
+                        AND (enddate IS NULL OR enddate >= ${nowISO})
                       ORDER BY priority DESC`,
-                args: [nowISO, nowISO],
-              }),
             catch: (error) =>
               new DatabaseError({ operation: "findActive.objective", error }),
           });
@@ -263,33 +212,20 @@ export const ObjectiveRepositoryLive = Layer.effect(
           // Update main objective
           const result = yield* Effect.tryPromise({
             try: () =>
-              client.execute({
-                sql: `UPDATE objective
-                      SET title = ?, priority = ?, type = ?, system = ?, faction = ?, description = ?, startdate = ?, enddate = ?
-                      WHERE id = ?`,
-                args: [
-                  Option.getOrNull(objective.title),
-                  Option.getOrNull(objective.priority),
-                  Option.getOrNull(objective.type),
-                  Option.getOrNull(objective.system),
-                  Option.getOrNull(objective.faction),
-                  Option.getOrNull(objective.description),
-                  Option.match(objective.startdate, {
-                    onNone: () => null,
-                    onSome: (date) => date.toISOString(),
-                  }),
-                  Option.match(objective.enddate, {
-                    onNone: () => null,
-                    onSome: (date) => date.toISOString(),
-                  }),
-                  objective.id,
-                ],
-              }),
+              client`UPDATE objective
+                      SET title = ${Option.getOrNull(objective.title)}, priority = ${Option.getOrNull(objective.priority)}, type = ${Option.getOrNull(objective.type)}, system = ${Option.getOrNull(objective.system)}, faction = ${Option.getOrNull(objective.faction)}, description = ${Option.getOrNull(objective.description)}, startdate = ${Option.match(objective.startdate, {
+                                      onNone: () => null,
+                                      onSome: (date) => date.toISOString(),
+                                    })}, enddate = ${Option.match(objective.enddate, {
+                                      onNone: () => null,
+                                      onSome: (date) => date.toISOString(),
+                                    })}
+                      WHERE id = ${objective.id}`,
             catch: (error) =>
               new DatabaseError({ operation: "update.objective", error }),
           });
 
-          if (result.rowsAffected === 0) {
+          if ((result as any).length === 0) {
             return yield* Effect.fail(
               new ObjectiveNotFoundError({ id: objective.id })
             );
@@ -298,10 +234,7 @@ export const ObjectiveRepositoryLive = Layer.effect(
           // Delete existing targets (CASCADE will delete settlements)
           yield* Effect.tryPromise({
             try: () =>
-              client.execute({
-                sql: "DELETE FROM objective_target WHERE objective_id = ?",
-                args: [objective.id],
-              }),
+              client`DELETE FROM objective_target WHERE objective_id = ${objective.id}`,
             catch: (error) =>
               new DatabaseError({
                 operation: "delete.objective.targets",
@@ -313,21 +246,8 @@ export const ObjectiveRepositoryLive = Layer.effect(
           for (const target of objective.targets) {
             yield* Effect.tryPromise({
               try: () =>
-                client.execute({
-                  sql: `INSERT INTO objective_target (id, objective_id, type, station, system, faction, progress, targetindividual, targetoverall)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                  args: [
-                    target.id,
-                    target.objectiveId,
-                    Option.getOrNull(target.type),
-                    Option.getOrNull(target.station),
-                    Option.getOrNull(target.system),
-                    Option.getOrNull(target.faction),
-                    Option.getOrNull(target.progress),
-                    Option.getOrNull(target.targetindividual),
-                    Option.getOrNull(target.targetoverall),
-                  ],
-                }),
+                client`INSERT INTO objective_target (id, objective_id, type, station, system, faction, progress, targetindividual, targetoverall)
+                        VALUES (${target.id}, ${target.objectiveId}, ${Option.getOrNull(target.type)}, ${Option.getOrNull(target.station)}, ${Option.getOrNull(target.system)}, ${Option.getOrNull(target.faction)}, ${Option.getOrNull(target.progress)}, ${Option.getOrNull(target.targetindividual)}, ${Option.getOrNull(target.targetoverall)})`,
               catch: (error) =>
                 new DatabaseError({
                   operation: "update.objectiveTarget",
@@ -338,18 +258,8 @@ export const ObjectiveRepositoryLive = Layer.effect(
             for (const settlement of target.settlements) {
               yield* Effect.tryPromise({
                 try: () =>
-                  client.execute({
-                    sql: `INSERT INTO objective_target_settlement (id, target_id, name, targetindividual, targetoverall, progress)
-                          VALUES (?, ?, ?, ?, ?, ?)`,
-                    args: [
-                      settlement.id,
-                      settlement.targetId,
-                      Option.getOrNull(settlement.name),
-                      Option.getOrNull(settlement.targetindividual),
-                      Option.getOrNull(settlement.targetoverall),
-                      Option.getOrNull(settlement.progress),
-                    ],
-                  }),
+                  client`INSERT INTO objective_target_settlement (id, target_id, name, targetindividual, targetoverall, progress)
+                          VALUES (${settlement.id}, ${settlement.targetId}, ${Option.getOrNull(settlement.name)}, ${Option.getOrNull(settlement.targetindividual)}, ${Option.getOrNull(settlement.targetoverall)}, ${Option.getOrNull(settlement.progress)})`,
                 catch: (error) =>
                   new DatabaseError({
                     operation: "update.objectiveTargetSettlement",
@@ -363,10 +273,7 @@ export const ObjectiveRepositoryLive = Layer.effect(
       delete: (id) =>
         Effect.tryPromise({
           try: () =>
-            client.execute({
-              sql: "DELETE FROM objective WHERE id = ?",
-              args: [id],
-            }),
+            client`DELETE FROM objective WHERE id = ${id}`,
           catch: (error) =>
             new DatabaseError({ operation: "delete.objective", error }),
         }).pipe(Effect.asVoid),

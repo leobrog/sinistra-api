@@ -1,18 +1,16 @@
+import { SQL } from 'bun'
 import { describe, it, expect, beforeEach } from "bun:test"
 import { Effect } from "effect"
-import { createClient, type Client as LibsqlClient } from "@libsql/client"
 import { buildDateFilter, type DateFilter } from "./date-filters.js"
 
 describe("DateFilterService", () => {
-  let db: LibsqlClient
+  let db: SQL
 
   beforeEach(async () => {
-    db = createClient({
-      url: ":memory:",
-    })
+    db = new SQL('postgres://postgres:password@localhost:5432/sinistra')
 
     // Create event table with tickid column
-    await db.execute(`
+    await db(`
       CREATE TABLE event (
         id TEXT PRIMARY KEY,
         timestamp TEXT NOT NULL,
@@ -107,11 +105,11 @@ describe("DateFilterService", () => {
   describe("tick-based filters", () => {
     it("should build current tick filter (ct) with tick data", async () => {
       // Insert test data with tickids
-      await db.execute({
+      await db({
         sql: "INSERT INTO event (id, timestamp, tickid) VALUES (?, ?, ?)",
         args: ["1", "2026-02-15T10:00:00Z", "tick-123"],
       })
-      await db.execute({
+      await db({
         sql: "INSERT INTO event (id, timestamp, tickid) VALUES (?, ?, ?)",
         args: ["2", "2026-02-15T09:00:00Z", "tick-122"],
       })
@@ -125,11 +123,11 @@ describe("DateFilterService", () => {
 
     it("should build last tick filter (lt) with 2 ticks", async () => {
       // Insert test data with 2 distinct tickids
-      await db.execute({
+      await db({
         sql: "INSERT INTO event (id, timestamp, tickid) VALUES (?, ?, ?)",
         args: ["1", "2026-02-15T10:00:00Z", "tick-123"],
       })
-      await db.execute({
+      await db({
         sql: "INSERT INTO event (id, timestamp, tickid) VALUES (?, ?, ?)",
         args: ["2", "2026-02-15T09:00:00Z", "tick-122"],
       })
@@ -143,7 +141,7 @@ describe("DateFilterService", () => {
 
     it("should build last tick filter (lt) with only 1 tick", async () => {
       // Insert test data with only 1 tickid
-      await db.execute({
+      await db({
         sql: "INSERT INTO event (id, timestamp, tickid) VALUES (?, ?, ?)",
         args: ["1", "2026-02-15T10:00:00Z", "tick-123"],
       })

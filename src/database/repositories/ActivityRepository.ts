@@ -1,5 +1,5 @@
 import { Effect, Layer, Option, Schema } from "effect";
-import { TursoClient } from "../client.ts";
+import { PgClient } from "../client.ts";
 import { ActivityRepository } from "../../domain/repositories.ts";
 import { Activity } from "../../domain/models.ts";
 import { DatabaseError } from "../../domain/errors.ts";
@@ -226,7 +226,7 @@ const mapRowToFactionStation = (row: any): unknown => ({
 export const ActivityRepositoryLive = Layer.effect(
   ActivityRepository,
   Effect.gen(function* () {
-    const client = yield* TursoClient;
+    const client = yield* PgClient;
     const decodeActivity = Schema.decodeUnknown(Activity);
 
     const repo = ActivityRepository.of({
@@ -235,22 +235,13 @@ export const ActivityRepositoryLive = Layer.effect(
           // Upsert main activity
           yield* Effect.tryPromise({
             try: () =>
-              client.execute({
-                sql: `INSERT INTO activity (id, tickid, ticktime, timestamp, cmdr)
-                      VALUES (?, ?, ?, ?, ?)
+              client`INSERT INTO activity (id, tickid, ticktime, timestamp, cmdr)
+                      VALUES (${activity.id}, ${activity.tickid}, ${activity.ticktime}, ${activity.timestamp}, ${Option.getOrNull(activity.cmdr)})
                       ON CONFLICT(id) DO UPDATE SET
                         tickid = excluded.tickid,
                         ticktime = excluded.ticktime,
                         timestamp = excluded.timestamp,
                         cmdr = excluded.cmdr`,
-                args: [
-                  activity.id,
-                  activity.tickid,
-                  activity.ticktime,
-                  activity.timestamp,
-                  Option.getOrNull(activity.cmdr),
-                ],
-              }),
             catch: (error) =>
               new DatabaseError({ operation: "upsert.activity", error }),
           });
@@ -258,10 +249,7 @@ export const ActivityRepositoryLive = Layer.effect(
           // Delete existing systems (CASCADE deletes factions → settlements + stations)
           yield* Effect.tryPromise({
             try: () =>
-              client.execute({
-                sql: "DELETE FROM system WHERE activity_id = ?",
-                args: [activity.id],
-              }),
+              client`DELETE FROM system WHERE activity_id = ${activity.id}`,
             catch: (error) =>
               new DatabaseError({ operation: "delete.activity.systems", error }),
           });
@@ -273,8 +261,7 @@ export const ActivityRepositoryLive = Layer.effect(
 
             yield* Effect.tryPromise({
               try: () =>
-                client.execute({
-                  sql: `INSERT INTO system (
+                client`INSERT INTO system (
                           id, name, address, activity_id,
                           twreactivate,
                           twkills_cyclops, twkills_basilisk, twkills_medusa, twkills_hydra,
@@ -282,29 +269,7 @@ export const ActivityRepositoryLive = Layer.effect(
                           twkills_scythe_glaive,
                           twsandr_blackboxes, twsandr_damagedpods, twsandr_occupiedpods,
                           twsandr_tissuesamples, twsandr_thargoidpods
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                  args: [
-                    system.id,
-                    system.name,
-                    system.address,
-                    system.activityId,
-                    Option.getOrNull(system.twreactivate),
-                    n(twkills && Option.getOrNull(twkills.cyclops)),
-                    n(twkills && Option.getOrNull(twkills.basilisk)),
-                    n(twkills && Option.getOrNull(twkills.medusa)),
-                    n(twkills && Option.getOrNull(twkills.hydra)),
-                    n(twkills && Option.getOrNull(twkills.orthrus)),
-                    n(twkills && Option.getOrNull(twkills.scout)),
-                    n(twkills && Option.getOrNull(twkills.revenant)),
-                    n(twkills && Option.getOrNull(twkills.banshee)),
-                    n(twkills && Option.getOrNull(twkills.scytheGlaive)),
-                    n(twsandr && Option.getOrNull(twsandr.blackboxes)),
-                    n(twsandr && Option.getOrNull(twsandr.damagedpods)),
-                    n(twsandr && Option.getOrNull(twsandr.occupiedpods)),
-                    n(twsandr && Option.getOrNull(twsandr.tissuesamples)),
-                    n(twsandr && Option.getOrNull(twsandr.thargoidpods)),
-                  ],
-                }),
+                        ) VALUES (${system.id}, ${system.name}, ${system.address}, ${system.activityId}, ${Option.getOrNull(system.twreactivate)}, ${n(twkills && Option.getOrNull(twkills.cyclops))}, ${n(twkills && Option.getOrNull(twkills.basilisk))}, ${n(twkills && Option.getOrNull(twkills.medusa))}, ${n(twkills && Option.getOrNull(twkills.hydra))}, ${n(twkills && Option.getOrNull(twkills.orthrus))}, ${n(twkills && Option.getOrNull(twkills.scout))}, ${n(twkills && Option.getOrNull(twkills.revenant))}, ${n(twkills && Option.getOrNull(twkills.banshee))}, ${n(twkills && Option.getOrNull(twkills.scytheGlaive))}, ${n(twsandr && Option.getOrNull(twsandr.blackboxes))}, ${n(twsandr && Option.getOrNull(twsandr.damagedpods))}, ${n(twsandr && Option.getOrNull(twsandr.occupiedpods))}, ${n(twsandr && Option.getOrNull(twsandr.tissuesamples))}, ${n(twsandr && Option.getOrNull(twsandr.thargoidpods))})`,
               catch: (error) =>
                 new DatabaseError({ operation: "insert.system", error }),
             });
@@ -324,8 +289,7 @@ export const ActivityRepositoryLive = Layer.effect(
 
               yield* Effect.tryPromise({
                 try: () =>
-                  client.execute({
-                    sql: `INSERT INTO faction (
+                  client`INSERT INTO faction (
                             id, name, state, system_id,
                             bvs, cbs, exobiology, exploration, scenarios,
                             infprimary, infsecondary, missionfails,
@@ -342,74 +306,22 @@ export const ActivityRepositoryLive = Layer.effect(
                             tradesell_low_items, tradesell_low_value, tradesell_low_profit,
                             tradesell_zero_items, tradesell_zero_value, tradesell_zero_profit
                           ) VALUES (
-                            ?, ?, ?, ?,
-                            ?, ?, ?, ?, ?,
-                            ?, ?, ?,
-                            ?, ?, ?,
-                            ?, ?, ?,
-                            ?, ?, ?,
-                            ?, ?, ?,
-                            ?, ?,
-                            ?, ?, ?,
-                            ?, ?,
-                            ?, ?,
-                            ?, ?,
-                            ?, ?, ?,
-                            ?, ?, ?,
-                            ?, ?, ?
+                            ${faction.id}, ${faction.name}, ${faction.state}, ${faction.systemId},
+                            ${Option.getOrNull(faction.bvs)}, ${Option.getOrNull(faction.cbs)}, ${Option.getOrNull(faction.exobiology)}, ${Option.getOrNull(faction.exploration)}, ${Option.getOrNull(faction.scenarios)},
+                            ${Option.getOrNull(faction.infprimary)}, ${Option.getOrNull(faction.infsecondary)}, ${Option.getOrNull(faction.missionfails)},
+                            ${Option.getOrNull(faction.murdersground)}, ${Option.getOrNull(faction.murdersspace)}, ${Option.getOrNull(faction.tradebm)},
+                            ${n(czspace && Option.getOrNull(czspace.low))}, ${n(czspace && Option.getOrNull(czspace.medium))}, ${n(czspace && Option.getOrNull(czspace.high))},
+                            ${n(czground && Option.getOrNull(czground.low))}, ${n(czground && Option.getOrNull(czground.medium))}, ${n(czground && Option.getOrNull(czground.high))},
+                            ${n(sandr && Option.getOrNull(sandr.blackboxes))}, ${n(sandr && Option.getOrNull(sandr.damagedpods))}, ${n(sandr && Option.getOrNull(sandr.occupiedpods))},
+                            ${n(sandr && Option.getOrNull(sandr.thargoidpods))}, ${n(sandr && Option.getOrNull(sandr.wreckagecomponents))},
+                            ${n(sandr && Option.getOrNull(sandr.personaleffects))}, ${n(sandr && Option.getOrNull(sandr.politicalprisoners))}, ${n(sandr && Option.getOrNull(sandr.hostages))},
+                            ${n(tbHigh && Option.getOrNull(tbHigh.items))}, ${n(tbHigh && Option.getOrNull(tbHigh.value))},
+                            ${n(tbLow && Option.getOrNull(tbLow.items))}, ${n(tbLow && Option.getOrNull(tbLow.value))},
+                            ${n(tbZero && Option.getOrNull(tbZero.items))}, ${n(tbZero && Option.getOrNull(tbZero.value))},
+                            ${n(tsHigh && Option.getOrNull(tsHigh.items))}, ${n(tsHigh && Option.getOrNull(tsHigh.value))}, ${n(tsHigh && Option.getOrNull(tsHigh.profit))},
+                            ${n(tsLow && Option.getOrNull(tsLow.items))}, ${n(tsLow && Option.getOrNull(tsLow.value))}, ${n(tsLow && Option.getOrNull(tsLow.profit))},
+                            ${n(tsZero && Option.getOrNull(tsZero.items))}, ${n(tsZero && Option.getOrNull(tsZero.value))}, ${n(tsZero && Option.getOrNull(tsZero.profit))}
                           )`,
-                    args: [
-                      faction.id,
-                      faction.name,
-                      faction.state,
-                      faction.systemId,
-                      Option.getOrNull(faction.bvs),
-                      Option.getOrNull(faction.cbs),
-                      Option.getOrNull(faction.exobiology),
-                      Option.getOrNull(faction.exploration),
-                      Option.getOrNull(faction.scenarios),
-                      Option.getOrNull(faction.infprimary),
-                      Option.getOrNull(faction.infsecondary),
-                      Option.getOrNull(faction.missionfails),
-                      Option.getOrNull(faction.murdersground),
-                      Option.getOrNull(faction.murdersspace),
-                      Option.getOrNull(faction.tradebm),
-                      // czspace
-                      n(czspace && Option.getOrNull(czspace.low)),
-                      n(czspace && Option.getOrNull(czspace.medium)),
-                      n(czspace && Option.getOrNull(czspace.high)),
-                      // czground
-                      n(czground && Option.getOrNull(czground.low)),
-                      n(czground && Option.getOrNull(czground.medium)),
-                      n(czground && Option.getOrNull(czground.high)),
-                      // sandr
-                      n(sandr && Option.getOrNull(sandr.blackboxes)),
-                      n(sandr && Option.getOrNull(sandr.damagedpods)),
-                      n(sandr && Option.getOrNull(sandr.occupiedpods)),
-                      n(sandr && Option.getOrNull(sandr.thargoidpods)),
-                      n(sandr && Option.getOrNull(sandr.wreckagecomponents)),
-                      n(sandr && Option.getOrNull(sandr.personaleffects)),
-                      n(sandr && Option.getOrNull(sandr.politicalprisoners)),
-                      n(sandr && Option.getOrNull(sandr.hostages)),
-                      // tradebuy
-                      n(tbHigh && Option.getOrNull(tbHigh.items)),
-                      n(tbHigh && Option.getOrNull(tbHigh.value)),
-                      n(tbLow && Option.getOrNull(tbLow.items)),
-                      n(tbLow && Option.getOrNull(tbLow.value)),
-                      n(tbZero && Option.getOrNull(tbZero.items)),
-                      n(tbZero && Option.getOrNull(tbZero.value)),
-                      // tradesell
-                      n(tsHigh && Option.getOrNull(tsHigh.items)),
-                      n(tsHigh && Option.getOrNull(tsHigh.value)),
-                      n(tsHigh && Option.getOrNull(tsHigh.profit)),
-                      n(tsLow && Option.getOrNull(tsLow.items)),
-                      n(tsLow && Option.getOrNull(tsLow.value)),
-                      n(tsLow && Option.getOrNull(tsLow.profit)),
-                      n(tsZero && Option.getOrNull(tsZero.items)),
-                      n(tsZero && Option.getOrNull(tsZero.value)),
-                      n(tsZero && Option.getOrNull(tsZero.profit)),
-                    ],
-                  }),
                 catch: (error) =>
                   new DatabaseError({ operation: "insert.faction", error }),
               });
@@ -418,11 +330,8 @@ export const ActivityRepositoryLive = Layer.effect(
               for (const settlement of faction.czgroundSettlements) {
                 yield* Effect.tryPromise({
                   try: () =>
-                    client.execute({
-                      sql: `INSERT INTO faction_settlement (id, faction_id, name, type, count)
-                            VALUES (?, ?, ?, ?, ?)`,
-                      args: [settlement.id, faction.id, settlement.name, settlement.type, settlement.count],
-                    }),
+                    client`INSERT INTO faction_settlement (id, faction_id, name, type, count)
+                            VALUES (${settlement.id}, ${faction.id}, ${settlement.name}, ${settlement.type}, ${settlement.count})`,
                   catch: (error) =>
                     new DatabaseError({ operation: "insert.faction_settlement", error }),
                 });
@@ -449,8 +358,7 @@ export const ActivityRepositoryLive = Layer.effect(
 
                 yield* Effect.tryPromise({
                   try: () =>
-                    client.execute({
-                      sql: `INSERT INTO faction_station (
+                    client`INSERT INTO faction_station (
                               id, faction_id, name, twreactivate,
                               twcargo_sum, twcargo_count,
                               twescapepods_low_sum, twescapepods_low_count,
@@ -466,32 +374,12 @@ export const ActivityRepositoryLive = Layer.effect(
                               twmassacre_orthrus_sum, twmassacre_orthrus_count,
                               twmassacre_scout_sum, twmassacre_scout_count
                             ) VALUES (
-                              ?, ?, ?, ?,
-                              ?, ?,
-                              ?, ?, ?, ?, ?, ?,
-                              ?, ?, ?, ?, ?, ?,
-                              ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                              ${station.id}, ${faction.id}, ${station.name}, ${Option.getOrNull(station.twreactivate)},
+                              ${n(twcargo?.sum)}, ${n(twcargo?.count)},
+                              ${n(tepLow?.sum)}, ${n(tepLow?.count)}, ${n(tepMed?.sum)}, ${n(tepMed?.count)}, ${n(tepHigh?.sum)}, ${n(tepHigh?.count)},
+                              ${n(tpLow?.sum)}, ${n(tpLow?.count)}, ${n(tpMed?.sum)}, ${n(tpMed?.count)}, ${n(tpHigh?.sum)}, ${n(tpHigh?.count)},
+                              ${n(tmCyclops?.sum)}, ${n(tmCyclops?.count)}, ${n(tmBasilisk?.sum)}, ${n(tmBasilisk?.count)}, ${n(tmMedusa?.sum)}, ${n(tmMedusa?.count)}, ${n(tmHydra?.sum)}, ${n(tmHydra?.count)}, ${n(tmOrthrus?.sum)}, ${n(tmOrthrus?.count)}, ${n(tmScout?.sum)}, ${n(tmScout?.count)}
                             )`,
-                      args: [
-                        station.id,
-                        faction.id,
-                        station.name,
-                        Option.getOrNull(station.twreactivate),
-                        n(twcargo?.sum), n(twcargo?.count),
-                        n(tepLow?.sum), n(tepLow?.count),
-                        n(tepMed?.sum), n(tepMed?.count),
-                        n(tepHigh?.sum), n(tepHigh?.count),
-                        n(tpLow?.sum), n(tpLow?.count),
-                        n(tpMed?.sum), n(tpMed?.count),
-                        n(tpHigh?.sum), n(tpHigh?.count),
-                        n(tmCyclops?.sum), n(tmCyclops?.count),
-                        n(tmBasilisk?.sum), n(tmBasilisk?.count),
-                        n(tmMedusa?.sum), n(tmMedusa?.count),
-                        n(tmHydra?.sum), n(tmHydra?.count),
-                        n(tmOrthrus?.sum), n(tmOrthrus?.count),
-                        n(tmScout?.sum), n(tmScout?.count),
-                      ],
-                    }),
                   catch: (error) =>
                     new DatabaseError({ operation: "insert.faction_station", error }),
                 });
@@ -504,10 +392,7 @@ export const ActivityRepositoryLive = Layer.effect(
         Effect.gen(function* () {
           const activityResult = yield* Effect.tryPromise({
             try: () =>
-              client.execute({
-                sql: "SELECT * FROM activity WHERE id = ?",
-                args: [id],
-              }),
+              client`SELECT * FROM activity WHERE id = ${id}`,
             catch: (error) =>
               new DatabaseError({ operation: "findById.activity", error }),
           });
@@ -517,10 +402,7 @@ export const ActivityRepositoryLive = Layer.effect(
 
           const systemsResult = yield* Effect.tryPromise({
             try: () =>
-              client.execute({
-                sql: "SELECT * FROM system WHERE activity_id = ?",
-                args: [id],
-              }),
+              client`SELECT * FROM system WHERE activity_id = ${id}`,
             catch: (error) =>
               new DatabaseError({ operation: "findById.activity.systems", error }),
           });
@@ -529,10 +411,7 @@ export const ActivityRepositoryLive = Layer.effect(
           for (const systemRow of systemsResult.rows) {
             const factionsResult = yield* Effect.tryPromise({
               try: () =>
-                client.execute({
-                  sql: "SELECT * FROM faction WHERE system_id = ?",
-                  args: [systemRow.id as string],
-                }),
+                client`SELECT * FROM faction WHERE system_id = ${systemRow.id as string}`,
               catch: (error) =>
                 new DatabaseError({ operation: "findById.activity.factions", error }),
             });
@@ -544,10 +423,7 @@ export const ActivityRepositoryLive = Layer.effect(
               // Fetch settlements for this faction
               const settlementsResult = yield* Effect.tryPromise({
                 try: () =>
-                  client.execute({
-                    sql: "SELECT * FROM faction_settlement WHERE faction_id = ?",
-                    args: [factionId],
-                  }),
+                  client`SELECT * FROM faction_settlement WHERE faction_id = ${factionId}`,
                 catch: (error) =>
                   new DatabaseError({ operation: "findById.faction.settlements", error }),
               });
@@ -558,10 +434,7 @@ export const ActivityRepositoryLive = Layer.effect(
               // Fetch stations for this faction
               const stationsResult = yield* Effect.tryPromise({
                 try: () =>
-                  client.execute({
-                    sql: "SELECT * FROM faction_station WHERE faction_id = ?",
-                    args: [factionId],
-                  }),
+                  client`SELECT * FROM faction_station WHERE faction_id = ${factionId}`,
                 catch: (error) =>
                   new DatabaseError({ operation: "findById.faction.stations", error }),
               });
@@ -593,10 +466,7 @@ export const ActivityRepositoryLive = Layer.effect(
         Effect.gen(function* () {
           const activityResult = yield* Effect.tryPromise({
             try: () =>
-              client.execute({
-                sql: "SELECT * FROM activity WHERE tickid = ? ORDER BY timestamp",
-                args: [tickId],
-              }),
+              client`SELECT * FROM activity WHERE tickid = ${tickId} ORDER BY timestamp`,
             catch: (error) =>
               new DatabaseError({ operation: "findByTickId.activity", error }),
           });
@@ -612,10 +482,7 @@ export const ActivityRepositoryLive = Layer.effect(
         Effect.gen(function* () {
           const activityResult = yield* Effect.tryPromise({
             try: () =>
-              client.execute({
-                sql: "SELECT id FROM activity WHERE timestamp >= ? AND timestamp <= ? ORDER BY timestamp",
-                args: [startDate, endDate],
-              }),
+              client`SELECT id FROM activity WHERE timestamp >= ${startDate} AND timestamp <= ${endDate} ORDER BY timestamp`,
             catch: (error) =>
               new DatabaseError({ operation: "findByDateRange.activity", error }),
           });
@@ -634,10 +501,7 @@ export const ActivityRepositoryLive = Layer.effect(
         Effect.gen(function* () {
           const activityResult = yield* Effect.tryPromise({
             try: () =>
-              client.execute({
-                sql: "SELECT id FROM activity WHERE cmdr = ? ORDER BY timestamp",
-                args: [cmdr],
-              }),
+              client`SELECT id FROM activity WHERE cmdr = ${cmdr} ORDER BY timestamp`,
             catch: (error) =>
               new DatabaseError({ operation: "findByCmdr.activity", error }),
           });

@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS eddn_system_info (
   system_name TEXT NOT NULL,
   controlling_faction TEXT,
   controlling_power TEXT,
-  population INTEGER,
+  population BIGINT,
   security TEXT,
   government TEXT,
   allegiance TEXT,
@@ -42,9 +42,9 @@ CREATE TABLE IF NOT EXISTS eddn_faction (
   state TEXT,
   allegiance TEXT,
   government TEXT,
-  recovering_states TEXT,  -- JSON as TEXT
-  active_states TEXT,      -- JSON as TEXT
-  pending_states TEXT,     -- JSON as TEXT
+  recovering_states JSONB,
+  active_states JSONB,
+  pending_states JSONB,
   updated_at TEXT NOT NULL,  -- ISO 8601
   FOREIGN KEY (eddn_message_id) REFERENCES eddn_message(id) ON DELETE SET NULL
 );
@@ -78,7 +78,7 @@ CREATE TABLE IF NOT EXISTS eddn_powerplay (
   id TEXT PRIMARY KEY,
   eddn_message_id TEXT,
   system_name TEXT NOT NULL,
-  power TEXT,              -- JSON as TEXT
+  power JSONB,
   powerplay_state TEXT,
   control_progress INTEGER,
   reinforcement INTEGER,

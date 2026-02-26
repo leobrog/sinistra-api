@@ -1,7 +1,8 @@
+import { SQL } from 'bun'
 import { describe, it, expect } from "bun:test"
 import { Effect, Layer, Option } from "effect"
-import { createClient } from "@libsql/client"
-import { TursoClient } from "../../database/client.js"
+
+import { PgClient } from "../../database/client.js"
 import { ColonyRepository } from "../../domain/repositories.js"
 import { ColonyRepositoryLive } from "../../database/repositories/ColonyRepository.js"
 import { AppConfig } from "../../lib/config.js"
@@ -72,15 +73,13 @@ describe("Colonies API Integration", () => {
 
   // Helper to create a fresh test database for each test
   const ClientLayer = Layer.effect(
-    TursoClient,
+    PgClient,
     Effect.gen(function* () {
-      const client = createClient({
-        url: "file::memory:",
-      })
+      const client = new SQL('postgres://postgres:password@localhost:5432/sinistra')
 
       // Initialize schema
       yield* Effect.tryPromise(() =>
-        client.executeMultiple(`
+        client(`
           CREATE TABLE IF NOT EXISTS colony (
             id TEXT PRIMARY KEY,
             cmdr TEXT,

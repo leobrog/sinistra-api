@@ -7,7 +7,7 @@
 
 import { Effect, Layer, PubSub } from "effect"
 import { AppConfig } from "../lib/config.js"
-import { TursoClient } from "../database/client.js"
+import { PgClient } from "../database/client.js"
 import { TickBus } from "../services/TickBus.js"
 import { runTickMonitor } from "./tick-monitor.js"
 import { runShoutoutScheduler } from "./shoutout-scheduler.js"
@@ -15,7 +15,7 @@ import { runConflictScheduler } from "./conflict-scheduler.js"
 import { runInaraSync } from "./inara-sync.js"
 import { runEddnConflictScan } from "./eddn-conflict-scan.js"
 
-export const SchedulersLive: Layer.Layer<never, never, AppConfig | TursoClient> =
+export const SchedulersLive: Layer.Layer<never, never, AppConfig | PgClient> =
   Layer.effectDiscard(
     Effect.gen(function* () {
       const config = yield* AppConfig

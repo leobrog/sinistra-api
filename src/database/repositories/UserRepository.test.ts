@@ -1,40 +1,19 @@
+import { SQL } from 'bun'
 import { describe, it, expect } from "bun:test"
 import { Effect, Layer, Option } from "effect"
 import { UserRepository } from "../../domain/repositories.ts"
 import { UserRepositoryLive } from "./UserRepository.ts"
-import { TursoClient } from "../client.ts"
-import { createClient } from "@libsql/client"
+import { PgClient } from "../client.ts"
+
 import { UserId, Email, HashedPassword } from "../../domain/ids.ts"
 import { PlanTier } from "../../domain/models.ts"
 
 // Helper to provide a fresh Test Layer for each test
 const ClientLayer = Layer.effect(
-  TursoClient,
+  PgClient,
   Effect.gen(function* () {
-    // Use a fresh in-memory DB for each test run if possible, or a temp file
-    // For pure isolation with file-based sqlite, we might want a unique file per test
-    // or just :memory: if the client supports it robustly (libsql/turso client does support :memory:)
-    const client = createClient({
-      url: "file::memory:",
-    })
-
-    // Initialize Schema
-    yield* Effect.tryPromise(() =>
-      client.executeMultiple(`
-        CREATE TABLE users (
-          id TEXT PRIMARY KEY,
-          email TEXT NOT NULL UNIQUE,
-          name TEXT NOT NULL,
-          password TEXT NOT NULL,
-          company TEXT,
-          plan_tier TEXT NOT NULL DEFAULT 'free',
-          created_at INTEGER NOT NULL,
-          updated_at INTEGER NOT NULL
-        );
-      `)
-    )
-
-    return client
+    const client = new SQL("postgres://postgres:password@localhost:5432/sinistra");
+    return PgClient.of(client);
   })
 )
 

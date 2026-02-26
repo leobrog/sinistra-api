@@ -1,42 +1,18 @@
+import { SQL } from 'bun'
 import { describe, it, expect } from "bun:test"
 import { Effect, Layer, Option } from "effect"
 import { CmdrRepository } from "../../domain/repositories.ts"
 import { CmdrRepositoryLive } from "./CmdrRepository.ts"
-import { TursoClient } from "../client.ts"
-import { createClient } from "@libsql/client"
+import { PgClient } from "../client.ts"
+
 import { CmdrId } from "../../domain/ids.ts"
 
 // Helper to provide a fresh Test Layer for each test
 const ClientLayer = Layer.effect(
-  TursoClient,
+  PgClient,
   Effect.gen(function* () {
-    const client = createClient({
-      url: "file::memory:",
-    })
-
-    // Initialize Schema
-    yield* Effect.tryPromise(() =>
-      client.executeMultiple(`
-        CREATE TABLE IF NOT EXISTS cmdr (
-          id TEXT PRIMARY KEY,
-          name TEXT NOT NULL UNIQUE,
-          rank_combat TEXT,
-          rank_trade TEXT,
-          rank_explore TEXT,
-          rank_cqc TEXT,
-          rank_empire TEXT,
-          rank_federation TEXT,
-          rank_power TEXT,
-          credits INTEGER,
-          assets INTEGER,
-          inara_url TEXT,
-          squadron_name TEXT,
-          squadron_rank TEXT
-        );
-      `)
-    )
-
-    return client
+    const client = new SQL("postgres://postgres:password@localhost:5432/sinistra");
+    return PgClient.of(client);
   })
 )
 
@@ -160,7 +136,7 @@ describe("CmdrRepository", () => {
         yield* repo.create(cmdr2)
 
         const result = yield* repo.findAll()
-        expect(result.length).toBeGreaterThanOrEqual(2)
+        expect((result as any).length).toBeGreaterThanOrEqual(2)
         const names = result.map(c => c.name)
         expect(names).toContain("Alpha Commander")
         expect(names).toContain("Beta Commander")

@@ -14,9 +14,9 @@
  */
 
 import { Effect, Option, Duration } from "effect"
-import type { Client } from "@libsql/client"
+import { SQL } from 'bun'
 import { AppConfig } from "../lib/config.js"
-import { TursoClient } from "../database/client.js"
+import { PgClient } from "../database/client.js"
 import type { ConflictEntry } from "./conflict-scheduler.js"
 import { runConflictDiff } from "./conflict-scheduler.js"
 
@@ -25,23 +25,23 @@ import { runConflictDiff } from "./conflict-scheduler.js"
 // ---------------------------------------------------------------------------
 
 const extractEddnConflicts = async (
-  client: Client,
+  client: SQL,
   factionNames: Set<string>
 ): Promise<Map<string, ConflictEntry>> => {
   // JOIN with protected_faction to get only conflicts involving our factions.
   // eddn_conflict has one row per conflict per system; a system may have
   // multiple rows if multiple conflicts exist, but we only keep the one
   // involving a tracked faction.
-  const result = await client.execute(`
+  const result = await client`
     SELECT ec.system_name, ec.faction1, ec.faction2,
            ec.stake1, ec.stake2, ec.won_days1, ec.won_days2, ec.war_type
     FROM eddn_conflict ec
     WHERE ec.faction1 IN (SELECT name FROM protected_faction)
        OR ec.faction2 IN (SELECT name FROM protected_faction)
-  `)
+  `
 
   const map = new Map<string, ConflictEntry>()
-  for (const row of result.rows) {
+  for (const row of result as any[]) {
     const system = String(row.system_name ?? "")
     if (!system) continue
 
@@ -67,10 +67,10 @@ const extractEddnConflicts = async (
 // Main fiber — runs every hour
 // ---------------------------------------------------------------------------
 
-export const runEddnConflictScan: Effect.Effect<never, never, AppConfig | TursoClient> =
+export const runEddnConflictScan: Effect.Effect<never, never, AppConfig | PgClient> =
   Effect.gen(function* () {
     const config = yield* AppConfig
-    const client = yield* TursoClient
+    const client = yield* PgClient
     const webhookUrl = Option.getOrNull(config.discord.webhooks.conflict)
 
     yield* Effect.logInfo("EDDN conflict scan started (hourly)")
@@ -79,8 +79,8 @@ export const runEddnConflictScan: Effect.Effect<never, never, AppConfig | TursoC
 
       const factionNames = yield* Effect.tryPromise({
         try: async () => {
-          const result = await client.execute("SELECT name FROM protected_faction")
-          return new Set(result.rows.map((r) => String(r.name)))
+          const result = await client`SELECT name FROM protected_faction`
+          return new Set((result as any[]).map((r) => String(r.name)))
         },
         catch: (e) => new Error(`Load protected factions failed: ${e}`),
       }).pipe(
@@ -122,4 +122,4 @@ export const runEddnConflictScan: Effect.Effect<never, never, AppConfig | TursoC
     return yield* Effect.forever(scanOnce)
   }).pipe(
     Effect.catchAll((e) => Effect.logError(`EDDN conflict scan fatal: ${e}`))
-  ) as Effect.Effect<never, never, AppConfig | TursoClient>
+  ) as Effect.Effect<never, never, AppConfig | PgClient>

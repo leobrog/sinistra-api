@@ -6,8 +6,8 @@ import { ActivityRepository } from "../../domain/repositories.js"
 import type { PutActivityRequest } from "./dtos.js"
 import { Activity, Faction, FactionSettlement, FactionStation, System } from "../../domain/models.js"
 import { ActivityId, FactionId, FactionSettlementId, FactionStationId, SystemId } from "../../domain/ids.js"
-import type { Client } from "@libsql/client"
-import { TursoClient } from "../../database/client.js"
+import { SQL } from 'bun'
+import { PgClient } from "../../database/client.js"
 import { DatabaseError } from "../../domain/errors.js"
 
 /**
@@ -188,7 +188,7 @@ const requestToActivity = (req: PutActivityRequest): Activity => {
  */
 const resolveTickFilter = (
   period: string | undefined,
-  client: Client
+  client: SQL
 ): Effect.Effect<string | null, DatabaseError> => {
   if (!period) {
     return Effect.succeed(null)
@@ -199,42 +199,36 @@ const resolveTickFilter = (
   if (normalized === "ct" || normalized === "current") {
     // Get most recent tickid
     return Effect.gen(function* () {
-      const result: { rows: any[] } = yield* Effect.tryPromise({
+      const result = yield* Effect.tryPromise({
         try: () =>
-          client.execute({
-            sql: "SELECT tickid FROM activity ORDER BY timestamp DESC LIMIT 1",
-            args: [],
-          }),
+          client`SELECT tickid FROM activity ORDER BY timestamp DESC LIMIT 1`,
         catch: (error) =>
           new DatabaseError({ operation: "query.activity.current_tick", error }),
       })
 
-      if (result.rows.length === 0) {
+      if ((result as any).length === 0) {
         return null
       }
 
-      return String(result.rows[0]![0])
+      return String((result as any)[0]![0])
     })
   }
 
   if (normalized === "lt" || normalized === "last") {
     // Get second most recent tickid
     return Effect.gen(function* () {
-      const result: { rows: any[] } = yield* Effect.tryPromise({
+      const result = yield* Effect.tryPromise({
         try: () =>
-          client.execute({
-            sql: "SELECT DISTINCT tickid FROM activity ORDER BY timestamp DESC LIMIT 2",
-            args: [],
-          }),
+          client`SELECT DISTINCT tickid FROM activity ORDER BY timestamp DESC LIMIT 2`,
         catch: (error) =>
           new DatabaseError({ operation: "query.activity.last_tick", error }),
       })
 
-      if (result.rows.length < 2) {
+      if ((result as any).length < 2) {
         return null
       }
 
-      return String(result.rows[1]![0])
+      return String((result as any)[1]![0])
     })
   }
 
@@ -265,7 +259,7 @@ export const ActivitiesApiLive = HttpApiBuilder.group(Api, "activities", (handle
     .handle("getActivities", (_request) =>
       Effect.gen(function* () {
         const activityRepo = yield* ActivityRepository
-        const client = yield* TursoClient
+        const client = yield* PgClient
         const httpRequest = yield* HttpServerRequest.HttpServerRequest
 
         // Parse query parameters
@@ -320,7 +314,7 @@ export const ActivitiesApiLive = HttpApiBuilder.group(Api, "activities", (handle
 
         // Execute query
         const result = yield* Effect.tryPromise({
-          try: () => client.execute({ sql, args }),
+          try: () => client.unsafe(sql as any),
           catch: (error) =>
             new DatabaseError({ operation: "query.activities", error }),
         })
@@ -328,7 +322,7 @@ export const ActivitiesApiLive = HttpApiBuilder.group(Api, "activities", (handle
         // Load full activities with nested data
         const activities: Activity[] = []
 
-        for (const row of result.rows) {
+        for (const row of result as any[]) {
           const activityId = String(row[0]) as ActivityId
           const activityOption = yield* activityRepo.findById(activityId)
 

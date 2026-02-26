@@ -14,9 +14,9 @@
  */
 
 import { Effect, Option, PubSub, Queue } from "effect"
-import type { Client } from "@libsql/client"
+import { SQL } from 'bun'
 import { AppConfig } from "../lib/config.js"
-import { TursoClient } from "../database/client.js"
+import { PgClient } from "../database/client.js"
 import { TickBus } from "../services/TickBus.js"
 
 // ---------------------------------------------------------------------------
@@ -91,16 +91,13 @@ export const parseConflictsFromEntries = (
  * Query the DB for events in a given tick and extract conflicts for tracked factions.
  */
 const extractConflicts = async (
-  client: Client,
+  client: SQL,
   tickId: string,
   factionNames: Set<string>
 ): Promise<Map<string, ConflictEntry>> => {
-  const result = await client.execute({
-    sql: "SELECT raw_json, timestamp FROM event WHERE tickid = ? AND raw_json IS NOT NULL",
-    args: [tickId],
-  })
+  const result = await client`SELECT raw_json, timestamp FROM event WHERE tickid = ${tickId} AND raw_json IS NOT NULL`
 
-  const entries = result.rows.flatMap((row) => {
+  const entries = (result as any[]).flatMap((row) => {
     try {
       const parsed = JSON.parse(String(row.raw_json))
       return [{ ...parsed, timestamp: String(row.timestamp ?? "") }]
@@ -116,10 +113,10 @@ const extractConflicts = async (
 // DB persistence
 // ---------------------------------------------------------------------------
 
-const loadConflictState = async (client: Client): Promise<Map<string, ConflictEntry>> => {
-  const result = await client.execute("SELECT * FROM conflict_state")
+const loadConflictState = async (client: SQL): Promise<Map<string, ConflictEntry>> => {
+  const result = await client`SELECT * FROM conflict_state`
   const map = new Map<string, ConflictEntry>()
-  for (const row of result.rows) {
+  for (const row of result as any[]) {
     map.set(String(row.system), {
       warType: String(row.war_type),
       faction1: String(row.faction1),
@@ -134,15 +131,14 @@ const loadConflictState = async (client: Client): Promise<Map<string, ConflictEn
 }
 
 const upsertConflictState = async (
-  client: Client,
+  client: SQL,
   system: string,
   entry: ConflictEntry,
   tickId: string
 ): Promise<void> => {
-  await client.execute({
-    sql: `INSERT INTO conflict_state
+  await client`INSERT INTO conflict_state
             (system, faction1, faction2, war_type, won_days1, won_days2, stake1, stake2, last_tick_id, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          VALUES (${system}, ${entry.faction1}, ${entry.faction2}, ${entry.warType}, ${entry.wonDays1}, ${entry.wonDays2}, ${entry.stake1}, ${entry.stake2}, ${tickId}, ${new Date().toISOString()})
           ON CONFLICT(system) DO UPDATE SET
             faction1     = excluded.faction1,
             faction2     = excluded.faction2,
@@ -152,27 +148,11 @@ const upsertConflictState = async (
             stake1       = excluded.stake1,
             stake2       = excluded.stake2,
             last_tick_id = excluded.last_tick_id,
-            updated_at   = excluded.updated_at`,
-    args: [
-      system,
-      entry.faction1,
-      entry.faction2,
-      entry.warType,
-      entry.wonDays1,
-      entry.wonDays2,
-      entry.stake1,
-      entry.stake2,
-      tickId,
-      new Date().toISOString(),
-    ],
-  })
+            updated_at   = excluded.updated_at`
 }
 
-const deleteConflictState = async (client: Client, system: string): Promise<void> => {
-  await client.execute({
-    sql: "DELETE FROM conflict_state WHERE system = ?",
-    args: [system],
-  })
+const deleteConflictState = async (client: SQL, system: string): Promise<void> => {
+  await client`DELETE FROM conflict_state WHERE system = ${system}`
 }
 
 // ---------------------------------------------------------------------------
@@ -270,7 +250,7 @@ const postToDiscord = (webhookUrl: string, content: string): Effect.Effect<void>
  * Shared by the tick-based scheduler and the EDDN hourly scan.
  */
 export const runConflictDiff = (
-  client: Client,
+  client: SQL,
   webhookUrl: string | null,
   currentConflicts: Map<string, ConflictEntry>,
   factionNames: Set<string>,
@@ -358,7 +338,7 @@ export const runConflictDiff = (
 // ---------------------------------------------------------------------------
 
 export const runConflictCheck = (
-  client: Client,
+  client: SQL,
   webhookUrl: string | null,
   previousTick: string,
   currentTick: string
@@ -369,8 +349,8 @@ export const runConflictCheck = (
     // Load all tracked faction names fresh each tick so changes via dashboard take effect immediately
     const factionNames = yield* Effect.tryPromise({
       try: async () => {
-        const result = await client.execute("SELECT name FROM protected_faction")
-        return new Set(result.rows.map((r) => String(r.name)))
+        const result = await client`SELECT name FROM protected_faction`
+        return new Set((result as any[]).map((r) => String(r.name)))
       },
       catch: (e) => new Error(`Load protected factions failed: ${e}`),
     }).pipe(
@@ -405,10 +385,10 @@ export const runConflictCheck = (
 export const runConflictScheduler: Effect.Effect<
   never,
   never,
-  AppConfig | TursoClient | TickBus
+  AppConfig | PgClient | TickBus
 > = Effect.gen(function* () {
   const config = yield* AppConfig
-  const client = yield* TursoClient
+  const client = yield* PgClient
   const bus = yield* TickBus
   const webhookUrl = Option.getOrNull(config.discord.webhooks.conflict)
 
@@ -424,11 +404,8 @@ export const runConflictScheduler: Effect.Effect<
           // Events carry hash IDs (e.g. "zoy-XXXX"), not ISO timestamps.
           const completedTickHash = yield* Effect.tryPromise({
             try: async () => {
-              const result = await client.execute({
-                sql: "SELECT DISTINCT tickid FROM event WHERE tickid IS NOT NULL AND timestamp < ? ORDER BY timestamp DESC LIMIT 1",
-                args: [currentTick],
-              })
-              return result.rows[0]?.tickid as string | undefined
+              const result = await client`SELECT DISTINCT tickid FROM event WHERE tickid IS NOT NULL AND timestamp < ${currentTick} ORDER BY timestamp DESC LIMIT 1`
+              return (result as any)[0]?.tickid as string | undefined
             },
             catch: (e) => new Error(`Tick hash lookup failed: ${e}`),
           }).pipe(Effect.catchAll((e) => Effect.logWarning(`${e}`).pipe(Effect.as(undefined))))
@@ -446,4 +423,4 @@ export const runConflictScheduler: Effect.Effect<
   )
 }).pipe(
   Effect.catchAll((e) => Effect.logError(`Conflict scheduler fatal: ${e}`))
-) as Effect.Effect<never, never, AppConfig | TursoClient | TickBus>
+) as Effect.Effect<never, never, AppConfig | PgClient | TickBus>

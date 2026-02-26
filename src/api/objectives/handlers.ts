@@ -6,7 +6,7 @@ import { ObjectiveRepository } from "../../domain/repositories.js"
 import type { CreateObjectiveRequest, ProgressDetail } from "./dtos.js"
 import { Objective, ObjectiveTarget, ObjectiveTargetSettlement } from "../../domain/models.js"
 import { ObjectiveId, ObjectiveTargetId, ObjectiveTargetSettlementId } from "../../domain/ids.js"
-import { TursoClient } from "../../database/client.js"
+import { PgClient } from "../../database/client.js"
 import { DatabaseError, ObjectiveNotFoundError } from "../../domain/errors.js"
 
 // ============================================================================
@@ -162,8 +162,8 @@ const computeTargetProgress = (
         return makeEmptyProgress(targetoverall)
       }
 
-      const result = await client.execute({ sql, args })
-      const rows: any[] = result.rows
+      const result = await client.unsafe(sql as any)
+      const rows: any[] = result
 
       // Aggregate progress by CMDR
       const cmdrMap = new Map<string, number>()
@@ -301,13 +301,13 @@ const buildGetObjectivesEffect = (
 
     // Execute query
     const result = (yield* Effect.tryPromise({
-      try: () => client.execute({ sql, args }),
+      try: () => client.unsafe(sql as any),
       catch: (error) => new DatabaseError({ operation: "query.objectives", error }),
     })) as { rows: any[] }
 
     // Load full objectives
     const objectives: Objective[] = []
-    for (const row of result.rows) {
+    for (const row of result as any[]) {
       const objectiveId = String(row[0]) as ObjectiveId
       const objectiveOption = yield* objectiveRepo.findById(objectiveId)
       if (Option.isSome(objectiveOption)) {
@@ -318,10 +318,7 @@ const buildGetObjectivesEffect = (
     // Get current tick ID for progress calculation
     const tickResult = (yield* Effect.tryPromise({
       try: () =>
-        client.execute({
-          sql: "SELECT tickid FROM event WHERE tickid IS NOT NULL ORDER BY timestamp DESC LIMIT 1",
-          args: [],
-        }),
+        client`SELECT tickid FROM event WHERE tickid IS NOT NULL ORDER BY timestamp DESC LIMIT 1`,
       catch: () => new DatabaseError({ operation: "query.currentTick", error: "tick query failed" }),
     }).pipe(Effect.orElse(() => Effect.succeed({ rows: [] as any[] })))) as { rows: any[] }
 
@@ -439,7 +436,7 @@ export const ObjectivesApiLive = HttpApiBuilder.group(Api, "objectives", (handle
     .handle("getObjectives", (_request) =>
       Effect.gen(function* () {
         const objectiveRepo = yield* ObjectiveRepository
-        const client = yield* TursoClient
+        const client = yield* PgClient
         const httpRequest = yield* HttpServerRequest.HttpServerRequest
         return yield* buildGetObjectivesEffect(objectiveRepo, client, httpRequest)
       })
@@ -447,7 +444,7 @@ export const ObjectivesApiLive = HttpApiBuilder.group(Api, "objectives", (handle
     .handle("getObjectivesAlt", (_request) =>
       Effect.gen(function* () {
         const objectiveRepo = yield* ObjectiveRepository
-        const client = yield* TursoClient
+        const client = yield* PgClient
         const httpRequest = yield* HttpServerRequest.HttpServerRequest
         return yield* buildGetObjectivesEffect(objectiveRepo, client, httpRequest)
       })

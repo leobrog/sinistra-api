@@ -1,3 +1,4 @@
+import { SQL } from 'bun'
 /**
  * One-shot shoutout sender.
  *
@@ -14,7 +15,7 @@
  * DISCORD_CONFLICT_WEBHOOK, DISCORD_SHOUTOUT_WEBHOOK from .env (auto-loaded by Bun).
  */
 
-import { createClient } from "@libsql/client"
+
 import {
   buildTickSummary,
   buildSpaceCzSummary,
@@ -29,7 +30,7 @@ const BGS_WEBHOOK = process.env.DISCORD_BGS_WEBHOOK ?? ""
 const CONFLICT_WEBHOOK = process.env.DISCORD_CONFLICT_WEBHOOK ?? ""
 const SHOUTOUT_WEBHOOK = process.env.DISCORD_SHOUTOUT_WEBHOOK ?? ""
 
-const client = createClient({ url: DB_URL, authToken: DB_TOKEN })
+const client = new SQL('postgres://postgres:password@localhost:5432/sinistra')
 
 async function resolveHashTickId(): Promise<string> {
   const arg = process.argv[2]
@@ -42,19 +43,14 @@ async function resolveHashTickId(): Promise<string> {
   if (arg) {
     upperBound = arg
   } else {
-    const ts = await client.execute(
-      "SELECT tickid FROM tick_state ORDER BY last_updated DESC LIMIT 1"
-    )
+    const ts = await client`SELECT tickid FROM tick_state ORDER BY last_updated DESC LIMIT 1`
     if (ts.rows.length === 0) throw new Error("No ticks in tick_state")
     upperBound = String(ts.rows[0].tickid)
   }
 
   console.log(`Using upper bound ISO timestamp: ${upperBound}`)
 
-  const result = await client.execute({
-    sql: "SELECT DISTINCT tickid FROM event WHERE tickid IS NOT NULL AND timestamp < ? ORDER BY timestamp DESC LIMIT 1",
-    args: [upperBound],
-  })
+  const result = await client`SELECT DISTINCT tickid FROM event WHERE tickid IS NOT NULL AND timestamp < ${upperBound} ORDER BY timestamp DESC LIMIT 1`
   const hash = result.rows[0]?.tickid as string | undefined
   if (!hash) throw new Error(`No events found before ${upperBound}`)
   return hash

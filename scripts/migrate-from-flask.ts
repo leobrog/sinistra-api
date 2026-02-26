@@ -1,3 +1,4 @@
+import { SQL } from 'bun'
 /**
  * Flask → Bun/Effect Migration Script
  *
@@ -14,7 +15,7 @@
 import { Database } from "bun:sqlite"
 import { readdir, readFile, unlink } from "fs/promises"
 import { join } from "path"
-import { createClient } from "@libsql/client"
+
 
 const SOURCE_DB = "/tmp/bgs_data.db"
 const LOCAL_TARGET_DB = "/tmp/sinistra_migrated.db"
@@ -611,7 +612,7 @@ async function main() {
   log("Phase 2: Pushing to Turso...")
   log(`  Target: ${TURSO_URL}`)
 
-  const turso = createClient({ url: TURSO_URL, ...(TURSO_TOKEN ? { authToken: TURSO_TOKEN } : {}) })
+  const turso = new SQL('postgres://postgres:password@localhost:5432/sinistra')
   const local = new Database(LOCAL_TARGET_DB, { readonly: true })
 
   // Apply schema migrations to Turso (all use CREATE TABLE IF NOT EXISTS)

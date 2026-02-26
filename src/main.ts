@@ -33,7 +33,7 @@ import { FlaskUserRepositoryLive } from "./database/repositories/FlaskUserReposi
 
 // Middleware & Infrastructure
 import { ApiKeyAuthLive } from "./api/middleware/apikey.ts"
-import { TursoClientLive } from "./database/client.ts"
+import { PgClientLive } from "./database/client.ts"
 import { AppConfigLive } from "./lib/config.ts"
 import { JwtServiceLive } from "./services/jwt.ts"
 
@@ -78,7 +78,7 @@ const RepositoriesLayer = Layer.mergeAll(
 
 const ServicesLayer = Layer.mergeAll(JwtServiceLive, ApiKeyAuthLive)
 
-const InfrastructureLayer = Layer.mergeAll(TursoClientLive, AppConfigLive)
+const InfrastructureLayer = Layer.mergeAll(PgClientLive, AppConfigLive)
 
 const SchedulerLayer = SchedulersLive.pipe(Layer.provide(InfrastructureLayer))
 
@@ -101,6 +101,6 @@ const ServerLayer = HttpApiBuilder.serve((app) =>
 // Launch server and schedulers together
 Layer.launch(Layer.mergeAll(ServerLayer, SchedulerLayer)).pipe(
   Effect.tap(() => Effect.logInfo("🚀 Sinistra API Server started on port 3000")),
-  Effect.scoped,
+  
   BunRuntime.runMain
 )

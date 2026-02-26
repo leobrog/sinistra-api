@@ -11,7 +11,7 @@
 import { Effect } from "effect"
 import { HttpServerRequest, HttpServerResponse } from "@effect/platform"
 import type { HttpApp } from "@effect/platform"
-import { TursoClient } from "../database/client.js"
+import { PgClient } from "../database/client.js"
 import { AppConfig } from "../lib/config.js"
 
 const ALLOWED_TABLES = new Set([
@@ -35,7 +35,7 @@ const TABLE_PATH = /^\/api\/table\/([^/]+)$/
 
 export const tableMiddleware = <E, R>(
   app: HttpApp.Default<E, R>
-): HttpApp.Default<E, R | TursoClient | AppConfig> =>
+): HttpApp.Default<E, R | PgClient | AppConfig> =>
   Effect.gen(function* () {
     const req = yield* HttpServerRequest.HttpServerRequest
     const url = new URL(req.url, "http://placeholder")
@@ -64,15 +64,15 @@ export const tableMiddleware = <E, R>(
     }
 
     return yield* Effect.gen(function* () {
-      const client = yield* TursoClient
+      const client = yield* PgClient
 
       const result = yield* Effect.tryPromise({
         try: () =>
-          client.execute({ sql: `SELECT * FROM ${tableName} LIMIT 1000`, args: [] }),
+          client(`SELECT * FROM ${tableName} LIMIT 1000`),
         catch: (error) => new Error(String(error)),
       })
 
-      const rows = result.rows.map((row) =>
+      const rows = (result as any[]).map((row) =>
         Object.fromEntries(result.columns.map((col, i) => [col, row[i]]))
       )
 
@@ -82,4 +82,4 @@ export const tableMiddleware = <E, R>(
         HttpServerResponse.json({ error: "Database error" }, { status: 500 }).pipe(Effect.orDie)
       )
     )
-  }) as HttpApp.Default<E, R | TursoClient | AppConfig>
+  }) as HttpApp.Default<E, R | PgClient | AppConfig>

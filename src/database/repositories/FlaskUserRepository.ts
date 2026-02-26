@@ -1,5 +1,5 @@
 import { Effect, Layer, Option, Schema } from "effect"
-import { TursoClient } from "../client.ts"
+import { PgClient } from "../client.ts"
 import { FlaskUserRepository } from "../../domain/repositories.ts"
 import { FlaskUser } from "../../domain/models.ts"
 import { DatabaseError, UserAlreadyExistsError, UserNotFoundError } from "../../domain/errors.ts"
@@ -22,7 +22,7 @@ const mapRowToFlaskUser = (row: Record<string, unknown>) => ({
 export const FlaskUserRepositoryLive = Layer.effect(
   FlaskUserRepository,
   Effect.gen(function* () {
-    const client = yield* TursoClient
+    const client = yield* PgClient
     const decodeFlaskUser = Schema.decodeUnknown(FlaskUser)
 
     return FlaskUserRepository.of({
@@ -31,10 +31,7 @@ export const FlaskUserRepositoryLive = Layer.effect(
           // Check if user already exists
           const existingByUsername = yield* Effect.tryPromise({
             try: () =>
-              client.execute({
-                sql: "SELECT id FROM flask_users WHERE username = ?",
-                args: [user.username],
-              }),
+              client`SELECT id FROM flask_users WHERE username = ${user.username}`,
             catch: (error) =>
               new DatabaseError({
                 operation: "checkUsername.flaskUser",
@@ -54,10 +51,7 @@ export const FlaskUserRepositoryLive = Layer.effect(
           if (Option.isSome(user.discordId)) {
             const existingByDiscord = yield* Effect.tryPromise({
               try: () =>
-                client.execute({
-                  sql: "SELECT id FROM flask_users WHERE discord_id = ?",
-                  args: [Option.getOrNull(user.discordId)],
-                }),
+                client`SELECT id FROM flask_users WHERE discord_id = ${Option.getOrNull(user.discordId)}`,
               catch: (error) =>
                 new DatabaseError({
                   operation: "checkDiscordId.flaskUser",
@@ -77,22 +71,8 @@ export const FlaskUserRepositoryLive = Layer.effect(
           // Insert new user
           yield* Effect.tryPromise({
             try: () =>
-              client.execute({
-                sql: `INSERT INTO flask_users (id, username, password_hash, discord_id, discord_username, is_admin, active, cmdr_id, created_at, updated_at)
-                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                args: [
-                  user.id,
-                  user.username,
-                  user.passwordHash,
-                  Option.getOrNull(user.discordId),
-                  Option.getOrNull(user.discordUsername),
-                  user.isAdmin ? 1 : 0,
-                  user.active ? 1 : 0,
-                  Option.getOrNull(user.cmdrId),
-                  user.createdAt.toISOString(),
-                  user.updatedAt.toISOString(),
-                ],
-              }),
+              client`INSERT INTO flask_users (id, username, password_hash, discord_id, discord_username, is_admin, active, cmdr_id, created_at, updated_at)
+                      VALUES (${user.id}, ${user.username}, ${user.passwordHash}, ${Option.getOrNull(user.discordId)}, ${Option.getOrNull(user.discordUsername)}, ${user.isAdmin ? 1 : 0}, ${user.active ? 1 : 0}, ${Option.getOrNull(user.cmdrId)}, ${user.createdAt.toISOString()}, ${user.updatedAt.toISOString()})`,
             catch: (error) =>
               new DatabaseError({
                 operation: "create.flaskUser",
@@ -105,10 +85,7 @@ export const FlaskUserRepositoryLive = Layer.effect(
         Effect.gen(function* () {
           const result = yield* Effect.tryPromise({
             try: () =>
-              client.execute({
-                sql: "SELECT * FROM flask_users WHERE id = ?",
-                args: [id],
-              }),
+              client`SELECT * FROM flask_users WHERE id = ${id}`,
             catch: (error) =>
               new DatabaseError({
                 operation: "findById.flaskUser",
@@ -116,7 +93,7 @@ export const FlaskUserRepositoryLive = Layer.effect(
               }),
           })
 
-          const row = result.rows[0]
+          const row = (result as any)[0]
           if (!row) return Option.none()
 
           const user = yield* decodeFlaskUser(mapRowToFlaskUser(row)).pipe(
@@ -136,10 +113,7 @@ export const FlaskUserRepositoryLive = Layer.effect(
         Effect.gen(function* () {
           const result = yield* Effect.tryPromise({
             try: () =>
-              client.execute({
-                sql: "SELECT * FROM flask_users WHERE username = ?",
-                args: [username],
-              }),
+              client`SELECT * FROM flask_users WHERE username = ${username}`,
             catch: (error) =>
               new DatabaseError({
                 operation: "findByUsername.flaskUser",
@@ -147,7 +121,7 @@ export const FlaskUserRepositoryLive = Layer.effect(
               }),
           })
 
-          const row = result.rows[0]
+          const row = (result as any)[0]
           if (!row) return Option.none()
 
           const user = yield* decodeFlaskUser(mapRowToFlaskUser(row)).pipe(
@@ -167,10 +141,7 @@ export const FlaskUserRepositoryLive = Layer.effect(
         Effect.gen(function* () {
           const result = yield* Effect.tryPromise({
             try: () =>
-              client.execute({
-                sql: "SELECT * FROM flask_users WHERE discord_id = ? AND active = 1",
-                args: [discordId],
-              }),
+              client`SELECT * FROM flask_users WHERE discord_id = ${discordId} AND active = 1`,
             catch: (error) =>
               new DatabaseError({
                 operation: "findByDiscordId.flaskUser",
@@ -178,7 +149,7 @@ export const FlaskUserRepositoryLive = Layer.effect(
               }),
           })
 
-          const row = result.rows[0]
+          const row = (result as any)[0]
           if (!row) return Option.none()
 
           const user = yield* decodeFlaskUser(mapRowToFlaskUser(row)).pipe(
@@ -198,22 +169,9 @@ export const FlaskUserRepositoryLive = Layer.effect(
         Effect.gen(function* () {
           const result = yield* Effect.tryPromise({
             try: () =>
-              client.execute({
-                sql: `UPDATE flask_users
-                      SET username = ?, password_hash = ?, discord_id = ?, discord_username = ?, is_admin = ?, active = ?, cmdr_id = ?, updated_at = ?
-                      WHERE id = ?`,
-                args: [
-                  user.username,
-                  user.passwordHash,
-                  Option.getOrNull(user.discordId),
-                  Option.getOrNull(user.discordUsername),
-                  user.isAdmin ? 1 : 0,
-                  user.active ? 1 : 0,
-                  Option.getOrNull(user.cmdrId),
-                  user.updatedAt.toISOString(),
-                  user.id,
-                ],
-              }),
+              client`UPDATE flask_users
+                      SET username = ${user.username}, password_hash = ${user.passwordHash}, discord_id = ${Option.getOrNull(user.discordId)}, discord_username = ${Option.getOrNull(user.discordUsername)}, is_admin = ${user.isAdmin ? 1 : 0}, active = ${user.active ? 1 : 0}, cmdr_id = ${Option.getOrNull(user.cmdrId)}, updated_at = ${user.updatedAt.toISOString()}
+                      WHERE id = ${user.id}`,
             catch: (error) =>
               new DatabaseError({
                 operation: "update.flaskUser",
@@ -221,7 +179,7 @@ export const FlaskUserRepositoryLive = Layer.effect(
               }),
           })
 
-          if (result.rowsAffected === 0) {
+          if ((result as any).length === 0) {
             return yield* Effect.fail(
               new UserNotFoundError({
                 id: user.id as UserId,
@@ -233,10 +191,7 @@ export const FlaskUserRepositoryLive = Layer.effect(
       delete: (id) =>
         Effect.tryPromise({
           try: () =>
-            client.execute({
-              sql: "DELETE FROM flask_users WHERE id = ?",
-              args: [id],
-            }),
+            client`DELETE FROM flask_users WHERE id = ${id}`,
           catch: (error) =>
             new DatabaseError({
               operation: "delete.flaskUser",
