@@ -60,7 +60,7 @@ const eventDataToEvent = (data: EventData): Event => {
     timestamp: data.timestamp,
     tickid: data.tickid || "",
     ticktime: data.ticktime || "",
-    cmdr: Option.fromNullable(data.Cmdr),
+    cmdr: Option.fromNullable(data.cmdr ?? data.Cmdr),
     starsystem: Option.fromNullable(data.StarSystem),
     systemaddress: Option.fromNullable(data.SystemAddress),
     rawJson: Option.some(JSON.stringify(data)),
@@ -258,7 +258,8 @@ const createSubEvents = (
         ],
       }
 
-    case "SyntheticCZ": {
+    case "SyntheticCZ":
+    case "SyntheticSpaceCZ": {
       const czType = extractCzType(data)
       const faction = data.faction || data.Faction
 
@@ -317,15 +318,22 @@ export const EventsApiLive = HttpApiBuilder.group(Api, "events", (handlers) =>
         yield* eventRepo.createEvent(event, subEvents)
       }
 
-      // Immediate conflict detection: FSDJump/Location events with Conflicts data
-      const conflictEvents = request.payload.filter(
-        (e) => ["FSDJump", "Location"].includes(e.event) && (e.Conflicts as any[])?.length > 0
+      // Immediate conflict detection: process all FSDJump/Location events.
+      // - Systems with Conflicts data → add/update in conflict_state
+      // - Systems visited with NO Conflicts → if tracked in conflict_state, mark as ended
+      const jumpEvents = request.payload.filter(
+        (e) => ["FSDJump", "Location"].includes(e.event)
       )
 
-      if (conflictEvents.length > 0) {
+      if (jumpEvents.length > 0) {
         const client = yield* TursoClient
         const config = yield* AppConfig
         const webhookUrl = Option.getOrNull(config.discord.webhooks.conflict)
+
+        // Collect every system the commander visited so we can scope cleanup
+        const visitedSystems = new Set(
+          jumpEvents.map((e) => String((e as any).StarSystem ?? "")).filter(Boolean)
+        )
 
         yield* Effect.forkDaemon(
           Effect.gen(function* () {
@@ -336,17 +344,16 @@ export const EventsApiLive = HttpApiBuilder.group(Api, "events", (handlers) =>
               },
               catch: (e) => new Error(`${e}`),
             })
-            const conflictMap = parseConflictsFromEntries(conflictEvents, factionNames)
-            if (conflictMap.size > 0) {
-              yield* runConflictDiff(
-                client,
-                webhookUrl,
-                conflictMap,
-                factionNames,
-                new Date().toISOString(),
-                "Event conflict check"
-              )
-            }
+            const conflictMap = parseConflictsFromEntries(jumpEvents, factionNames)
+            yield* runConflictDiff(
+              client,
+              webhookUrl,
+              conflictMap,
+              factionNames,
+              new Date().toISOString(),
+              "Event conflict check",
+              { cleanupScope: visitedSystems }
+            )
           }).pipe(Effect.catchAll((e) => Effect.logWarning(`Event conflict check: ${e}`)))
         )
       }

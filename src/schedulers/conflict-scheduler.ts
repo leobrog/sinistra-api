@@ -31,6 +31,7 @@ export interface ConflictEntry {
   stake2: string
   wonDays1: number
   wonDays2: number
+  updatedAt?: string  // ISO string from conflict_state.updated_at, if loaded from DB
 }
 
 // ---------------------------------------------------------------------------
@@ -128,6 +129,7 @@ const loadConflictState = async (client: Client): Promise<Map<string, ConflictEn
       stake2: String(row.stake2 ?? ""),
       wonDays1: Number(row.won_days1),
       wonDays2: Number(row.won_days2),
+      ...(row.updated_at ? { updatedAt: String(row.updated_at) } : {}),
     })
   }
   return map
@@ -242,6 +244,28 @@ const formatConflictResolved = (
   }
 }
 
+const formatConflictEnded = (
+  system: string,
+  entry: ConflictEntry,
+  factionNames: Set<string>
+): string => {
+  const ourSide = factionNames.has(entry.faction1) ? 1 : 2
+  const ourDays = ourSide === 1 ? entry.wonDays1 : entry.wonDays2
+  const theirDays = ourSide === 1 ? entry.wonDays2 : entry.wonDays1
+  const ourFaction = ourSide === 1 ? entry.faction1 : entry.faction2
+  const theirFaction = ourSide === 1 ? entry.faction2 : entry.faction1
+  const weWereAhead = ourDays > theirDays
+  const emoji = weWereAhead ? "🏆" : ourDays === theirDays ? "🤝" : "💀"
+  const stake = ourSide === 1 ? entry.stake1 : entry.stake2
+  return [
+    `${emoji} Conflict ended in **${system}** (last known score)`,
+    `${ourFaction}: ${ourDays} day${ourDays !== 1 ? "s" : ""} | ${theirFaction}: ${theirDays} day${theirDays !== 1 ? "s" : ""}`,
+    stake ? `Stake: ${stake}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n")
+}
+
 // ---------------------------------------------------------------------------
 // Discord helper
 // ---------------------------------------------------------------------------
@@ -275,7 +299,17 @@ export const runConflictDiff = (
   currentConflicts: Map<string, ConflictEntry>,
   factionNames: Set<string>,
   tickRef: string,
-  logPrefix: string
+  logPrefix: string,
+  options: {
+    /**
+     * Controls which systems are eligible for cleanup (deletion from conflict_state
+     * when absent from currentConflicts):
+     *   'all'       — clean up every missing system (EDDN hourly scan)
+     *   Set<string> — only clean up systems the caller actually observed (event handler)
+     *   undefined   — no cleanup; caller has partial knowledge (tick scheduler)
+     */
+    cleanupScope?: "all" | Set<string>
+  } = {}
 ): Effect.Effect<void> =>
   Effect.gen(function* () {
     const prevState = yield* Effect.tryPromise({
@@ -339,14 +373,35 @@ export const runConflictDiff = (
       }).pipe(Effect.catchAll((e) => Effect.logWarning(`${e}`)))
     }
 
-    // --- Silently clean up systems no longer present ---
-    for (const system of prevState.keys()) {
-      if (!currentConflicts.has(system)) {
+    // --- Clean up systems no longer present ---
+    // Only runs for callers that have full or partial knowledge of which systems
+    // they observed. Callers with no knowledge (tick scheduler) pass no cleanupScope
+    // and skip this block entirely.
+    if (options.cleanupScope !== undefined) {
+      const scope = options.cleanupScope
+      const oneDayMs = 24 * 60 * 60 * 1000
+      for (const [system, prev] of prevState.entries()) {
+        if (currentConflicts.has(system)) continue
+        // Scoped cleanup: skip systems the caller didn't visit
+        if (scope !== "all" && !scope.has(system)) continue
+
         yield* Effect.tryPromise({
           try: () => deleteConflictState(client, system),
           catch: (e) => new Error(`Delete failed: ${e}`),
         }).pipe(Effect.catchAll((e) => Effect.logWarning(`${e}`)))
-        yield* Effect.logInfo(`${logPrefix}: conflict gone (data gap / late resolve) in ${system}`)
+
+        // If the conflict was recently active (within 24h), it most likely ended —
+        // wars last at most 7 days so a recent disappearance means a resolution
+        const recentlyActive =
+          prev.updatedAt !== undefined &&
+          Date.now() - new Date(prev.updatedAt).getTime() < oneDayMs
+
+        if (recentlyActive && webhookUrl) {
+          yield* postToDiscord(webhookUrl, formatConflictEnded(system, prev, factionNames))
+        }
+        yield* Effect.logInfo(
+          `${logPrefix}: conflict ended in ${system}${recentlyActive ? " (notification sent)" : " (stale, silent)"}`
+        )
       }
     }
 
@@ -395,6 +450,8 @@ export const runConflictCheck = (
       )
     )
 
+    // No cleanupScope: tick scheduler sees only events from commanders who submitted
+    // journals, so it has a partial view. Cleanup is delegated to the EDDN hourly scan.
     yield* runConflictDiff(client, webhookUrl, currentConflicts, factionNames, currentTick, "Conflict scheduler")
   })
 
