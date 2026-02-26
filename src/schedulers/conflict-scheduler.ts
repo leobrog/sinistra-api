@@ -23,7 +23,7 @@ import { TickBus } from "../services/TickBus.js"
 // Types
 // ---------------------------------------------------------------------------
 
-interface ConflictEntry {
+export interface ConflictEntry {
   warType: string
   faction1: string
   faction2: string
@@ -249,6 +249,98 @@ const postToDiscord = (webhookUrl: string, content: string): Effect.Effect<void>
   )
 
 // ---------------------------------------------------------------------------
+// Shared diff + notification logic
+// ---------------------------------------------------------------------------
+
+/**
+ * Diff currentConflicts against conflict_state and post Discord notifications.
+ * Shared by the tick-based scheduler and the EDDN hourly scan.
+ */
+export const runConflictDiff = (
+  client: Client,
+  webhookUrl: string | null,
+  currentConflicts: Map<string, ConflictEntry>,
+  factionNames: Set<string>,
+  tickRef: string,
+  logPrefix: string
+): Effect.Effect<void> =>
+  Effect.gen(function* () {
+    const prevState = yield* Effect.tryPromise({
+      try: () => loadConflictState(client),
+      catch: (e) => new Error(`Load conflict state failed: ${e}`),
+    }).pipe(
+      Effect.catchAll((e) =>
+        Effect.logWarning(`${e}`).pipe(Effect.as(new Map<string, ConflictEntry>()))
+      )
+    )
+
+    // --- Process systems present in current data ---
+    for (const [system, current] of currentConflicts.entries()) {
+      const prev = prevState.get(system)
+
+      if (!prev) {
+        yield* Effect.tryPromise({
+          try: () => upsertConflictState(client, system, current, tickRef),
+          catch: (e) => new Error(`Upsert failed: ${e}`),
+        }).pipe(Effect.catchAll((e) => Effect.logWarning(`${e}`)))
+
+        if (webhookUrl) {
+          yield* postToDiscord(webhookUrl, formatNewConflict(system, current))
+        }
+        yield* Effect.logInfo(`${logPrefix}: new conflict in ${system}`)
+        continue
+      }
+
+      // Conflict already known — check win condition first
+      if (current.wonDays1 >= 4 || current.wonDays2 >= 4) {
+        yield* Effect.tryPromise({
+          try: () => deleteConflictState(client, system),
+          catch: (e) => new Error(`Delete failed: ${e}`),
+        }).pipe(Effect.catchAll((e) => Effect.logWarning(`${e}`)))
+
+        if (webhookUrl) {
+          yield* postToDiscord(webhookUrl, formatConflictResolved(system, current, factionNames))
+        }
+        yield* Effect.logInfo(`${logPrefix}: conflict resolved in ${system}`)
+        continue
+      }
+
+      // Day scored?
+      if (current.wonDays1 > prev.wonDays1 || current.wonDays2 > prev.wonDays2) {
+        yield* Effect.tryPromise({
+          try: () => upsertConflictState(client, system, current, tickRef),
+          catch: (e) => new Error(`Upsert failed: ${e}`),
+        }).pipe(Effect.catchAll((e) => Effect.logWarning(`${e}`)))
+
+        if (webhookUrl) {
+          yield* postToDiscord(webhookUrl, formatDayScored(system, current, prev))
+        }
+        yield* Effect.logInfo(`${logPrefix}: day scored in ${system}`)
+        continue
+      }
+
+      // Unchanged — just refresh the tick reference
+      yield* Effect.tryPromise({
+        try: () => upsertConflictState(client, system, current, tickRef),
+        catch: (e) => new Error(`Upsert failed: ${e}`),
+      }).pipe(Effect.catchAll((e) => Effect.logWarning(`${e}`)))
+    }
+
+    // --- Silently clean up systems no longer present ---
+    for (const system of prevState.keys()) {
+      if (!currentConflicts.has(system)) {
+        yield* Effect.tryPromise({
+          try: () => deleteConflictState(client, system),
+          catch: (e) => new Error(`Delete failed: ${e}`),
+        }).pipe(Effect.catchAll((e) => Effect.logWarning(`${e}`)))
+        yield* Effect.logInfo(`${logPrefix}: conflict gone (data gap / late resolve) in ${system}`)
+      }
+    }
+
+    yield* Effect.logInfo(`${logPrefix}: processed — ${currentConflicts.size} active conflict(s)`)
+  })
+
+// ---------------------------------------------------------------------------
 // Per-tick diff + notification logic
 // ---------------------------------------------------------------------------
 
@@ -281,98 +373,16 @@ export const runConflictCheck = (
 
     yield* Effect.logInfo(`Conflict scheduler: tracking ${factionNames.size} faction(s): ${[...factionNames].join(", ")}`)
 
-    const [currentConflicts, prevState] = yield* Effect.all([
-      Effect.tryPromise({
-        try: () => extractConflicts(client, previousTick, factionNames),
-        catch: (e) => new Error(`Conflict extraction failed: ${e}`),
-      }).pipe(
-        Effect.catchAll((e) =>
-          Effect.logWarning(`${e}`).pipe(Effect.as(new Map<string, ConflictEntry>()))
-        )
-      ),
-      Effect.tryPromise({
-        try: () => loadConflictState(client),
-        catch: (e) => new Error(`Load conflict state failed: ${e}`),
-      }).pipe(
-        Effect.catchAll((e) =>
-          Effect.logWarning(`${e}`).pipe(Effect.as(new Map<string, ConflictEntry>()))
-        )
-      ),
-    ])
-
-    // --- Process systems present in the current tick ---
-    for (const [system, current] of currentConflicts.entries()) {
-      const prev = prevState.get(system)
-
-      if (!prev) {
-        // New conflict — insert state, notify
-        yield* Effect.tryPromise({
-          try: () => upsertConflictState(client, system, current, currentTick),
-          catch: (e) => new Error(`Upsert failed: ${e}`),
-        }).pipe(Effect.catchAll((e) => Effect.logWarning(`${e}`)))
-
-        if (webhookUrl) {
-          yield* postToDiscord(webhookUrl, formatNewConflict(system, current))
-        }
-        yield* Effect.logInfo(`Conflict scheduler: new conflict in ${system}`)
-        continue
-      }
-
-      // Conflict already known — check win condition first
-      if (current.wonDays1 >= 4 || current.wonDays2 >= 4) {
-        yield* Effect.tryPromise({
-          try: () => deleteConflictState(client, system),
-          catch: (e) => new Error(`Delete failed: ${e}`),
-        }).pipe(Effect.catchAll((e) => Effect.logWarning(`${e}`)))
-
-        if (webhookUrl) {
-          yield* postToDiscord(
-            webhookUrl,
-            formatConflictResolved(system, current, factionNames)
-          )
-        }
-        yield* Effect.logInfo(`Conflict scheduler: conflict resolved in ${system}`)
-        continue
-      }
-
-      // Day scored?
-      if (current.wonDays1 > prev.wonDays1 || current.wonDays2 > prev.wonDays2) {
-        yield* Effect.tryPromise({
-          try: () => upsertConflictState(client, system, current, currentTick),
-          catch: (e) => new Error(`Upsert failed: ${e}`),
-        }).pipe(Effect.catchAll((e) => Effect.logWarning(`${e}`)))
-
-        if (webhookUrl) {
-          yield* postToDiscord(webhookUrl, formatDayScored(system, current, prev))
-        }
-        yield* Effect.logInfo(`Conflict scheduler: day scored in ${system}`)
-        continue
-      }
-
-      // Unchanged — just refresh the tick reference
-      yield* Effect.tryPromise({
-        try: () => upsertConflictState(client, system, current, currentTick),
-        catch: (e) => new Error(`Upsert failed: ${e}`),
-      }).pipe(Effect.catchAll((e) => Effect.logWarning(`${e}`)))
-    }
-
-    // --- Silently clean up systems no longer in current tick ---
-    for (const system of prevState.keys()) {
-      if (!currentConflicts.has(system)) {
-        yield* Effect.tryPromise({
-          try: () => deleteConflictState(client, system),
-          catch: (e) => new Error(`Delete failed: ${e}`),
-        }).pipe(Effect.catchAll((e) => Effect.logWarning(`${e}`)))
-        yield* Effect.logInfo(
-          `Conflict scheduler: conflict gone (data gap / late resolve) in ${system}`
-        )
-      }
-    }
-
-    yield* Effect.logInfo(
-      `Conflict scheduler: tick ${currentTick} processed — ` +
-        `${currentConflicts.size} active conflict(s)`
+    const currentConflicts = yield* Effect.tryPromise({
+      try: () => extractConflicts(client, previousTick, factionNames),
+      catch: (e) => new Error(`Conflict extraction failed: ${e}`),
+    }).pipe(
+      Effect.catchAll((e) =>
+        Effect.logWarning(`${e}`).pipe(Effect.as(new Map<string, ConflictEntry>()))
+      )
     )
+
+    yield* runConflictDiff(client, webhookUrl, currentConflicts, factionNames, currentTick, "Conflict scheduler")
   })
 
 // ---------------------------------------------------------------------------

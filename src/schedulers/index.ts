@@ -13,6 +13,7 @@ import { runTickMonitor } from "./tick-monitor.js"
 import { runShoutoutScheduler } from "./shoutout-scheduler.js"
 import { runConflictScheduler } from "./conflict-scheduler.js"
 import { runInaraSync } from "./inara-sync.js"
+import { runEddnConflictScan } from "./eddn-conflict-scan.js"
 
 export const SchedulersLive: Layer.Layer<never, never, AppConfig | TursoClient> =
   Layer.effectDiscard(
@@ -37,6 +38,7 @@ export const SchedulersLive: Layer.Layer<never, never, AppConfig | TursoClient> 
         Effect.provideService(runConflictScheduler, TickBus, bus)
       )
       yield* Effect.forkDaemon(runInaraSync)
+      yield* Effect.forkDaemon(runEddnConflictScan)
 
       yield* Effect.logInfo("All schedulers forked")
     })
