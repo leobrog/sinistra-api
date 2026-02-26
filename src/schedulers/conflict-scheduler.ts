@@ -38,38 +38,26 @@ export interface ConflictEntry {
 // ---------------------------------------------------------------------------
 
 /**
- * Parse raw_json for each event in the given tick, extract conflicts
- * where any of our tracked factions appears as Faction1 or Faction2.
- * Deduplicates by system, keeping the most recent jump entry.
+ * Parse an array of journal-style entries and extract conflict data for tracked factions.
+ * Each entry needs: event, StarSystem, Conflicts[], and optionally timestamp (for dedup).
+ * Exported so the events POST handler can reuse it directly on incoming DTO data.
  */
-const extractConflicts = async (
-  client: Client,
-  tickId: string,
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const parseConflictsFromEntries = (
+  entries: ReadonlyArray<Record<string, any>>,
   factionNames: Set<string>
-): Promise<Map<string, ConflictEntry>> => {
-  const result = await client.execute({
-    sql: "SELECT raw_json, timestamp FROM event WHERE tickid = ? AND raw_json IS NOT NULL",
-    args: [tickId],
-  })
-
+): Map<string, ConflictEntry> => {
   const raw = new Map<string, ConflictEntry & { detectedAt: string }>()
 
-  for (const row of result.rows) {
-    let parsed: any
-    try {
-      parsed = JSON.parse(String(row.raw_json))
-    } catch {
-      continue
-    }
-
-    const eventType: string = parsed?.event ?? ""
+  for (const entry of entries) {
+    const eventType: string = entry?.event ?? ""
     if (!["FSDJump", "Location"].includes(eventType)) continue
 
-    const system: string = parsed?.StarSystem ?? ""
+    const system: string = entry?.StarSystem ?? ""
     if (!system) continue
 
-    const rawConflicts: any[] = parsed?.Conflicts ?? []
-    const timestamp: string = String(row.timestamp ?? "")
+    const rawConflicts: any[] = entry?.Conflicts ?? []
+    const timestamp: string = entry?.timestamp ?? ""
 
     for (const c of rawConflicts) {
       const f1: string = c?.Faction1?.Name ?? ""
@@ -97,6 +85,31 @@ const extractConflicts = async (
     out.set(system, entry)
   }
   return out
+}
+
+/**
+ * Query the DB for events in a given tick and extract conflicts for tracked factions.
+ */
+const extractConflicts = async (
+  client: Client,
+  tickId: string,
+  factionNames: Set<string>
+): Promise<Map<string, ConflictEntry>> => {
+  const result = await client.execute({
+    sql: "SELECT raw_json, timestamp FROM event WHERE tickid = ? AND raw_json IS NOT NULL",
+    args: [tickId],
+  })
+
+  const entries = result.rows.flatMap((row) => {
+    try {
+      const parsed = JSON.parse(String(row.raw_json))
+      return [{ ...parsed, timestamp: String(row.timestamp ?? "") }]
+    } catch {
+      return []
+    }
+  })
+
+  return parseConflictsFromEntries(entries, factionNames)
 }
 
 // ---------------------------------------------------------------------------

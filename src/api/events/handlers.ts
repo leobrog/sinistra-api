@@ -3,6 +3,9 @@ import { HttpApiBuilder } from "@effect/platform"
 import { v4 as uuid } from "uuid"
 import { Api } from "../index.js"
 import { EventRepository } from "../../domain/repositories.js"
+import { TursoClient } from "../../database/client.js"
+import { AppConfig } from "../../lib/config.js"
+import { runConflictDiff, parseConflictsFromEntries } from "../../schedulers/conflict-scheduler.js"
 import type { EventData } from "./dtos.js"
 import {
   Event,
@@ -314,8 +317,39 @@ export const EventsApiLive = HttpApiBuilder.group(Api, "events", (handlers) =>
         yield* eventRepo.createEvent(event, subEvents)
       }
 
-      // TODO: Detect tick changes (implement in future iteration)
-      // Flask tracks last_known_tickid and logs changes
+      // Immediate conflict detection: FSDJump/Location events with Conflicts data
+      const conflictEvents = request.payload.filter(
+        (e) => ["FSDJump", "Location"].includes(e.event) && (e.Conflicts as any[])?.length > 0
+      )
+
+      if (conflictEvents.length > 0) {
+        const client = yield* TursoClient
+        const config = yield* AppConfig
+        const webhookUrl = Option.getOrNull(config.discord.webhooks.conflict)
+
+        yield* Effect.forkDaemon(
+          Effect.gen(function* () {
+            const factionNames = yield* Effect.tryPromise({
+              try: async () => {
+                const result = await client.execute("SELECT name FROM protected_faction")
+                return new Set(result.rows.map((r) => String(r.name)))
+              },
+              catch: (e) => new Error(`${e}`),
+            })
+            const conflictMap = parseConflictsFromEntries(conflictEvents, factionNames)
+            if (conflictMap.size > 0) {
+              yield* runConflictDiff(
+                client,
+                webhookUrl,
+                conflictMap,
+                factionNames,
+                new Date().toISOString(),
+                "Event conflict check"
+              )
+            }
+          }).pipe(Effect.catchAll((e) => Effect.logWarning(`Event conflict check: ${e}`)))
+        )
+      }
 
       return {
         status: "success" as const,
