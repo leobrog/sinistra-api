@@ -31,6 +31,7 @@ export interface ConflictEntry {
   stake2: string
   wonDays1: number
   wonDays2: number
+  updatedAt?: string  // ISO string from conflict_state.updated_at, if loaded from DB
 }
 
 // ---------------------------------------------------------------------------
@@ -128,6 +129,7 @@ const loadConflictState = async (client: Client): Promise<Map<string, ConflictEn
       stake2: String(row.stake2 ?? ""),
       wonDays1: Number(row.won_days1),
       wonDays2: Number(row.won_days2),
+      ...(row.updated_at ? { updatedAt: String(row.updated_at) } : {}),
     })
   }
   return map
@@ -242,6 +244,28 @@ const formatConflictResolved = (
   }
 }
 
+const formatConflictEnded = (
+  system: string,
+  entry: ConflictEntry,
+  factionNames: Set<string>
+): string => {
+  const ourSide = factionNames.has(entry.faction1) ? 1 : 2
+  const ourDays = ourSide === 1 ? entry.wonDays1 : entry.wonDays2
+  const theirDays = ourSide === 1 ? entry.wonDays2 : entry.wonDays1
+  const ourFaction = ourSide === 1 ? entry.faction1 : entry.faction2
+  const theirFaction = ourSide === 1 ? entry.faction2 : entry.faction1
+  const weWereAhead = ourDays > theirDays
+  const emoji = weWereAhead ? "🏆" : ourDays === theirDays ? "🤝" : "💀"
+  const stake = ourSide === 1 ? entry.stake1 : entry.stake2
+  return [
+    `${emoji} Conflict ended in **${system}** (last known score)`,
+    `${ourFaction}: ${ourDays} day${ourDays !== 1 ? "s" : ""} | ${theirFaction}: ${theirDays} day${theirDays !== 1 ? "s" : ""}`,
+    stake ? `Stake: ${stake}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n")
+}
+
 // ---------------------------------------------------------------------------
 // Discord helper
 // ---------------------------------------------------------------------------
@@ -339,14 +363,27 @@ export const runConflictDiff = (
       }).pipe(Effect.catchAll((e) => Effect.logWarning(`${e}`)))
     }
 
-    // --- Silently clean up systems no longer present ---
-    for (const system of prevState.keys()) {
+    // --- Clean up systems no longer present ---
+    const oneDayMs = 24 * 60 * 60 * 1000
+    for (const [system, prev] of prevState.entries()) {
       if (!currentConflicts.has(system)) {
         yield* Effect.tryPromise({
           try: () => deleteConflictState(client, system),
           catch: (e) => new Error(`Delete failed: ${e}`),
         }).pipe(Effect.catchAll((e) => Effect.logWarning(`${e}`)))
-        yield* Effect.logInfo(`${logPrefix}: conflict gone (data gap / late resolve) in ${system}`)
+
+        // If the conflict was recently active (within 24h), it most likely ended —
+        // wars last at most 7 days so a recent disappearance means a resolution
+        const recentlyActive =
+          prev.updatedAt !== undefined &&
+          Date.now() - new Date(prev.updatedAt).getTime() < oneDayMs
+
+        if (recentlyActive && webhookUrl) {
+          yield* postToDiscord(webhookUrl, formatConflictEnded(system, prev, factionNames))
+        }
+        yield* Effect.logInfo(
+          `${logPrefix}: conflict ended in ${system}${recentlyActive ? " (notification sent)" : " (stale, silent)"}`
+        )
       }
     }
 
