@@ -18,17 +18,9 @@ const RETENTION_MS = parseInt(process.env.EDDN_MESSAGE_RETENTION_MS ?? "86400000
 const RETRY_DELAY_MS = 5000
 
 const client = createClient({ url: DB_URL, authToken: AUTH_TOKEN })
+await client.execute("PRAGMA busy_timeout = 3000")
 
 // ---------------------------------------------------------------------------
-
-async function deleteSystemData(systemName) {
-  await client.batch([
-    { sql: "DELETE FROM eddn_system_info WHERE system_name = ?", args: [systemName] },
-    { sql: "DELETE FROM eddn_faction WHERE system_name = ?", args: [systemName] },
-    { sql: "DELETE FROM eddn_conflict WHERE system_name = ?", args: [systemName] },
-    { sql: "DELETE FROM eddn_powerplay WHERE system_name = ?", args: [systemName] },
-  ])
-}
 
 async function saveEddnData(data) {
   const msg = data?.message ?? {}
@@ -42,15 +34,23 @@ async function saveEddnData(data) {
   const now = new Date().toISOString()
   const msgId = crypto.randomUUID()
 
-  await client.execute({
+  const statements = []
+
+  // 1. Insert raw message
+  statements.push({
     sql: `INSERT INTO eddn_message (id, schema_ref, header_gateway_timestamp, message_type, message_json, timestamp)
           VALUES (?, ?, ?, ?, ?, ?)`,
     args: [msgId, data?.["$schemaRef"] ?? "", data?.header?.gatewayTimestamp ?? null, messageType, JSON.stringify(data), now],
   })
 
-  await deleteSystemData(systemName)
+  // 2. Delete stale system data
+  statements.push({ sql: "DELETE FROM eddn_system_info WHERE system_name = ?", args: [systemName] })
+  statements.push({ sql: "DELETE FROM eddn_faction WHERE system_name = ?", args: [systemName] })
+  statements.push({ sql: "DELETE FROM eddn_conflict WHERE system_name = ?", args: [systemName] })
+  statements.push({ sql: "DELETE FROM eddn_powerplay WHERE system_name = ?", args: [systemName] })
 
-  await client.execute({
+  // 3. Insert system info
+  statements.push({
     sql: `INSERT INTO eddn_system_info (id, eddn_message_id, system_name, controlling_faction, controlling_power, population, security, government, allegiance, updated_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
@@ -61,8 +61,9 @@ async function saveEddnData(data) {
     ],
   })
 
+  // 4. Factions
   for (const f of msg.Factions ?? []) {
-    await client.execute({
+    statements.push({
       sql: `INSERT INTO eddn_faction (id, eddn_message_id, system_name, name, influence, state, allegiance, government, recovering_states, active_states, pending_states, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       args: [
@@ -77,8 +78,9 @@ async function saveEddnData(data) {
     })
   }
 
+  // 5. Conflicts
   for (const c of msg.Conflicts ?? []) {
-    await client.execute({
+    statements.push({
       sql: `INSERT INTO eddn_conflict (id, eddn_message_id, system_name, faction1, faction2, stake1, stake2, won_days1, won_days2, status, war_type, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       args: [
@@ -91,9 +93,10 @@ async function saveEddnData(data) {
     })
   }
 
+  // 6. Powerplay
   if ("Powers" in msg || "PowerplayState" in msg) {
     const powers = msg.Powers
-    await client.execute({
+    statements.push({
       sql: `INSERT INTO eddn_powerplay (id, eddn_message_id, system_name, power, powerplay_state, control_progress, reinforcement, undermining, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       args: [
@@ -105,6 +108,8 @@ async function saveEddnData(data) {
       ],
     })
   }
+
+  await client.batch(statements, "write")
 }
 
 async function cleanupOldMessages() {
