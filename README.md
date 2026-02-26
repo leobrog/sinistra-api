@@ -98,6 +98,8 @@ The API is organized into several domains:
 *   **Objectives**: Mission and goal tracking.
 *   **Discord Summary**: aggregated data for Discord bot commands.
 
+For detailed endpoint definitions, refer to the `src/api/*/api.ts` files.
+
 ## Schedulers
 
 The application runs background services (configurable via `ENABLE_SCHEDULERS`):
