@@ -31,7 +31,7 @@ export interface ConflictEntry {
   stake2: string
   wonDays1: number
   wonDays2: number
-  updatedAt?: string  // ISO string from conflict_state.updated_at, if loaded from DB
+  updatedAt?: string  // ISO string, set from DB — used for TTL cleanup
 }
 
 // ---------------------------------------------------------------------------
@@ -39,31 +39,43 @@ export interface ConflictEntry {
 // ---------------------------------------------------------------------------
 
 /**
- * Parse an array of journal-style entries and extract conflict data for tracked factions.
- * Each entry needs: event, StarSystem, Conflicts[], and optionally timestamp (for dedup).
- * Exported so the events POST handler can reuse it directly on incoming DTO data.
+ * Parse raw_json for each event in the given tick, extract conflicts
+ * where our faction appears as Faction1 or Faction2. Deduplicates by
+ * system, keeping the most recent jump entry.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const parseConflictsFromEntries = (
-  entries: ReadonlyArray<Record<string, any>>,
-  factionNames: Set<string>
-): Map<string, ConflictEntry> => {
+const extractConflicts = async (
+  client: Client,
+  tickId: string,
+  factionName: string
+): Promise<Map<string, ConflictEntry>> => {
+  const result = await client.execute({
+    sql: "SELECT raw_json, timestamp FROM event WHERE tickid = ? AND raw_json IS NOT NULL",
+    args: [tickId],
+  })
+
   const raw = new Map<string, ConflictEntry & { detectedAt: string }>()
 
-  for (const entry of entries) {
-    const eventType: string = entry?.event ?? ""
+  for (const row of result.rows) {
+    let parsed: any
+    try {
+      parsed = JSON.parse(String(row.raw_json))
+    } catch {
+      continue
+    }
+
+    const eventType: string = parsed?.event ?? ""
     if (!["FSDJump", "Location"].includes(eventType)) continue
 
-    const system: string = entry?.StarSystem ?? ""
+    const system: string = parsed?.StarSystem ?? ""
     if (!system) continue
 
-    const rawConflicts: any[] = entry?.Conflicts ?? []
-    const timestamp: string = entry?.timestamp ?? ""
+    const rawConflicts: any[] = parsed?.Conflicts ?? []
+    const timestamp: string = String(row.timestamp ?? "")
 
     for (const c of rawConflicts) {
       const f1: string = c?.Faction1?.Name ?? ""
       const f2: string = c?.Faction2?.Name ?? ""
-      if (!factionNames.has(f1) && !factionNames.has(f2)) continue
+      if (f1 !== factionName && f2 !== factionName) continue
 
       const existing = raw.get(system)
       if (!existing || timestamp > existing.detectedAt) {
@@ -88,31 +100,6 @@ export const parseConflictsFromEntries = (
   return out
 }
 
-/**
- * Query the DB for events in a given tick and extract conflicts for tracked factions.
- */
-const extractConflicts = async (
-  client: Client,
-  tickId: string,
-  factionNames: Set<string>
-): Promise<Map<string, ConflictEntry>> => {
-  const result = await client.execute({
-    sql: "SELECT raw_json, timestamp FROM event WHERE tickid = ? AND raw_json IS NOT NULL",
-    args: [tickId],
-  })
-
-  const entries = result.rows.flatMap((row) => {
-    try {
-      const parsed = JSON.parse(String(row.raw_json))
-      return [{ ...parsed, timestamp: String(row.timestamp ?? "") }]
-    } catch {
-      return []
-    }
-  })
-
-  return parseConflictsFromEntries(entries, factionNames)
-}
-
 // ---------------------------------------------------------------------------
 // DB persistence
 // ---------------------------------------------------------------------------
@@ -129,7 +116,6 @@ const loadConflictState = async (client: Client): Promise<Map<string, ConflictEn
       stake2: String(row.stake2 ?? ""),
       wonDays1: Number(row.won_days1),
       wonDays2: Number(row.won_days2),
-      ...(row.updated_at ? { updatedAt: String(row.updated_at) } : {}),
     })
   }
   return map
@@ -215,9 +201,9 @@ const formatDayScored = (
 const formatConflictResolved = (
   system: string,
   entry: ConflictEntry,
-  factionNames: Set<string>
+  factionName: string
 ): string => {
-  const ourSide = factionNames.has(entry.faction1) ? 1 : 2
+  const ourSide = entry.faction1 === factionName ? 1 : 2
   const winner = entry.wonDays1 >= 4 ? 1 : 2
   const weWon = ourSide === winner
   const winScore = winner === 1 ? entry.wonDays1 : entry.wonDays2
@@ -244,28 +230,6 @@ const formatConflictResolved = (
   }
 }
 
-const formatConflictEnded = (
-  system: string,
-  entry: ConflictEntry,
-  factionNames: Set<string>
-): string => {
-  const ourSide = factionNames.has(entry.faction1) ? 1 : 2
-  const ourDays = ourSide === 1 ? entry.wonDays1 : entry.wonDays2
-  const theirDays = ourSide === 1 ? entry.wonDays2 : entry.wonDays1
-  const ourFaction = ourSide === 1 ? entry.faction1 : entry.faction2
-  const theirFaction = ourSide === 1 ? entry.faction2 : entry.faction1
-  const weWereAhead = ourDays > theirDays
-  const emoji = weWereAhead ? "🏆" : ourDays === theirDays ? "🤝" : "💀"
-  const stake = ourSide === 1 ? entry.stake1 : entry.stake2
-  return [
-    `${emoji} Conflict ended in **${system}** (last known score)`,
-    `${ourFaction}: ${ourDays} day${ourDays !== 1 ? "s" : ""} | ${theirFaction}: ${theirDays} day${theirDays !== 1 ? "s" : ""}`,
-    stake ? `Stake: ${stake}` : "",
-  ]
-    .filter(Boolean)
-    .join("\n")
-}
-
 // ---------------------------------------------------------------------------
 // Discord helper
 // ---------------------------------------------------------------------------
@@ -286,55 +250,52 @@ const postToDiscord = (webhookUrl: string, content: string): Effect.Effect<void>
   )
 
 // ---------------------------------------------------------------------------
-// Shared diff + notification logic
+// Per-tick diff + notification logic
 // ---------------------------------------------------------------------------
 
-/**
- * Diff currentConflicts against conflict_state and post Discord notifications.
- * Shared by the tick-based scheduler and the EDDN hourly scan.
- */
-export const runConflictDiff = (
+export const runConflictCheck = (
   client: Client,
+  factionName: string,
   webhookUrl: string | null,
-  currentConflicts: Map<string, ConflictEntry>,
-  factionNames: Set<string>,
-  tickRef: string,
-  logPrefix: string,
-  options: {
-    /**
-     * Controls which systems are eligible for cleanup (deletion from conflict_state
-     * when absent from currentConflicts):
-     *   'all'       — clean up every missing system (EDDN hourly scan)
-     *   Set<string> — only clean up systems the caller actually observed (event handler)
-     *   undefined   — no cleanup; caller has partial knowledge (tick scheduler)
-     */
-    cleanupScope?: "all" | Set<string>
-  } = {}
+  tickId: string
 ): Effect.Effect<void> =>
   Effect.gen(function* () {
-    const prevState = yield* Effect.tryPromise({
-      try: () => loadConflictState(client),
-      catch: (e) => new Error(`Load conflict state failed: ${e}`),
-    }).pipe(
-      Effect.catchAll((e) =>
-        Effect.logWarning(`${e}`).pipe(Effect.as(new Map<string, ConflictEntry>()))
-      )
-    )
+    yield* Effect.logInfo(`Conflict scheduler: processing tick ${tickId}`)
 
-    // --- Process systems present in current data ---
+    const [currentConflicts, prevState] = yield* Effect.all([
+      Effect.tryPromise({
+        try: () => extractConflicts(client, tickId, factionName),
+        catch: (e) => new Error(`Conflict extraction failed: ${e}`),
+      }).pipe(
+        Effect.catchAll((e) =>
+          Effect.logWarning(`${e}`).pipe(Effect.as(new Map<string, ConflictEntry>()))
+        )
+      ),
+      Effect.tryPromise({
+        try: () => loadConflictState(client),
+        catch: (e) => new Error(`Load conflict state failed: ${e}`),
+      }).pipe(
+        Effect.catchAll((e) =>
+          Effect.logWarning(`${e}`).pipe(Effect.as(new Map<string, ConflictEntry>()))
+        )
+      ),
+    ])
+
+    // --- Process systems present in the current tick ---
     for (const [system, current] of currentConflicts.entries()) {
       const prev = prevState.get(system)
 
       if (!prev) {
+        // New conflict — insert state, notify
         yield* Effect.tryPromise({
-          try: () => upsertConflictState(client, system, current, tickRef),
+          try: () => upsertConflictState(client, system, current, tickId),
           catch: (e) => new Error(`Upsert failed: ${e}`),
         }).pipe(Effect.catchAll((e) => Effect.logWarning(`${e}`)))
 
         if (webhookUrl) {
           yield* postToDiscord(webhookUrl, formatNewConflict(system, current))
         }
-        yield* Effect.logInfo(`${logPrefix}: new conflict in ${system}`)
+        yield* Effect.logInfo(`Conflict scheduler: new conflict in ${system}`)
         continue
       }
 
@@ -346,114 +307,187 @@ export const runConflictDiff = (
         }).pipe(Effect.catchAll((e) => Effect.logWarning(`${e}`)))
 
         if (webhookUrl) {
-          yield* postToDiscord(webhookUrl, formatConflictResolved(system, current, factionNames))
+          yield* postToDiscord(
+            webhookUrl,
+            formatConflictResolved(system, current, factionName)
+          )
         }
-        yield* Effect.logInfo(`${logPrefix}: conflict resolved in ${system}`)
+        yield* Effect.logInfo(`Conflict scheduler: conflict resolved in ${system}`)
         continue
       }
 
       // Day scored?
       if (current.wonDays1 > prev.wonDays1 || current.wonDays2 > prev.wonDays2) {
         yield* Effect.tryPromise({
-          try: () => upsertConflictState(client, system, current, tickRef),
+          try: () => upsertConflictState(client, system, current, tickId),
           catch: (e) => new Error(`Upsert failed: ${e}`),
         }).pipe(Effect.catchAll((e) => Effect.logWarning(`${e}`)))
 
         if (webhookUrl) {
           yield* postToDiscord(webhookUrl, formatDayScored(system, current, prev))
         }
-        yield* Effect.logInfo(`${logPrefix}: day scored in ${system}`)
+        yield* Effect.logInfo(`Conflict scheduler: day scored in ${system}`)
         continue
       }
 
       // Unchanged — just refresh the tick reference
       yield* Effect.tryPromise({
-        try: () => upsertConflictState(client, system, current, tickRef),
+        try: () => upsertConflictState(client, system, current, tickId),
         catch: (e) => new Error(`Upsert failed: ${e}`),
       }).pipe(Effect.catchAll((e) => Effect.logWarning(`${e}`)))
     }
 
-    // --- Clean up systems no longer present ---
-    // Only runs for callers that have full or partial knowledge of which systems
-    // they observed. Callers with no knowledge (tick scheduler) pass no cleanupScope
-    // and skip this block entirely.
-    if (options.cleanupScope !== undefined) {
-      const scope = options.cleanupScope
-      const oneDayMs = 24 * 60 * 60 * 1000
-      for (const [system, prev] of prevState.entries()) {
-        if (currentConflicts.has(system)) continue
-        // Scoped cleanup: skip systems the caller didn't visit
-        if (scope !== "all" && !scope.has(system)) continue
-
-        yield* Effect.tryPromise({
-          try: () => deleteConflictState(client, system),
-          catch: (e) => new Error(`Delete failed: ${e}`),
-        }).pipe(Effect.catchAll((e) => Effect.logWarning(`${e}`)))
-
-        // If the conflict was recently active (within 24h), it most likely ended —
-        // wars last at most 7 days so a recent disappearance means a resolution
-        const recentlyActive =
-          prev.updatedAt !== undefined &&
-          Date.now() - new Date(prev.updatedAt).getTime() < oneDayMs
-
-        if (recentlyActive && webhookUrl) {
-          yield* postToDiscord(webhookUrl, formatConflictEnded(system, prev, factionNames))
-        }
-        yield* Effect.logInfo(
-          `${logPrefix}: conflict ended in ${system}${recentlyActive ? " (notification sent)" : " (stale, silent)"}`
-        )
-      }
-    }
-
-    yield* Effect.logInfo(`${logPrefix}: processed — ${currentConflicts.size} active conflict(s)`)
+    yield* Effect.logInfo(
+      `Conflict scheduler: tick ${tickId} processed — ` +
+        `${currentConflicts.size} active conflict(s)`
+    )
   })
 
 // ---------------------------------------------------------------------------
-// Per-tick diff + notification logic
+// Shared diff logic — accepts a pre-computed conflict map
 // ---------------------------------------------------------------------------
 
-export const runConflictCheck = (
+export const runConflictDiff = (
   client: Client,
   webhookUrl: string | null,
-  previousTick: string,
-  currentTick: string
+  currentConflicts: Map<string, ConflictEntry>,
+  factionNames: Set<string>,
+  tickId: string,
+  label: string,
+  options: { cleanupScope: "all" | Set<string> }
 ): Effect.Effect<void> =>
   Effect.gen(function* () {
-    yield* Effect.logInfo(`Conflict scheduler: processing tick ${currentTick} (data from ${previousTick})`)
+    yield* Effect.logInfo(`${label}: processing ${currentConflicts.size} conflict(s)`)
 
-    // Load all tracked faction names fresh each tick so changes via dashboard take effect immediately
-    const factionNames = yield* Effect.tryPromise({
-      try: async () => {
-        const result = await client.execute("SELECT name FROM protected_faction")
-        return new Set(result.rows.map((r) => String(r.name)))
-      },
-      catch: (e) => new Error(`Load protected factions failed: ${e}`),
-    }).pipe(
-      Effect.catchAll((e) =>
-        Effect.logWarning(`${e}`).pipe(Effect.as(new Set<string>()))
-      )
-    )
-
-    if (factionNames.size === 0) {
-      yield* Effect.logWarning("Conflict scheduler: no protected factions found, skipping")
-      return
-    }
-
-    yield* Effect.logInfo(`Conflict scheduler: tracking ${factionNames.size} faction(s): ${[...factionNames].join(", ")}`)
-
-    const currentConflicts = yield* Effect.tryPromise({
-      try: () => extractConflicts(client, previousTick, factionNames),
-      catch: (e) => new Error(`Conflict extraction failed: ${e}`),
+    const prevState = yield* Effect.tryPromise({
+      try: () => loadConflictState(client),
+      catch: (e) => new Error(`Load conflict state failed: ${e}`),
     }).pipe(
       Effect.catchAll((e) =>
         Effect.logWarning(`${e}`).pipe(Effect.as(new Map<string, ConflictEntry>()))
       )
     )
 
-    // No cleanupScope: tick scheduler sees only events from commanders who submitted
-    // journals, so it has a partial view. Cleanup is delegated to the EDDN hourly scan.
-    yield* runConflictDiff(client, webhookUrl, currentConflicts, factionNames, currentTick, "Conflict scheduler")
+    for (const [system, current] of currentConflicts.entries()) {
+      const prev = prevState.get(system)
+
+      if (!prev) {
+        yield* Effect.tryPromise({
+          try: () => upsertConflictState(client, system, current, tickId),
+          catch: (e) => new Error(`Upsert failed: ${e}`),
+        }).pipe(Effect.catchAll((e) => Effect.logWarning(`${e}`)))
+        if (webhookUrl) {
+          yield* postToDiscord(webhookUrl, formatNewConflict(system, current))
+        }
+        yield* Effect.logInfo(`${label}: new conflict in ${system}`)
+        continue
+      }
+
+      if (current.wonDays1 >= 4 || current.wonDays2 >= 4) {
+        yield* Effect.tryPromise({
+          try: () => deleteConflictState(client, system),
+          catch: (e) => new Error(`Delete failed: ${e}`),
+        }).pipe(Effect.catchAll((e) => Effect.logWarning(`${e}`)))
+        if (webhookUrl) {
+          const ourFaction =
+            [...factionNames].find((n) => n === current.faction1 || n === current.faction2) ??
+            current.faction1
+          yield* postToDiscord(webhookUrl, formatConflictResolved(system, current, ourFaction))
+        }
+        yield* Effect.logInfo(`${label}: conflict resolved in ${system}`)
+        continue
+      }
+
+      if (current.wonDays1 > prev.wonDays1 || current.wonDays2 > prev.wonDays2) {
+        yield* Effect.tryPromise({
+          try: () => upsertConflictState(client, system, current, tickId),
+          catch: (e) => new Error(`Upsert failed: ${e}`),
+        }).pipe(Effect.catchAll((e) => Effect.logWarning(`${e}`)))
+        if (webhookUrl) {
+          yield* postToDiscord(webhookUrl, formatDayScored(system, current, prev))
+        }
+        yield* Effect.logInfo(`${label}: day scored in ${system}`)
+        continue
+      }
+
+      yield* Effect.tryPromise({
+        try: () => upsertConflictState(client, system, current, tickId),
+        catch: (e) => new Error(`Upsert failed: ${e}`),
+      }).pipe(Effect.catchAll((e) => Effect.logWarning(`${e}`)))
+    }
+
+    for (const system of prevState.keys()) {
+      if (currentConflicts.has(system)) continue
+      const { cleanupScope } = options
+      const scopeKind =
+        cleanupScope === "all"
+          ? "all"
+          : cleanupScope instanceof Set && cleanupScope.has(system)
+            ? "visited"
+            : null
+      if (scopeKind !== null) {
+        const entry = prevState.get(system)!
+        const reason =
+          scopeKind === "all"
+            ? `not found in ${label} scan`
+            : `commander visited ${system} but no conflict detected in their journal`
+        const debugMsg = [
+          `🗑️ **[DEBUG] Deleting conflict in ${system}**`,
+          `Reason: ${reason}`,
+          `Was: ${entry.faction1} vs ${entry.faction2} (${typeLabel(entry.warType)})`,
+          `Score: ${entry.wonDays1} – ${entry.wonDays2}${entry.stake1 ? ` | Stake: ${entry.stake1}` : ""}`,
+          `Source: ${label}`,
+        ].join("\n")
+        yield* Effect.logWarning(
+          `${label}: DELETING ${system} — ${reason} | was: ${entry.faction1} vs ${entry.faction2} score ${entry.wonDays1}-${entry.wonDays2}`
+        )
+        if (webhookUrl) {
+          yield* postToDiscord(webhookUrl, debugMsg)
+        }
+        yield* Effect.tryPromise({
+          try: () => deleteConflictState(client, system),
+          catch: (e) => new Error(`Delete failed: ${e}`),
+        }).pipe(Effect.catchAll((e) => Effect.logWarning(`${e}`)))
+      }
+    }
+
+    yield* Effect.logInfo(`${label}: done — ${currentConflicts.size} active conflict(s)`)
   })
+
+// ---------------------------------------------------------------------------
+// Parse conflicts from in-memory FSDJump/Location event objects
+// ---------------------------------------------------------------------------
+
+export const parseConflictsFromEntries = (
+  entries: ReadonlyArray<{ event: string; StarSystem?: string; Conflicts?: ReadonlyArray<unknown> }>,
+  factionNames: Set<string>
+): Map<string, ConflictEntry> => {
+  const out = new Map<string, ConflictEntry>()
+
+  for (const entry of entries) {
+    if (!["FSDJump", "Location"].includes(entry.event)) continue
+    const system = entry.StarSystem
+    if (!system) continue
+
+    for (const c of (entry.Conflicts ?? []) as any[]) {
+      const f1: string = c?.Faction1?.Name ?? ""
+      const f2: string = c?.Faction2?.Name ?? ""
+      if (!factionNames.has(f1) && !factionNames.has(f2)) continue
+
+      out.set(system, {
+        warType: c?.WarType ?? "unknown",
+        faction1: f1,
+        faction2: f2,
+        stake1: c?.Faction1?.Stake ?? "",
+        stake2: c?.Faction2?.Stake ?? "",
+        wonDays1: c?.Faction1?.WonDays ?? 0,
+        wonDays2: c?.Faction2?.WonDays ?? 0,
+      })
+    }
+  }
+
+  return out
+}
 
 // ---------------------------------------------------------------------------
 // Main fiber — subscribes to TickBus
@@ -467,7 +501,8 @@ export const runConflictScheduler: Effect.Effect<
   const config = yield* AppConfig
   const client = yield* TursoClient
   const bus = yield* TickBus
-  const webhookUrl = Option.getOrNull(config.discord.webhooks.conflict)
+  const factionName = config.faction.name
+  const webhookUrl = Option.getOrNull(config.discord.webhooks.bgs)
 
   yield* Effect.logInfo("Conflict scheduler started (event-driven, subscribed to TickBus)")
 
@@ -476,27 +511,8 @@ export const runConflictScheduler: Effect.Effect<
       const sub = yield* PubSub.subscribe(bus)
       return yield* Effect.forever(
         Effect.gen(function* () {
-          const currentTick = yield* Queue.take(sub)
-          // Look up the Zoy hash tickid for events submitted before this tick's ISO timestamp.
-          // Events carry hash IDs (e.g. "zoy-XXXX"), not ISO timestamps.
-          const completedTickHash = yield* Effect.tryPromise({
-            try: async () => {
-              const result = await client.execute({
-                sql: "SELECT DISTINCT tickid FROM event WHERE tickid IS NOT NULL AND timestamp < ? ORDER BY timestamp DESC LIMIT 1",
-                args: [currentTick],
-              })
-              return result.rows[0]?.tickid as string | undefined
-            },
-            catch: (e) => new Error(`Tick hash lookup failed: ${e}`),
-          }).pipe(Effect.catchAll((e) => Effect.logWarning(`${e}`).pipe(Effect.as(undefined))))
-
-          if (!completedTickHash) {
-            yield* Effect.logInfo(
-              `Conflict scheduler: skipping ${currentTick} — no events found before this tick`
-            )
-            return
-          }
-          yield* runConflictCheck(client, webhookUrl, completedTickHash, currentTick)
+          const tickId = yield* Queue.take(sub)
+          yield* runConflictCheck(client, factionName, webhookUrl, tickId)
         })
       )
     })

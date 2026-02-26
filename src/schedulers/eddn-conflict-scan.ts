@@ -124,7 +124,7 @@ export const runEddnConflictScan: Effect.Effect<never, never, AppConfig | TursoC
         factionNames,
         new Date().toISOString(),
         "EDDN conflict scan",
-        { cleanupScope: "all" }
+        { cleanupScope: new Set<string>() }
       )
 
       yield* Effect.sleep(Duration.hours(1))
