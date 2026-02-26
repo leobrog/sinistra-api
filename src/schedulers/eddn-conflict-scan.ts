@@ -107,13 +107,24 @@ export const runEddnConflictScan: Effect.Effect<never, never, AppConfig | TursoC
         `EDDN conflict scan: found ${currentConflicts.size} conflict(s) in EDDN data`
       )
 
+      // If the query returned nothing while we have tracked factions, the EDDN
+      // client may not have populated the table yet (e.g. race on startup).
+      // Skip the diff entirely rather than triggering spurious "conflict ended"
+      // cleanup that would delete all conflict_state entries.
+      if (currentConflicts.size === 0) {
+        yield* Effect.logWarning("EDDN conflict scan: no conflicts found, skipping diff")
+        yield* Effect.sleep(Duration.hours(1))
+        return
+      }
+
       yield* runConflictDiff(
         client,
         webhookUrl,
         currentConflicts,
         factionNames,
         new Date().toISOString(),
-        "EDDN conflict scan"
+        "EDDN conflict scan",
+        { cleanupScope: "all" }
       )
 
       yield* Effect.sleep(Duration.hours(1))

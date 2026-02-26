@@ -68,7 +68,12 @@ export const tableMiddleware = <E, R>(
 
       const result = yield* Effect.tryPromise({
         try: () =>
-          client.execute({ sql: `SELECT * FROM ${tableName} LIMIT 1000`, args: [] }),
+          client.execute({
+            sql: tableName === "event"
+              ? `SELECT * FROM event ORDER BY rowid DESC LIMIT 3000`
+              : `SELECT * FROM ${tableName} LIMIT 1000`,
+            args: [],
+          }),
         catch: (error) => new Error(String(error)),
       })
 

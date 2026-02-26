@@ -299,7 +299,17 @@ export const runConflictDiff = (
   currentConflicts: Map<string, ConflictEntry>,
   factionNames: Set<string>,
   tickRef: string,
-  logPrefix: string
+  logPrefix: string,
+  options: {
+    /**
+     * Controls which systems are eligible for cleanup (deletion from conflict_state
+     * when absent from currentConflicts):
+     *   'all'       — clean up every missing system (EDDN hourly scan)
+     *   Set<string> — only clean up systems the caller actually observed (event handler)
+     *   undefined   — no cleanup; caller has partial knowledge (tick scheduler)
+     */
+    cleanupScope?: "all" | Set<string>
+  } = {}
 ): Effect.Effect<void> =>
   Effect.gen(function* () {
     const prevState = yield* Effect.tryPromise({
@@ -364,9 +374,17 @@ export const runConflictDiff = (
     }
 
     // --- Clean up systems no longer present ---
-    const oneDayMs = 24 * 60 * 60 * 1000
-    for (const [system, prev] of prevState.entries()) {
-      if (!currentConflicts.has(system)) {
+    // Only runs for callers that have full or partial knowledge of which systems
+    // they observed. Callers with no knowledge (tick scheduler) pass no cleanupScope
+    // and skip this block entirely.
+    if (options.cleanupScope !== undefined) {
+      const scope = options.cleanupScope
+      const oneDayMs = 24 * 60 * 60 * 1000
+      for (const [system, prev] of prevState.entries()) {
+        if (currentConflicts.has(system)) continue
+        // Scoped cleanup: skip systems the caller didn't visit
+        if (scope !== "all" && !scope.has(system)) continue
+
         yield* Effect.tryPromise({
           try: () => deleteConflictState(client, system),
           catch: (e) => new Error(`Delete failed: ${e}`),
@@ -432,6 +450,8 @@ export const runConflictCheck = (
       )
     )
 
+    // No cleanupScope: tick scheduler sees only events from commanders who submitted
+    // journals, so it has a partial view. Cleanup is delegated to the EDDN hourly scan.
     yield* runConflictDiff(client, webhookUrl, currentConflicts, factionNames, currentTick, "Conflict scheduler")
   })
 
