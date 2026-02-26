@@ -28,7 +28,7 @@ const requestToActivity = (req: PutActivityRequest): Activity => {
             id: uuid() as FactionSettlementId,
             factionId,
             name: s.name,
-            type: s.type,
+            type: s.type ?? "",
             count: s.count,
           })
       )

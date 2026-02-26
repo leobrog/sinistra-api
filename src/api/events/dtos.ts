@@ -20,7 +20,7 @@ export const EventDataSchema = Schema.Struct({
   // Commander and location
   Cmdr: Schema.optional(Schema.String),
   StarSystem: Schema.optional(Schema.String),
-  SystemAddress: Schema.optional(Schema.Number),
+  SystemAddress: Schema.optional(Schema.Union(Schema.Number, Schema.NumberFromString)),
 
   // Event-specific fields (all optional, validated later)
   // MarketBuy
