@@ -6,8 +6,8 @@ import { ProtectedFactionId } from "../../domain/ids.ts";
  */
 export const CreateProtectedFactionRequest = Schema.Struct({
   name: Schema.String,
-  webhook_url: Schema.optional(Schema.String),
-  description: Schema.optional(Schema.String),
+  webhook_url: Schema.optional(Schema.NullOr(Schema.String)),
+  description: Schema.optional(Schema.NullOr(Schema.String)),
   protected: Schema.optional(Schema.Boolean), // Default to true in handler logic
 });
 
@@ -17,9 +17,9 @@ export type CreateProtectedFactionRequest = typeof CreateProtectedFactionRequest
  * Request DTO for PUT /api/protected-faction/:id
  */
 export const UpdateProtectedFactionRequest = Schema.Struct({
-  name: Schema.optional(Schema.String),
-  webhook_url: Schema.optional(Schema.String),
-  description: Schema.optional(Schema.String),
+  name: Schema.optional(Schema.NullOr(Schema.String)),
+  webhook_url: Schema.optional(Schema.NullOr(Schema.String)),
+  description: Schema.optional(Schema.NullOr(Schema.String)),
   protected: Schema.optional(Schema.Boolean),
 });
 

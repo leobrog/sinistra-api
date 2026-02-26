@@ -12,13 +12,17 @@
  */
 
 import { Database } from "bun:sqlite"
-import { readdir, readFile } from "fs/promises"
+import { readdir, readFile, unlink } from "fs/promises"
 import { join } from "path"
+import { createClient } from "@libsql/client"
 
-const SOURCE_DB = "./data/bgs_data.db"
-const TARGET_DB = "./data/sinistra_migrated.db"
+const SOURCE_DB = "/tmp/bgs_data.db"
+const LOCAL_TARGET_DB = "/tmp/sinistra_migrated.db"
+const TURSO_URL = process.env.TURSO_DATABASE_URL!
+const TURSO_TOKEN = process.env.TURSO_AUTH_TOKEN
 const MIGRATIONS_DIR = "./migrations"
 const BATCH_SIZE = 500
+const TURSO_BATCH_SIZE = 500
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -44,20 +48,14 @@ function logTable(name: string, count: number) {
 async function main() {
   log("Flask → Bun migration starting")
   log(`  Source: ${SOURCE_DB}`)
-  log(`  Target: ${TARGET_DB}`)
+  log(`  Local:  ${LOCAL_TARGET_DB}`)
+  log(`  Turso:  ${TURSO_URL}`)
 
-  // Remove old target if it exists
-  const targetFile = Bun.file(TARGET_DB)
-  if (await targetFile.exists()) {
-    log("  Removing existing target DB...")
-    await Bun.file(TARGET_DB).delete?.()
-    // Fallback: try to delete via fs
-    const { unlink } = await import("fs/promises")
-    await unlink(TARGET_DB).catch(() => {})
-  }
+  // Remove stale local target if it exists
+  await unlink(LOCAL_TARGET_DB).catch(() => {})
 
   const src = new Database(SOURCE_DB, { readonly: true })
-  const dst = new Database(TARGET_DB)
+  const dst = new Database(LOCAL_TARGET_DB)
 
   // Enable WAL mode and performance pragmas for target
   dst.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA foreign_keys=OFF;")
@@ -602,13 +600,78 @@ async function main() {
     console.log(`  ${t.padEnd(40)} ${String(n).padStart(8)}`)
   }
 
-  log("")
-  log(`Target DB written to: ${TARGET_DB}`)
-  log("To run the server against migrated data:")
-  log(`  TURSO_URL=file:./data/sinistra_migrated.db bun src/main.ts`)
-
   src.close()
   dst.close()
+
+  log("")
+  log(`Phase 1 complete — local DB: ${LOCAL_TARGET_DB}`)
+
+  // ── Phase 2: Push local SQLite → Turso ───────────────────────────────────
+  log("")
+  log("Phase 2: Pushing to Turso...")
+  log(`  Target: ${TURSO_URL}`)
+
+  const turso = createClient({ url: TURSO_URL, ...(TURSO_TOKEN ? { authToken: TURSO_TOKEN } : {}) })
+  const local = new Database(LOCAL_TARGET_DB, { readonly: true })
+
+  // Apply schema migrations to Turso (all use CREATE TABLE IF NOT EXISTS)
+  log("  Applying schema migrations...")
+  const tursoMigrationFiles = (await readdir(MIGRATIONS_DIR)).filter(f => f.endsWith(".sql")).sort()
+  for (const file of tursoMigrationFiles) {
+    const sql = await readFile(join(MIGRATIONS_DIR, file), "utf-8")
+    const statements = sql.split(";").map(s => s.trim()).filter(Boolean)
+    for (const stmt of statements) {
+      await turso.execute(stmt)
+    }
+    log(`    ✓ ${file}`)
+  }
+
+  // Tables in FK-safe insertion order
+  const pushTables = [
+    "cmdr", "colony", "protected_faction",
+    "objective", "objective_target", "objective_target_settlement",
+    "activity", "system", "faction", "faction_settlement",
+    "event",
+    "market_buy_event", "market_sell_event",
+    "mission_completed_event", "mission_completed_influence",
+    "faction_kill_bond_event", "mission_failed_event",
+    "multi_sell_exploration_data_event", "redeem_voucher_event",
+    "sell_exploration_data_event", "commit_crime_event",
+    "synthetic_cz", "synthetic_ground_cz",
+    "flask_users",
+  ]
+
+  // @libsql/client only accepts: null | number | string | bigint | ArrayBuffer
+  const toLibsql = (v: any): null | number | string | bigint | ArrayBuffer => {
+    if (v === null || v === undefined) return null
+    if (typeof v === "number" || typeof v === "string" || typeof v === "bigint") return v
+    if (typeof v === "boolean") return v ? 1 : 0
+    if (v instanceof Uint8Array) return v.buffer as ArrayBuffer
+    if (v instanceof ArrayBuffer) return v
+    return String(v)
+  }
+
+  for (const table of pushTables) {
+    const cols = (local.query(`PRAGMA table_info(${table})`).all() as any[]).map(c => c.name)
+    const rows = local.query(`SELECT * FROM ${table}`).all() as any[]
+    if (rows.length === 0) { log(`  - ${table}: 0 rows`); continue }
+
+    const ph = cols.map(() => "?").join(", ")
+    const insertSql = `INSERT OR REPLACE INTO ${table} (${cols.join(", ")}) VALUES (${ph})`
+
+    for (let i = 0; i < rows.length; i += TURSO_BATCH_SIZE) {
+      const batch = rows.slice(i, i + TURSO_BATCH_SIZE)
+      await turso.batch(
+        batch.map(row => ({ sql: insertSql, args: cols.map(c => toLibsql(row[c])) })),
+        "write"
+      )
+    }
+    log(`  ✓ ${table}: ${rows.length.toLocaleString()} rows`)
+  }
+
+  local.close()
+  log("")
+  log("Migration complete — all data pushed to Turso.")
 }
 
 main().catch((err) => {

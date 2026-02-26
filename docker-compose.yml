@@ -1,5 +1,5 @@
 services:
-  sinistra-api:
+  backend:
     build:
       context: .
     env_file:
@@ -7,34 +7,34 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      - sinistra_data:/app/data
+      - ./data:/app/data
     networks:
       - sinistra_network
 
-  sinistra-dashboard:
+  dashboard:
     build:
-      context: ../sinistra-dashboard
+      context: ../dashboard
     ports:
       - "${DASHBOARD_PORT:-8501}:8501"
     depends_on:
-      - sinistra-api
+      - backend
     networks:
       - sinistra_network
 
-  discordsinistragoal:
+  bot:
     profiles: [discord]
     build:
-      context: ../SinistraGoal
+      context: ../bot
     command: ["/bin/bash", "/app/entrypoint.sh"]
     env_file:
-      - ../SinistraGoal/.env
+      - ../bot/.env
     environment:
-      - API_BASE=http://sinistra-api:3000/api/
+      - API_BASE=http://backend:3000/api/
     volumes:
-      - ../SinistraGoal:/app
+      - ../bot:/app
     working_dir: /app
     depends_on:
-      - sinistra-api
+      - backend
     networks:
       - sinistra_network
 
@@ -42,5 +42,3 @@ networks:
   sinistra_network:
     driver: bridge
 
-volumes:
-  sinistra_data:

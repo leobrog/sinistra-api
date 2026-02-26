@@ -9,23 +9,23 @@ import { ObjectiveId, ObjectiveTargetId, ObjectiveTargetSettlementId } from "../
 
 // Settlement input for POST/PUT
 export const SettlementInputSchema = Schema.Struct({
-  name: Schema.optional(Schema.String),
-  targetindividual: Schema.optional(Schema.Int),
-  targetoverall: Schema.optional(Schema.Int),
-  progress: Schema.optional(Schema.Int),
+  name: Schema.optional(Schema.NullOr(Schema.String)),
+  targetindividual: Schema.optional(Schema.NullOr(Schema.Int)),
+  targetoverall: Schema.optional(Schema.NullOr(Schema.Int)),
+  progress: Schema.optional(Schema.NullOr(Schema.Int)),
 })
 
 export type SettlementInput = typeof SettlementInputSchema.Type
 
 // Target input for POST/PUT
 export const TargetInputSchema = Schema.Struct({
-  type: Schema.optional(Schema.String),
-  station: Schema.optional(Schema.String),
-  system: Schema.optional(Schema.String),
-  faction: Schema.optional(Schema.String),
-  progress: Schema.optional(Schema.Int),
-  targetindividual: Schema.optional(Schema.Int),
-  targetoverall: Schema.optional(Schema.Int),
+  type: Schema.optional(Schema.NullOr(Schema.String)),
+  station: Schema.optional(Schema.NullOr(Schema.String)),
+  system: Schema.optional(Schema.NullOr(Schema.String)),
+  faction: Schema.optional(Schema.NullOr(Schema.String)),
+  progress: Schema.optional(Schema.NullOr(Schema.Int)),
+  targetindividual: Schema.optional(Schema.NullOr(Schema.Int)),
+  targetoverall: Schema.optional(Schema.NullOr(Schema.Int)),
   settlements: Schema.Array(SettlementInputSchema),
 })
 
@@ -34,13 +34,13 @@ export type TargetInput = typeof TargetInputSchema.Type
 // POST /objectives request
 export const CreateObjectiveRequest = Schema.Struct({
   title: Schema.String,
-  priority: Schema.optional(Schema.Int),
-  type: Schema.optional(Schema.String),
-  system: Schema.optional(Schema.String),
-  faction: Schema.optional(Schema.String),
-  description: Schema.optional(Schema.String),
-  startdate: Schema.optional(Schema.Date),
-  enddate: Schema.optional(Schema.Date),
+  priority: Schema.optional(Schema.NullOr(Schema.Int)),
+  type: Schema.optional(Schema.NullOr(Schema.String)),
+  system: Schema.optional(Schema.NullOr(Schema.String)),
+  faction: Schema.optional(Schema.NullOr(Schema.String)),
+  description: Schema.optional(Schema.NullOr(Schema.String)),
+  startdate: Schema.optional(Schema.NullOr(Schema.Date)),
+  enddate: Schema.optional(Schema.NullOr(Schema.Date)),
   targets: Schema.Array(TargetInputSchema),
 })
 
@@ -56,14 +56,14 @@ export type CreateObjectiveResponse = typeof CreateObjectiveResponse.Type
 
 // POST /api/objectives/:id request (update)
 export const UpdateObjectiveRequest = Schema.Struct({
-  title: Schema.optional(Schema.String),
-  priority: Schema.optional(Schema.Int),
-  type: Schema.optional(Schema.String),
-  system: Schema.optional(Schema.String),
-  faction: Schema.optional(Schema.String),
-  description: Schema.optional(Schema.String),
-  startdate: Schema.optional(Schema.Date),
-  enddate: Schema.optional(Schema.Date),
+  title: Schema.optional(Schema.NullOr(Schema.String)),
+  priority: Schema.optional(Schema.NullOr(Schema.Int)),
+  type: Schema.optional(Schema.NullOr(Schema.String)),
+  system: Schema.optional(Schema.NullOr(Schema.String)),
+  faction: Schema.optional(Schema.NullOr(Schema.String)),
+  description: Schema.optional(Schema.NullOr(Schema.String)),
+  startdate: Schema.optional(Schema.NullOr(Schema.Date)),
+  enddate: Schema.optional(Schema.NullOr(Schema.Date)),
   targets: Schema.optional(Schema.Array(TargetInputSchema)),
 })
 

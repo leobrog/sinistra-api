@@ -5,10 +5,10 @@
  * Import SchedulersLive and provide it with InfrastructureLayer in main.ts.
  */
 
-import { Effect, Layer } from "effect"
+import { Effect, Layer, PubSub } from "effect"
 import { AppConfig } from "../lib/config.js"
 import { TursoClient } from "../database/client.js"
-import { runEddnClient } from "./eddn-client.js"
+import { TickBus } from "../services/TickBus.js"
 import { runTickMonitor } from "./tick-monitor.js"
 import { runShoutoutScheduler } from "./shoutout-scheduler.js"
 import { runConflictScheduler } from "./conflict-scheduler.js"
@@ -24,10 +24,18 @@ export const SchedulersLive: Layer.Layer<never, never, AppConfig | TursoClient> 
         return
       }
 
-      yield* Effect.forkDaemon(runEddnClient)
-      yield* Effect.forkDaemon(runTickMonitor)
-      yield* Effect.forkDaemon(runShoutoutScheduler)
-      yield* Effect.forkDaemon(runConflictScheduler)
+      // Create TickBus — shared PubSub connecting tick-monitor → conflict-scheduler
+      const bus = yield* PubSub.unbounded<string>()
+
+      yield* Effect.forkDaemon(
+        Effect.provideService(runTickMonitor, TickBus, bus)
+      )
+      yield* Effect.forkDaemon(
+        Effect.provideService(runShoutoutScheduler, TickBus, bus)
+      )
+      yield* Effect.forkDaemon(
+        Effect.provideService(runConflictScheduler, TickBus, bus)
+      )
       yield* Effect.forkDaemon(runInaraSync)
 
       yield* Effect.logInfo("All schedulers forked")

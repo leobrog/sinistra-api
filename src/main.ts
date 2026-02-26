@@ -15,6 +15,11 @@ import { AuthApiLive } from "./api/auth/handlers.ts"
 import { DiscordSummaryApiLive } from "./api/discord-summary/handlers.ts"
 import { CommandersApiLive } from "./api/commanders/handlers.ts"
 import { DiscoveryApiLive } from "./api/discovery/handlers.ts"
+import { TickApiLive } from "./api/tick/handlers.ts"
+import { CmdrLocationApiLive } from "./api/cmdr-location/handlers.ts"
+import { CZApiLive } from "./api/cz/handlers.ts"
+import { BountyVouchersApiLive } from "./api/bounty-vouchers/handlers.ts"
+import { FactionVisitedSystemsApiLive } from "./api/faction-visited-systems/handlers.ts"
 
 // Repositories
 import { EventRepositoryLive } from "./database/repositories/EventRepository.ts"
@@ -37,6 +42,8 @@ import { SchedulersLive } from "./schedulers/index.ts"
 
 // OAuth callback (outside HttpApiBuilder — needs raw redirect + Set-Cookie)
 import { oauthCallbackMiddleware } from "./api/auth/oauth-callback.ts"
+// BGS Table browser (outside HttpApiBuilder — raw DB query endpoint)
+import { tableMiddleware } from "./api/table-middleware.ts"
 
 // Build API from composed endpoint groups
 const ApiHandlersLayer = Layer.mergeAll(
@@ -50,7 +57,12 @@ const ApiHandlersLayer = Layer.mergeAll(
   AuthApiLive,
   DiscordSummaryApiLive,
   CommandersApiLive,
-  DiscoveryApiLive
+  DiscoveryApiLive,
+  TickApiLive,
+  CmdrLocationApiLive,
+  CZApiLive,
+  BountyVouchersApiLive,
+  FactionVisitedSystemsApiLive
 )
 
 const RepositoriesLayer = Layer.mergeAll(
@@ -78,7 +90,7 @@ const ApiLive = HttpApiBuilder.api(Api).pipe(
 )
 
 const ServerLayer = HttpApiBuilder.serve((app) =>
-  HttpMiddleware.logger(oauthCallbackMiddleware(app))
+  HttpMiddleware.logger(tableMiddleware(oauthCallbackMiddleware(app)))
 ).pipe(
   Layer.provide(ApiLive),
   Layer.provide(RepositoriesLayer),

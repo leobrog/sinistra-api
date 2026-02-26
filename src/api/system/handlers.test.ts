@@ -456,7 +456,7 @@ describe("System API Integration", () => {
           expect(result.conflicts.length).toBe(1)
           expect(result.conflicts[0]!.faction1).toBe("Deciat Gang")
           expect(result.conflicts[0]!.faction2).toBe("Deciat Rebels")
-          expect(result.conflicts[0]!.war_type).toBe("civilwar")
+          expect(result.conflicts[0]!.conflict_type).toBe("civilwar")
         }
       })
     )

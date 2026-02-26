@@ -44,14 +44,14 @@ const mapConflict = (domain: DomainModels.EddnConflict): EddnConflictDTO => {
   return new EddnConflictDTO({
     id: domain.id,
     system_name: domain.systemName,
-    war_type: Option.getOrUndefined(domain.warType),
+    conflict_type: Option.getOrUndefined(domain.warType),
     status: Option.getOrUndefined(domain.status),
     faction1: Option.getOrUndefined(domain.faction1),
     faction1_stake: Option.getOrUndefined(domain.stake1),
-    faction1_days_won: Option.getOrUndefined(domain.wonDays1),
+    faction1_won: Option.getOrUndefined(domain.wonDays1),
     faction2: Option.getOrUndefined(domain.faction2),
     faction2_stake: Option.getOrUndefined(domain.stake2),
-    faction2_days_won: Option.getOrUndefined(domain.wonDays2),
+    faction2_won: Option.getOrUndefined(domain.wonDays2),
     timestamp: domain.updatedAt.toISOString(),
   })
 }
@@ -217,19 +217,19 @@ export const handleGetSystemSummary = (
         systems = systems === null ? new Set(matches) : new Set([...systems].filter((s) => matches.includes(s)))
       }
 
-      // CF in conflict (requires controlling_faction to be set)
+      // CF in conflict
       if (isTruthy(query.cf_in_conflict)) {
-        if (!query.controlling_faction) {
-          return new SystemSearchErrorResponse({
-            error: "For cf_in_conflict, controlling_faction must be specified.",
-            count: 0,
-            systems: [],
-          })
+        if (query.controlling_faction) {
+          // Specific controlling faction in conflict
+          const cfSystems = yield* eddnRepo.findSystemsByControllingFaction(query.controlling_faction)
+          const conflictSystems = yield* eddnRepo.findSystemsWithConflictsForFaction(query.controlling_faction)
+          const cfInConflictSystems = cfSystems.filter((s) => conflictSystems.includes(s))
+          systems = systems === null ? new Set(cfInConflictSystems) : new Set([...systems].filter((s) => cfInConflictSystems.includes(s)))
+        } else {
+          // Any controlling faction in conflict
+          const matches = yield* eddnRepo.findSystemsWithControllingFactionInConflict()
+          systems = systems === null ? new Set(matches) : new Set([...systems].filter((s) => matches.includes(s)))
         }
-        const cfSystems = yield* eddnRepo.findSystemsByControllingFaction(query.controlling_faction)
-        const conflictSystems = yield* eddnRepo.findSystemsWithConflictsForFaction(query.controlling_faction)
-        const cfInConflictSystems = cfSystems.filter((s) => conflictSystems.includes(s))
-        systems = systems === null ? new Set(cfInConflictSystems) : new Set([...systems].filter((s) => cfInConflictSystems.includes(s)))
       }
 
       // If still no systems found, return error response

@@ -10,6 +10,11 @@ import { AuthApi } from "./auth/api.js";
 import { DiscordSummaryApi } from "./discord-summary/api.js";
 import { CommandersApi } from "./commanders/api.js";
 import { DiscoveryApi } from "./discovery/api.js";
+import { TickApi } from "./tick/api.js";
+import { CmdrLocationApi } from "./cmdr-location/api.js";
+import { CZApi } from "./cz/api.js";
+import { BountyVouchersApi } from "./bounty-vouchers/api.js";
+import { FactionVisitedSystemsApi } from "./faction-visited-systems/api.js";
 
 // API composition - all endpoint groups
 export const Api = HttpApi.make("sinistra-api")
@@ -23,4 +28,9 @@ export const Api = HttpApi.make("sinistra-api")
   .add(AuthApi)
   .add(DiscordSummaryApi)
   .add(CommandersApi)
-  .add(DiscoveryApi);
+  .add(DiscoveryApi)
+  .add(TickApi)
+  .add(CmdrLocationApi)
+  .add(CZApi)
+  .add(BountyVouchersApi)
+  .add(FactionVisitedSystemsApi);

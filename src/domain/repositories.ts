@@ -218,5 +218,6 @@ export class EddnRepository extends Context.Tag('EddnRepository')<
         findSystemsByPopulation(populationFilter: string): Effect.Effect<Array<string>, DatabaseError>
         findSystemsByPowerplayState(state: string): Effect.Effect<Array<string>, DatabaseError>
         findSystemsWithConflictsForFaction(factionName: string): Effect.Effect<Array<string>, DatabaseError>
+        findSystemsWithControllingFactionInConflict(): Effect.Effect<Array<string>, DatabaseError>
     }
 >() {}

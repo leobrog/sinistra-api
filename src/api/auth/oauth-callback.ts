@@ -29,6 +29,17 @@ export const oauthCallbackMiddleware = (
     const req = yield* HttpServerRequest.HttpServerRequest
     const url = new URL(req.url, "http://placeholder")
 
+    // Initiate Discord OAuth flow
+    if (req.method === "GET" && url.pathname === "/api/auth/discord/login") {
+      const config = yield* AppConfig
+      const authUrl = new URL("https://discord.com/api/oauth2/authorize")
+      authUrl.searchParams.set("client_id", config.discord.oauth.clientId)
+      authUrl.searchParams.set("redirect_uri", config.discord.oauth.redirectUri)
+      authUrl.searchParams.set("response_type", "code")
+      authUrl.searchParams.set("scope", "identify")
+      return HttpServerResponse.redirect(authUrl.toString(), { status: 302 })
+    }
+
     // Only intercept the OAuth callback — everything else falls through
     if (req.method !== "GET" || url.pathname !== "/api/auth/discord/callback") {
       return yield* app
@@ -79,6 +90,7 @@ export const oauthCallbackMiddleware = (
           active: true,
           createdAt: new Date(),
           updatedAt: new Date(),
+          cmdrId: Option.none(),
         })
 
         yield* flaskUserRepo.create(flaskUser)
