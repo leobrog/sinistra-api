@@ -35,7 +35,7 @@ interface DiscordEmbed {
  * Post embeds to a Discord webhook.
  * Splits into multiple requests if needed (max 10 embeds, 6000 total chars per request).
  */
-const postEmbedsToDiscord = async (webhookUrl: string, embeds: DiscordEmbed[]): Promise<void> => {
+export const postEmbedsToDiscord = async (webhookUrl: string, embeds: DiscordEmbed[]): Promise<void> => {
   const chunks: DiscordEmbed[][] = []
   let current: DiscordEmbed[] = []
   let totalChars = 0
@@ -127,7 +127,7 @@ const groupHeader = (label: string): string => `${DIVIDER}\n**${label}**`
 // Job 1 — BGS tick summary (BGS webhook)
 // ---------------------------------------------------------------------------
 
-const buildTickSummary = async (
+export const buildTickSummary = async (
   client: Client,
   tickId: string,
   factionName: string
@@ -229,7 +229,7 @@ const buildTickSummary = async (
 // Job 2 — Space CZ summary (conflict webhook)
 // ---------------------------------------------------------------------------
 
-const buildSpaceCzSummary = async (client: Client, tickId: string): Promise<DiscordEmbed[]> => {
+export const buildSpaceCzSummary = async (client: Client, tickId: string): Promise<DiscordEmbed[]> => {
   const result = await client.execute({
     sql: `SELECT e.starsystem AS system, scz.cz_type, e.cmdr, COUNT(*) AS cz_count
           FROM synthetic_cz scz
@@ -269,7 +269,7 @@ const buildSpaceCzSummary = async (client: Client, tickId: string): Promise<Disc
 // Job 3 — Ground CZ summary (shoutout webhook)
 // ---------------------------------------------------------------------------
 
-const buildGroundCzSummary = async (client: Client, tickId: string): Promise<DiscordEmbed[]> => {
+export const buildGroundCzSummary = async (client: Client, tickId: string): Promise<DiscordEmbed[]> => {
   const result = await client.execute({
     sql: `SELECT e.starsystem AS system, sgcz.settlement, sgcz.cz_type, e.cmdr, COUNT(*) AS cz_count
           FROM synthetic_ground_cz sgcz
@@ -326,12 +326,37 @@ export const runShoutoutScheduler: Effect.Effect<
       const sub = yield* PubSub.subscribe(bus)
       return yield* Effect.forever(
         Effect.gen(function* () {
-          const tickId = yield* Queue.take(sub)
+          const currentTick = yield* Queue.take(sub)
           yield* Effect.logInfo(
-            `Shoutout scheduler: received tick ${tickId}, waiting 15 minutes`
+            `Shoutout scheduler: received tick ${currentTick}, waiting 15 minutes`
           )
           yield* Effect.sleep(Duration.minutes(15))
-          yield* Effect.logInfo(`Shoutout scheduler: running jobs for tick ${tickId}`)
+
+          // Resolve the Zoy hash tickid for the just-completed period.
+          // Events carry hash IDs (e.g. "zoy-XXXX"), not ISO timestamps, so we
+          // find the most recent distinct tickid from events submitted before the
+          // new tick's ISO timestamp — that is the completed tick's hash.
+          const completedTickHash = yield* Effect.tryPromise({
+            try: async () => {
+              const result = await client.execute({
+                sql: "SELECT DISTINCT tickid FROM event WHERE tickid IS NOT NULL AND timestamp < ? ORDER BY timestamp DESC LIMIT 1",
+                args: [currentTick],
+              })
+              return result.rows[0]?.tickid as string | undefined
+            },
+            catch: (e) => new Error(`Tick hash lookup failed: ${e}`),
+          }).pipe(Effect.catchAll((e) => Effect.logWarning(`${e}`).pipe(Effect.as(undefined))))
+
+          if (!completedTickHash) {
+            yield* Effect.logInfo(
+              `Shoutout scheduler: skipping ${currentTick} — no events found before this tick`
+            )
+            return
+          }
+
+          yield* Effect.logInfo(
+            `Shoutout scheduler: running jobs for completed tick ${completedTickHash}`
+          )
 
           const bgsWebhook = Option.getOrNull(config.discord.webhooks.bgs)
           const conflictWebhook = Option.getOrNull(config.discord.webhooks.conflict)
@@ -341,39 +366,69 @@ export const runShoutoutScheduler: Effect.Effect<
           if (bgsWebhook) {
             yield* Effect.tryPromise({
               try: async () => {
-                const embeds = await buildTickSummary(client, tickId, factionName)
-                if (embeds.length > 0) await postEmbedsToDiscord(bgsWebhook, embeds)
+                const embeds = await buildTickSummary(client, completedTickHash, factionName)
+                if (embeds.length > 0) {
+                  await postEmbedsToDiscord(bgsWebhook, embeds)
+                  return embeds.length
+                }
+                return 0
               },
               catch: (e) => new Error(`BGS summary failed: ${e}`),
-            }).pipe(Effect.catchAll((e) => Effect.logWarning(`Shoutout BGS error: ${e}`)))
-            yield* Effect.logInfo("Shoutout: BGS summary sent")
+            }).pipe(
+              Effect.flatMap((n) =>
+                n > 0
+                  ? Effect.logInfo(`Shoutout: BGS summary sent (${n} embed(s))`)
+                  : Effect.logInfo("Shoutout: BGS summary — no data for this tick")
+              ),
+              Effect.catchAll((e) => Effect.logWarning(`Shoutout BGS error: ${e}`))
+            )
           }
 
           // Job 2: Space CZ → conflict webhook
           if (conflictWebhook) {
             yield* Effect.tryPromise({
               try: async () => {
-                const embeds = await buildSpaceCzSummary(client, tickId)
-                if (embeds.length > 0) await postEmbedsToDiscord(conflictWebhook, embeds)
+                const embeds = await buildSpaceCzSummary(client, completedTickHash)
+                if (embeds.length > 0) {
+                  await postEmbedsToDiscord(conflictWebhook, embeds)
+                  return embeds.length
+                }
+                return 0
               },
               catch: (e) => new Error(`Space CZ summary failed: ${e}`),
-            }).pipe(Effect.catchAll((e) => Effect.logWarning(`Shoutout space CZ error: ${e}`)))
-            yield* Effect.logInfo("Shoutout: Space CZ summary sent")
+            }).pipe(
+              Effect.flatMap((n) =>
+                n > 0
+                  ? Effect.logInfo(`Shoutout: Space CZ summary sent (${n} embed(s))`)
+                  : Effect.logInfo("Shoutout: Space CZ summary — no data for this tick")
+              ),
+              Effect.catchAll((e) => Effect.logWarning(`Shoutout space CZ error: ${e}`))
+            )
           }
 
           // Job 3: Ground CZ → shoutout webhook
           if (shoutoutWebhook) {
             yield* Effect.tryPromise({
               try: async () => {
-                const embeds = await buildGroundCzSummary(client, tickId)
-                if (embeds.length > 0) await postEmbedsToDiscord(shoutoutWebhook, embeds)
+                const embeds = await buildGroundCzSummary(client, completedTickHash)
+                if (embeds.length > 0) {
+                  await postEmbedsToDiscord(shoutoutWebhook, embeds)
+                  return embeds.length
+                }
+                return 0
               },
               catch: (e) => new Error(`Ground CZ summary failed: ${e}`),
-            }).pipe(Effect.catchAll((e) => Effect.logWarning(`Shoutout ground CZ error: ${e}`)))
-            yield* Effect.logInfo("Shoutout: Ground CZ summary sent")
+            }).pipe(
+              Effect.flatMap((n) =>
+                n > 0
+                  ? Effect.logInfo(`Shoutout: Ground CZ summary sent (${n} embed(s))`)
+                  : Effect.logInfo("Shoutout: Ground CZ summary — no data for this tick")
+              ),
+              Effect.catchAll((e) => Effect.logWarning(`Shoutout ground CZ error: ${e}`))
+            )
           }
 
-          yield* Effect.logInfo(`Shoutout scheduler: tick ${tickId} jobs complete`)
+          yield* Effect.logInfo(`Shoutout scheduler: tick ${currentTick} jobs complete`)
         })
       )
     })

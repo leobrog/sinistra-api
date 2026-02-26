@@ -13,7 +13,7 @@
  */
 
 import { Effect, Duration } from "effect"
-import type { Client } from "@libsql/client"
+import type { Client, InStatement } from "@libsql/client"
 import { AppConfig } from "../lib/config.js"
 import { TursoClient } from "../database/client.js"
 import { fetchCmdrProfile, profileToDbValues, InaraRateLimitError } from "../services/inara.js"
@@ -34,35 +34,40 @@ const msUntilUtcTime = (hour: number, minute = 0): number => {
 // DB update
 // ---------------------------------------------------------------------------
 
-const updateCmdrRanks = (
-  client: Client,
+const buildUpdateStatement = (
   cmdrId: string,
   vals: ReturnType<typeof profileToDbValues>
+): InStatement => ({
+  sql: `UPDATE cmdr
+        SET rank_combat = ?, rank_trade = ?, rank_explore = ?, rank_cqc = ?,
+            rank_empire = ?, rank_federation = ?, rank_power = ?,
+            inara_url = ?, squadron_name = ?, squadron_rank = ?
+        WHERE id = ?`,
+  args: [
+    vals.rankCombat !== null ? String(vals.rankCombat) : null,
+    vals.rankTrade !== null ? String(vals.rankTrade) : null,
+    vals.rankExplore !== null ? String(vals.rankExplore) : null,
+    vals.rankCqc !== null ? String(vals.rankCqc) : null,
+    vals.rankEmpire !== null ? String(vals.rankEmpire) : null,
+    vals.rankFederation !== null ? String(vals.rankFederation) : null,
+    vals.rankPower,
+    vals.inaraUrl,
+    vals.squadronName,
+    vals.squadronRank,
+    cmdrId,
+  ],
+})
+
+const flushUpdates = (
+  client: Client,
+  statements: InStatement[]
 ): Effect.Effect<void, Error> =>
-  Effect.tryPromise({
-    try: () =>
-      client.execute({
-        sql: `UPDATE cmdr
-              SET rank_combat = ?, rank_trade = ?, rank_explore = ?, rank_cqc = ?,
-                  rank_empire = ?, rank_federation = ?, rank_power = ?,
-                  inara_url = ?, squadron_name = ?, squadron_rank = ?
-              WHERE id = ?`,
-        args: [
-          vals.rankCombat !== null ? String(vals.rankCombat) : null,
-          vals.rankTrade !== null ? String(vals.rankTrade) : null,
-          vals.rankExplore !== null ? String(vals.rankExplore) : null,
-          vals.rankCqc !== null ? String(vals.rankCqc) : null,
-          vals.rankEmpire !== null ? String(vals.rankEmpire) : null,
-          vals.rankFederation !== null ? String(vals.rankFederation) : null,
-          vals.rankPower,
-          vals.inaraUrl,
-          vals.squadronName,
-          vals.squadronRank,
-          cmdrId,
-        ],
-      }),
-    catch: (e) => new Error(`DB update failed for cmdr ${cmdrId}: ${e}`),
-  }).pipe(Effect.asVoid)
+  statements.length === 0
+    ? Effect.void
+    : Effect.tryPromise({
+        try: () => client.batch(statements, "write"),
+        catch: (e) => new Error(`Batch DB update failed: ${e}`),
+      }).pipe(Effect.asVoid)
 
 // ---------------------------------------------------------------------------
 // Main fiber
@@ -97,9 +102,10 @@ export const runInaraSync: Effect.Effect<never, never, AppConfig | TursoClient> 
       const cmdrs = cmdrResult.rows
       yield* Effect.logInfo(`Inara sync: processing ${cmdrs.length} CMDRs`)
 
-      let synced = 0
       let skipped = 0
       let rateLimited = false
+      const pendingUpdates: InStatement[] = []
+      const syncedNames: string[] = []
 
       for (const row of cmdrs) {
         if (rateLimited) break
@@ -107,29 +113,28 @@ export const runInaraSync: Effect.Effect<never, never, AppConfig | TursoClient> 
         const cmdrId = String(row.id)
         const cmdrName = String(row.name)
 
-        // Fetch profile and update DB; handle rate-limit and other errors
+        // Fetch profile; collect statement — do NOT write to DB yet
         const outcome = yield* fetchCmdrProfile(cmdrName, config.inara.apiKey).pipe(
-          Effect.flatMap((profile) => updateCmdrRanks(client, cmdrId, profileToDbValues(profile))),
-          Effect.map(() => "synced" as const),
+          Effect.map((profile) => ({ tag: "synced" as const, statement: buildUpdateStatement(cmdrId, profileToDbValues(profile)) })),
           Effect.catchTag("InaraRateLimitError", (_e: InaraRateLimitError) =>
-            Effect.succeed("rate_limited" as const)
+            Effect.succeed({ tag: "rate_limited" as const })
           ),
           Effect.catchAll((e) =>
             Effect.logWarning(`Inara sync: skipped ${cmdrName}: ${e}`).pipe(
-              Effect.as("skipped" as const)
+              Effect.as({ tag: "skipped" as const })
             )
           )
         )
 
-        if (outcome === "rate_limited") {
+        if (outcome.tag === "rate_limited") {
           rateLimited = true
-          yield* Effect.logWarning(`Inara sync: rate limited after ${synced} CMDRs, aborting batch`)
+          yield* Effect.logWarning(`Inara sync: rate limited after ${syncedNames.length} CMDRs, aborting batch`)
           break
         }
 
-        if (outcome === "synced") {
-          synced++
-          yield* Effect.logInfo(`Inara sync: updated ${cmdrName}`)
+        if (outcome.tag === "synced") {
+          pendingUpdates.push(outcome.statement)
+          syncedNames.push(cmdrName)
         } else {
           skipped++
         }
@@ -138,8 +143,12 @@ export const runInaraSync: Effect.Effect<never, never, AppConfig | TursoClient> 
         yield* Effect.sleep(Duration.seconds(60))
       }
 
+      // Commit all collected updates in a single write transaction
+      yield* Effect.logInfo(`Inara sync: flushing ${pendingUpdates.length} updates in one batch`)
+      yield* flushUpdates(client, pendingUpdates)
+
       yield* Effect.logInfo(
-        `Inara sync complete: ${synced} updated, ${skipped} skipped${rateLimited ? ", rate limited" : ""}`
+        `Inara sync complete: ${syncedNames.length} updated, ${skipped} skipped${rateLimited ? ", rate limited" : ""}`
       )
     })
 

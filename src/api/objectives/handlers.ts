@@ -361,14 +361,13 @@ const buildGetObjectivesEffect = (
 
         enrichedTargets.push({
           id: target.id,
-          objectiveId: target.objectiveId,
-          type: target.type,
-          station: target.station,
-          system: target.system,
-          faction: target.faction,
-          progress: Option.some(progressDetail.overallProgress),
-          targetindividual: target.targetindividual,
-          targetoverall: target.targetoverall,
+          type: Option.getOrElse(target.type, () => ""),
+          station: Option.getOrElse(target.station, () => ""),
+          system: Option.getOrElse(target.system, () => Option.getOrElse(objective.system, () => "")),
+          faction: Option.getOrElse(target.faction, () => Option.getOrElse(objective.faction, () => "")),
+          progress: progressDetail.overallProgress,
+          targetindividual,
+          targetoverall,
           settlements: target.settlements.map((s) => {
             const sName = Option.getOrNull(s.name)
             const calcProgress = sName
@@ -376,11 +375,10 @@ const buildGetObjectivesEffect = (
               : 0
             return {
               id: s.id,
-              targetId: s.targetId,
-              name: s.name,
-              targetindividual: s.targetindividual,
-              targetoverall: s.targetoverall,
-              progress: Option.some(calcProgress),
+              name: Option.getOrElse(s.name, () => ""),
+              targetindividual: Option.getOrElse(s.targetindividual, () => 0),
+              targetoverall: Option.getOrElse(s.targetoverall, () => 0),
+              progress: calcProgress,
             }
           }),
           progressDetail,
@@ -389,14 +387,14 @@ const buildGetObjectivesEffect = (
 
       enrichedObjectives.push({
         id: objective.id,
-        title: objective.title,
-        priority: objective.priority,
-        type: objective.type,
-        system: objective.system,
-        faction: objective.faction,
-        description: objective.description,
-        startdate: objective.startdate,
-        enddate: objective.enddate,
+        title: Option.getOrElse(objective.title, () => ""),
+        priority: Option.getOrElse(objective.priority, () => 0),
+        type: Option.getOrElse(objective.type, () => ""),
+        system: Option.getOrElse(objective.system, () => ""),
+        faction: Option.getOrElse(objective.faction, () => ""),
+        description: Option.getOrElse(objective.description, () => ""),
+        startdate: startdate ? startdate.toISOString().replace(/\.\d{3}Z$/, "Z") : undefined,
+        enddate: enddate ? enddate.toISOString().replace(/\.\d{3}Z$/, "Z") : undefined,
         targets: enrichedTargets,
       })
     }

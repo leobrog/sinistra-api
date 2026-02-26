@@ -57,6 +57,9 @@ export const EventDataSchema = Schema.Struct({
   Type: Schema.optional(Schema.String),
   Factions: Schema.optional(Schema.Array(Schema.Unknown)),
 
+  // FSDJump / Location conflict data
+  Conflicts: Schema.optional(Schema.Array(Schema.Unknown)),
+
   // CommitCrime
   CrimeType: Schema.optional(Schema.String),
   Victim: Schema.optional(Schema.String),

@@ -121,39 +121,37 @@ export type ProgressDetail = typeof ProgressDetailSchema.Type
 // Settlement in GET response
 const SettlementResponseSchema = Schema.Struct({
   id: ObjectiveTargetSettlementId,
-  targetId: ObjectiveTargetId,
-  name: Schema.optionalWith(Schema.String, { as: "Option" }),
-  targetindividual: Schema.optionalWith(Schema.Number, { as: "Option" }),
-  targetoverall: Schema.optionalWith(Schema.Number, { as: "Option" }),
-  progress: Schema.optionalWith(Schema.Number, { as: "Option" }),
+  name: Schema.String,
+  targetindividual: Schema.Int,
+  targetoverall: Schema.Int,
+  progress: Schema.Int,
 })
 
 // Target in GET response (includes progressDetail)
 const ObjectiveTargetResponseSchema = Schema.Struct({
   id: ObjectiveTargetId,
-  objectiveId: ObjectiveId,
-  type: Schema.optionalWith(Schema.String, { as: "Option" }),
-  station: Schema.optionalWith(Schema.String, { as: "Option" }),
-  system: Schema.optionalWith(Schema.String, { as: "Option" }),
-  faction: Schema.optionalWith(Schema.String, { as: "Option" }),
-  progress: Schema.optionalWith(Schema.Number, { as: "Option" }),
-  targetindividual: Schema.optionalWith(Schema.Number, { as: "Option" }),
-  targetoverall: Schema.optionalWith(Schema.Number, { as: "Option" }),
-  settlements: Schema.Array(SettlementResponseSchema),
+  type: Schema.String,
+  station: Schema.String,
+  system: Schema.String,
+  faction: Schema.String,
+  progress: Schema.Int,
   progressDetail: ProgressDetailSchema,
+  settlements: Schema.Array(SettlementResponseSchema),
+  targetindividual: Schema.Int,
+  targetoverall: Schema.Int,
 })
 
 // Objective in GET response
 const ObjectiveResponseSchema = Schema.Struct({
   id: ObjectiveId,
-  title: Schema.optionalWith(Schema.String, { as: "Option" }),
-  priority: Schema.optionalWith(Schema.Number, { as: "Option" }),
-  type: Schema.optionalWith(Schema.String, { as: "Option" }),
-  system: Schema.optionalWith(Schema.String, { as: "Option" }),
-  faction: Schema.optionalWith(Schema.String, { as: "Option" }),
-  description: Schema.optionalWith(Schema.String, { as: "Option" }),
-  startdate: Schema.optionalWith(Schema.Date, { as: "Option" }),
-  enddate: Schema.optionalWith(Schema.Date, { as: "Option" }),
+  title: Schema.String,
+  priority: Schema.Int,
+  type: Schema.String,
+  system: Schema.String,
+  faction: Schema.String,
+  description: Schema.String,
+  startdate: Schema.optional(Schema.String),
+  enddate: Schema.optional(Schema.String),
   targets: Schema.Array(ObjectiveTargetResponseSchema),
 })
 
