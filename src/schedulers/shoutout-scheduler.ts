@@ -362,6 +362,8 @@ export const runShoutoutScheduler: Effect.Effect<
           const conflictWebhook = Option.getOrNull(config.discord.webhooks.conflict)
           const shoutoutWebhook = Option.getOrNull(config.discord.webhooks.shoutout)
 
+          let totalSent = 0
+
           // Job 1: BGS tick summary → bgs webhook
           if (bgsWebhook) {
             yield* Effect.tryPromise({
@@ -375,11 +377,12 @@ export const runShoutoutScheduler: Effect.Effect<
               },
               catch: (e) => new Error(`BGS summary failed: ${e}`),
             }).pipe(
-              Effect.flatMap((n) =>
-                n > 0
+              Effect.flatMap((n) => {
+                totalSent += n
+                return n > 0
                   ? Effect.logInfo(`Shoutout: BGS summary sent (${n} embed(s))`)
                   : Effect.logInfo("Shoutout: BGS summary — no data for this tick")
-              ),
+              }),
               Effect.catchAll((e) => Effect.logWarning(`Shoutout BGS error: ${e}`))
             )
           }
@@ -397,11 +400,12 @@ export const runShoutoutScheduler: Effect.Effect<
               },
               catch: (e) => new Error(`Space CZ summary failed: ${e}`),
             }).pipe(
-              Effect.flatMap((n) =>
-                n > 0
+              Effect.flatMap((n) => {
+                totalSent += n
+                return n > 0
                   ? Effect.logInfo(`Shoutout: Space CZ summary sent (${n} embed(s))`)
                   : Effect.logInfo("Shoutout: Space CZ summary — no data for this tick")
-              ),
+              }),
               Effect.catchAll((e) => Effect.logWarning(`Shoutout space CZ error: ${e}`))
             )
           }
@@ -419,13 +423,34 @@ export const runShoutoutScheduler: Effect.Effect<
               },
               catch: (e) => new Error(`Ground CZ summary failed: ${e}`),
             }).pipe(
-              Effect.flatMap((n) =>
-                n > 0
+              Effect.flatMap((n) => {
+                totalSent += n
+                return n > 0
                   ? Effect.logInfo(`Shoutout: Ground CZ summary sent (${n} embed(s))`)
                   : Effect.logInfo("Shoutout: Ground CZ summary — no data for this tick")
-              ),
+              }),
               Effect.catchAll((e) => Effect.logWarning(`Shoutout ground CZ error: ${e}`))
             )
+          }
+
+          // If no data was sent on any job, post a fallback "nothing happened" notice
+          if (totalSent === 0) {
+            const fallbackWebhook = bgsWebhook ?? conflictWebhook ?? shoutoutWebhook
+            if (fallbackWebhook) {
+              yield* Effect.tryPromise({
+                try: () =>
+                  postEmbedsToDiscord(fallbackWebhook, [
+                    {
+                      description: `📭 **No BGS activity recorded for tick ${completedTickHash}**\n_No missions, market trades, or CZ data found in the database for this tick._`,
+                      color: 9807270, // grey
+                    },
+                  ]),
+                catch: (e) => new Error(`Fallback notice failed: ${e}`),
+              }).pipe(
+                Effect.flatMap(() => Effect.logInfo("Shoutout: posted no-activity notice")),
+                Effect.catchAll((e) => Effect.logWarning(`Shoutout fallback notice error: ${e}`))
+              )
+            }
           }
 
           yield* Effect.logInfo(`Shoutout scheduler: tick ${currentTick} jobs complete`)
