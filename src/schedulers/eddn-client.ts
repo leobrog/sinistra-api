@@ -18,17 +18,7 @@ import { TursoClient } from "../database/client.js"
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Delete all derived data for a system before re-inserting */
-const deleteSystemData = async (client: Client, systemName: string) => {
-  await client.batch([
-    { sql: "DELETE FROM eddn_system_info WHERE system_name = ?", args: [systemName] },
-    { sql: "DELETE FROM eddn_faction WHERE system_name = ?", args: [systemName] },
-    { sql: "DELETE FROM eddn_conflict WHERE system_name = ?", args: [systemName] },
-    { sql: "DELETE FROM eddn_powerplay WHERE system_name = ?", args: [systemName] },
-  ])
-}
-
-/** Save one parsed EDDN message to the DB */
+/** Save one parsed EDDN message to the DB — all writes in a single transaction */
 const saveEddnData = async (client: Client, data: any): Promise<void> => {
   const msg = data?.message ?? {}
   const messageType: string = msg.event ?? ""
@@ -41,107 +31,57 @@ const saveEddnData = async (client: Client, data: any): Promise<void> => {
   const now = new Date().toISOString()
   const msgId = crypto.randomUUID()
 
-  // 1. Save raw message
-  await client.execute({
+  const stmts: Array<{ sql: string; args: unknown[] }> = []
+
+  // 1. Raw message
+  stmts.push({
     sql: `INSERT INTO eddn_message (id, schema_ref, header_gateway_timestamp, message_type, message_json, timestamp)
           VALUES (?, ?, ?, ?, ?, ?)`,
-    args: [
-      msgId,
-      data?.["$schemaRef"] ?? "",
-      data?.header?.gatewayTimestamp ?? null,
-      messageType,
-      JSON.stringify(data),
-      now,
-    ],
+    args: [msgId, data?.["$schemaRef"] ?? "", data?.header?.gatewayTimestamp ?? null, messageType, JSON.stringify(data), now],
   })
 
-  // 2. Delete stale data for this system
-  await deleteSystemData(client, systemName)
+  // 2. Delete stale derived data for this system
+  stmts.push({ sql: "DELETE FROM eddn_system_info WHERE system_name = ?", args: [systemName] })
+  stmts.push({ sql: "DELETE FROM eddn_faction WHERE system_name = ?", args: [systemName] })
+  stmts.push({ sql: "DELETE FROM eddn_conflict WHERE system_name = ?", args: [systemName] })
+  stmts.push({ sql: "DELETE FROM eddn_powerplay WHERE system_name = ?", args: [systemName] })
 
-  // 3. Insert new system info
-  await client.execute({
+  // 3. System info
+  stmts.push({
     sql: `INSERT INTO eddn_system_info (id, eddn_message_id, system_name, controlling_faction, controlling_power, population, security, government, allegiance, updated_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    args: [
-      crypto.randomUUID(),
-      msgId,
-      systemName,
-      msg.SystemFaction?.Name ?? null,
-      msg.ControllingPower ?? null,
-      msg.Population ?? null,
-      msg.SystemSecurity ?? null,
-      msg.SystemGovernment ?? null,
-      msg.SystemAllegiance ?? null,
-      now,
-    ],
+    args: [crypto.randomUUID(), msgId, systemName, msg.SystemFaction?.Name ?? null, msg.ControllingPower ?? null, msg.Population ?? null, msg.SystemSecurity ?? null, msg.SystemGovernment ?? null, msg.SystemAllegiance ?? null, now],
   })
 
-  // 4. Insert factions
-  const factions: any[] = msg.Factions ?? []
-  for (const f of factions) {
-    await client.execute({
+  // 4. Factions
+  for (const f of (msg.Factions ?? []) as any[]) {
+    stmts.push({
       sql: `INSERT INTO eddn_faction (id, eddn_message_id, system_name, name, influence, state, allegiance, government, recovering_states, active_states, pending_states, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      args: [
-        crypto.randomUUID(),
-        msgId,
-        systemName,
-        f.Name ?? "Unknown",
-        f.Influence ?? null,
-        f.FactionState ?? null,
-        f.Allegiance ?? null,
-        f.Government ?? null,
-        f.RecoveringStates ? JSON.stringify(f.RecoveringStates) : null,
-        f.ActiveStates ? JSON.stringify(f.ActiveStates) : null,
-        f.PendingStates ? JSON.stringify(f.PendingStates) : null,
-        now,
-      ],
+      args: [crypto.randomUUID(), msgId, systemName, f.Name ?? "Unknown", f.Influence ?? null, f.FactionState ?? null, f.Allegiance ?? null, f.Government ?? null, f.RecoveringStates ? JSON.stringify(f.RecoveringStates) : null, f.ActiveStates ? JSON.stringify(f.ActiveStates) : null, f.PendingStates ? JSON.stringify(f.PendingStates) : null, now],
     })
   }
 
-  // 5. Insert conflicts
-  const conflicts: any[] = msg.Conflicts ?? []
-  for (const c of conflicts) {
-    await client.execute({
+  // 5. Conflicts
+  for (const c of (msg.Conflicts ?? []) as any[]) {
+    stmts.push({
       sql: `INSERT INTO eddn_conflict (id, eddn_message_id, system_name, faction1, faction2, stake1, stake2, won_days1, won_days2, status, war_type, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      args: [
-        crypto.randomUUID(),
-        msgId,
-        systemName,
-        c.Faction1?.Name ?? null,
-        c.Faction2?.Name ?? null,
-        c.Faction1?.Stake ?? null,
-        c.Faction2?.Stake ?? null,
-        c.Faction1?.WonDays ?? null,
-        c.Faction2?.WonDays ?? null,
-        c.Status ?? null,
-        c.WarType ?? null,
-        now,
-      ],
+      args: [crypto.randomUUID(), msgId, systemName, c.Faction1?.Name ?? null, c.Faction2?.Name ?? null, c.Faction1?.Stake ?? null, c.Faction2?.Stake ?? null, c.Faction1?.WonDays ?? null, c.Faction2?.WonDays ?? null, c.Status ?? null, c.WarType ?? null, now],
     })
   }
 
-  // 6. Insert powerplay (if present)
-  const hasPowerplay = "Powers" in msg || "PowerplayState" in msg
-  if (hasPowerplay) {
+  // 6. Powerplay (if present)
+  if ("Powers" in msg || "PowerplayState" in msg) {
     const powers = msg.Powers
-    await client.execute({
+    stmts.push({
       sql: `INSERT INTO eddn_powerplay (id, eddn_message_id, system_name, power, powerplay_state, control_progress, reinforcement, undermining, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      args: [
-        crypto.randomUUID(),
-        msgId,
-        systemName,
-        powers ? JSON.stringify(Array.isArray(powers) ? powers : [powers]) : null,
-        msg.PowerplayState ?? null,
-        msg.PowerplayStateControlProgress ?? null,
-        msg.PowerplayStateReinforcement ?? null,
-        msg.PowerplayStateUndermining ?? null,
-        now,
-      ],
+      args: [crypto.randomUUID(), msgId, systemName, powers ? JSON.stringify(Array.isArray(powers) ? powers : [powers]) : null, msg.PowerplayState ?? null, msg.PowerplayStateControlProgress ?? null, msg.PowerplayStateReinforcement ?? null, msg.PowerplayStateUndermining ?? null, now],
     })
   }
+
+  await client.batch(stmts as any)
 }
 
 /** Delete eddn_message rows older than retentionMs */

@@ -121,47 +121,40 @@ const loadConflictState = async (client: Client): Promise<Map<string, ConflictEn
   return map
 }
 
-const upsertConflictState = async (
-  client: Client,
-  system: string,
-  entry: ConflictEntry,
-  tickId: string
-): Promise<void> => {
-  await client.execute({
-    sql: `INSERT INTO conflict_state
-            (system, faction1, faction2, war_type, won_days1, won_days2, stake1, stake2, last_tick_id, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          ON CONFLICT(system) DO UPDATE SET
-            faction1     = excluded.faction1,
-            faction2     = excluded.faction2,
-            war_type     = excluded.war_type,
-            won_days1    = excluded.won_days1,
-            won_days2    = excluded.won_days2,
-            stake1       = excluded.stake1,
-            stake2       = excluded.stake2,
-            last_tick_id = excluded.last_tick_id,
-            updated_at   = excluded.updated_at`,
-    args: [
-      system,
-      entry.faction1,
-      entry.faction2,
-      entry.warType,
-      entry.wonDays1,
-      entry.wonDays2,
-      entry.stake1,
-      entry.stake2,
-      tickId,
-      new Date().toISOString(),
-    ],
-  })
-}
+type Stmt = { sql: string; args: unknown[] }
 
-const deleteConflictState = async (client: Client, system: string): Promise<void> => {
-  await client.execute({
-    sql: "DELETE FROM conflict_state WHERE system = ?",
-    args: [system],
-  })
-}
+const buildUpsertStmt = (system: string, entry: ConflictEntry, tickId: string): Stmt => ({
+  sql: `INSERT INTO conflict_state
+          (system, faction1, faction2, war_type, won_days1, won_days2, stake1, stake2, last_tick_id, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(system) DO UPDATE SET
+          faction1     = excluded.faction1,
+          faction2     = excluded.faction2,
+          war_type     = excluded.war_type,
+          won_days1    = excluded.won_days1,
+          won_days2    = excluded.won_days2,
+          stake1       = excluded.stake1,
+          stake2       = excluded.stake2,
+          last_tick_id = excluded.last_tick_id,
+          updated_at   = excluded.updated_at`,
+  args: [
+    system,
+    entry.faction1,
+    entry.faction2,
+    entry.warType,
+    entry.wonDays1,
+    entry.wonDays2,
+    entry.stake1,
+    entry.stake2,
+    tickId,
+    new Date().toISOString(),
+  ],
+})
+
+const buildDeleteStmt = (system: string): Stmt => ({
+  sql: "DELETE FROM conflict_state WHERE system = ?",
+  args: [system],
+})
 
 // ---------------------------------------------------------------------------
 // Message formatters
@@ -281,60 +274,51 @@ export const runConflictCheck = (
       ),
     ])
 
+    const stmts: Stmt[] = []
+    const discordMessages: string[] = []
+
     // --- Process systems present in the current tick ---
     for (const [system, current] of currentConflicts.entries()) {
       const prev = prevState.get(system)
 
       if (!prev) {
-        // New conflict — insert state, notify
-        yield* Effect.tryPromise({
-          try: () => upsertConflictState(client, system, current, tickId),
-          catch: (e) => new Error(`Upsert failed: ${e}`),
-        }).pipe(Effect.catchAll((e) => Effect.logWarning(`${e}`)))
-
-        if (webhookUrl) {
-          yield* postToDiscord(webhookUrl, formatNewConflict(system, current))
-        }
+        stmts.push(buildUpsertStmt(system, current, tickId))
+        discordMessages.push(formatNewConflict(system, current))
         yield* Effect.logInfo(`Conflict scheduler: new conflict in ${system}`)
         continue
       }
 
-      // Conflict already known — check win condition first
       if (current.wonDays1 >= 4 || current.wonDays2 >= 4) {
-        yield* Effect.tryPromise({
-          try: () => deleteConflictState(client, system),
-          catch: (e) => new Error(`Delete failed: ${e}`),
-        }).pipe(Effect.catchAll((e) => Effect.logWarning(`${e}`)))
-
-        if (webhookUrl) {
-          yield* postToDiscord(
-            webhookUrl,
-            formatConflictResolved(system, current, factionName)
-          )
-        }
+        stmts.push(buildDeleteStmt(system))
+        discordMessages.push(formatConflictResolved(system, current, factionName))
         yield* Effect.logInfo(`Conflict scheduler: conflict resolved in ${system}`)
         continue
       }
 
-      // Day scored?
       if (current.wonDays1 > prev.wonDays1 || current.wonDays2 > prev.wonDays2) {
-        yield* Effect.tryPromise({
-          try: () => upsertConflictState(client, system, current, tickId),
-          catch: (e) => new Error(`Upsert failed: ${e}`),
-        }).pipe(Effect.catchAll((e) => Effect.logWarning(`${e}`)))
-
-        if (webhookUrl) {
-          yield* postToDiscord(webhookUrl, formatDayScored(system, current, prev))
-        }
+        stmts.push(buildUpsertStmt(system, current, tickId))
+        discordMessages.push(formatDayScored(system, current, prev))
         yield* Effect.logInfo(`Conflict scheduler: day scored in ${system}`)
         continue
       }
 
       // Unchanged — just refresh the tick reference
+      stmts.push(buildUpsertStmt(system, current, tickId))
+    }
+
+    // Send Discord notifications
+    if (webhookUrl) {
+      for (const msg of discordMessages) {
+        yield* postToDiscord(webhookUrl, msg)
+      }
+    }
+
+    // Batch all DB writes in one transaction
+    if (stmts.length > 0) {
       yield* Effect.tryPromise({
-        try: () => upsertConflictState(client, system, current, tickId),
-        catch: (e) => new Error(`Upsert failed: ${e}`),
-      }).pipe(Effect.catchAll((e) => Effect.logWarning(`${e}`)))
+        try: () => client.batch(stmts as any),
+        catch: (e) => new Error(`Batch write failed: ${e}`),
+      }).pipe(Effect.catchAll((e) => Effect.logWarning(`Conflict scheduler batch error: ${e}`)))
     }
 
     yield* Effect.logInfo(
@@ -368,52 +352,37 @@ export const runConflictDiff = (
       )
     )
 
+    const stmts: Stmt[] = []
+    const discordMessages: string[] = []
+
     for (const [system, current] of currentConflicts.entries()) {
       const prev = prevState.get(system)
 
       if (!prev) {
-        yield* Effect.tryPromise({
-          try: () => upsertConflictState(client, system, current, tickId),
-          catch: (e) => new Error(`Upsert failed: ${e}`),
-        }).pipe(Effect.catchAll((e) => Effect.logWarning(`${e}`)))
-        if (webhookUrl) {
-          yield* postToDiscord(webhookUrl, formatNewConflict(system, current))
-        }
+        stmts.push(buildUpsertStmt(system, current, tickId))
+        discordMessages.push(formatNewConflict(system, current))
         yield* Effect.logInfo(`${label}: new conflict in ${system}`)
         continue
       }
 
       if (current.wonDays1 >= 4 || current.wonDays2 >= 4) {
-        yield* Effect.tryPromise({
-          try: () => deleteConflictState(client, system),
-          catch: (e) => new Error(`Delete failed: ${e}`),
-        }).pipe(Effect.catchAll((e) => Effect.logWarning(`${e}`)))
-        if (webhookUrl) {
-          const ourFaction =
-            [...factionNames].find((n) => n === current.faction1 || n === current.faction2) ??
-            current.faction1
-          yield* postToDiscord(webhookUrl, formatConflictResolved(system, current, ourFaction))
-        }
+        stmts.push(buildDeleteStmt(system))
+        const ourFaction =
+          [...factionNames].find((n) => n === current.faction1 || n === current.faction2) ??
+          current.faction1
+        discordMessages.push(formatConflictResolved(system, current, ourFaction))
         yield* Effect.logInfo(`${label}: conflict resolved in ${system}`)
         continue
       }
 
       if (current.wonDays1 > prev.wonDays1 || current.wonDays2 > prev.wonDays2) {
-        yield* Effect.tryPromise({
-          try: () => upsertConflictState(client, system, current, tickId),
-          catch: (e) => new Error(`Upsert failed: ${e}`),
-        }).pipe(Effect.catchAll((e) => Effect.logWarning(`${e}`)))
-        if (webhookUrl) {
-          yield* postToDiscord(webhookUrl, formatDayScored(system, current, prev))
-        }
+        stmts.push(buildUpsertStmt(system, current, tickId))
+        discordMessages.push(formatDayScored(system, current, prev))
         yield* Effect.logInfo(`${label}: day scored in ${system}`)
         continue
       }
 
-      yield* Effect.tryPromise({
-        try: () => upsertConflictState(client, system, current, tickId),
-        catch: (e) => new Error(`Upsert failed: ${e}`),
-      }).pipe(Effect.catchAll((e) => Effect.logWarning(`${e}`)))
+      stmts.push(buildUpsertStmt(system, current, tickId))
     }
 
     for (const system of prevState.keys()) {
@@ -441,14 +410,24 @@ export const runConflictDiff = (
         yield* Effect.logWarning(
           `${label}: DELETING ${system} — ${reason} | was: ${entry.faction1} vs ${entry.faction2} score ${entry.wonDays1}-${entry.wonDays2}`
         )
-        if (webhookUrl) {
-          yield* postToDiscord(webhookUrl, debugMsg)
-        }
-        yield* Effect.tryPromise({
-          try: () => deleteConflictState(client, system),
-          catch: (e) => new Error(`Delete failed: ${e}`),
-        }).pipe(Effect.catchAll((e) => Effect.logWarning(`${e}`)))
+        stmts.push(buildDeleteStmt(system))
+        discordMessages.push(debugMsg)
       }
+    }
+
+    // Send Discord notifications
+    if (webhookUrl) {
+      for (const msg of discordMessages) {
+        yield* postToDiscord(webhookUrl, msg)
+      }
+    }
+
+    // Batch all DB writes in one transaction
+    if (stmts.length > 0) {
+      yield* Effect.tryPromise({
+        try: () => client.batch(stmts as any),
+        catch: (e) => new Error(`Batch write failed: ${e}`),
+      }).pipe(Effect.catchAll((e) => Effect.logWarning(`${label} batch error: ${e}`)))
     }
 
     yield* Effect.logInfo(`${label}: done — ${currentConflicts.size} active conflict(s)`)
