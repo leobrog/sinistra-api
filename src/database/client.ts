@@ -17,7 +17,7 @@ export const TursoClientLive = Layer.effect(
         })
 
         yield* Effect.tryPromise({
-            try: () => client.execute("PRAGMA busy_timeout = 3000"),
+            try: () => client.execute("PRAGMA busy_timeout = 30000"),
             catch: (e) => new Error(`Failed to set busy_timeout: ${e}`),
         })
 
