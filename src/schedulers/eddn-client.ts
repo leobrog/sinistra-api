@@ -4,8 +4,8 @@
  * Connects to the EDDN ZMQ feed, processes Location/FSDJump messages,
  * and upserts system/faction/conflict/powerplay data into the DB.
  *
- * Uses TursoClient directly (DELETE + INSERT pattern) to replace stale
- * per-system data on each update.
+ * Collects BATCH_SIZE messages before writing, so the SQLite write lock
+ * is acquired once per batch rather than once per message.
  */
 
 import { Effect, Ref, Schedule, Duration } from "effect"
@@ -18,20 +18,21 @@ import { TursoClient } from "../database/client.js"
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Save one parsed EDDN message to the DB — all writes in a single transaction */
-const saveEddnData = async (client: Client, data: any): Promise<void> => {
+type Stmt = { sql: string; args: unknown[] }
+
+/** Build SQL statements for one parsed EDDN message — pure, no DB access */
+const buildEddnStmts = (data: any): Stmt[] => {
+  const stmts: Stmt[] = []
   const msg = data?.message ?? {}
   const messageType: string = msg.event ?? ""
 
-  if (!["Location", "FSDJump"].includes(messageType)) return
+  if (!["Location", "FSDJump"].includes(messageType)) return stmts
 
   const systemName: string | undefined = msg.StarSystem
-  if (!systemName) return
+  if (!systemName) return stmts
 
   const now = new Date().toISOString()
   const msgId = crypto.randomUUID()
-
-  const stmts: Array<{ sql: string; args: unknown[] }> = []
 
   // 1. Raw message
   stmts.push({
@@ -81,7 +82,7 @@ const saveEddnData = async (client: Client, data: any): Promise<void> => {
     })
   }
 
-  await client.batch(stmts as any)
+  return stmts
 }
 
 /** Delete eddn_message rows older than retentionMs */
@@ -105,6 +106,9 @@ const cleanupOldMessages = (client: Client, retentionMs: number) =>
 // Main fiber
 // ---------------------------------------------------------------------------
 
+/** Number of ZMQ messages to accumulate before a single DB write */
+const BATCH_SIZE = 20
+
 export const runEddnClient: Effect.Effect<never, never, AppConfig | TursoClient> = Effect.gen(
   function* () {
     const config = yield* AppConfig
@@ -124,27 +128,34 @@ export const runEddnClient: Effect.Effect<never, never, AppConfig | TursoClient>
 
     const lastCleanupRef = yield* Ref.make(Date.now())
 
-    // One iteration: receive one message, process it, maybe cleanup
-    const receiveOnce = Effect.gen(function* () {
-      const [rawMsg] = yield* Effect.tryPromise({
-        try: () => socket.receive() as Promise<[Buffer]>,
-        catch: (e) => new Error(`ZMQ receive error: ${e}`),
-      })
+    // One iteration: receive BATCH_SIZE messages, build statements, write once
+    const receiveBatch = Effect.gen(function* () {
+      const allStmts: Stmt[] = []
 
-      // Decompress (zlib format)
-      const data = yield* Effect.try({
-        try: () => {
-          const decompressed = inflateSync(rawMsg!)
-          return JSON.parse(decompressed.toString("utf-8")) as unknown
-        },
-        catch: (e) => new Error(`Decompress/parse failed: ${e}`),
-      }).pipe(Effect.catchAll((e) => Effect.logDebug(`EDDN skip: ${e}`).pipe(Effect.as(null))))
+      for (let i = 0; i < BATCH_SIZE; i++) {
+        const [rawMsg] = yield* Effect.tryPromise({
+          try: () => socket.receive() as Promise<[Buffer]>,
+          catch: (e) => new Error(`ZMQ receive error: ${e}`),
+        })
 
-      if (data !== null) {
+        const data = yield* Effect.try({
+          try: () => {
+            const decompressed = inflateSync(rawMsg!)
+            return JSON.parse(decompressed.toString("utf-8")) as unknown
+          },
+          catch: (e) => new Error(`Decompress/parse failed: ${e}`),
+        }).pipe(Effect.catchAll((e) => Effect.logDebug(`EDDN skip: ${e}`).pipe(Effect.as(null))))
+
+        if (data !== null) {
+          allStmts.push(...buildEddnStmts(data))
+        }
+      }
+
+      if (allStmts.length > 0) {
         yield* Effect.tryPromise({
-          try: () => saveEddnData(client, data),
-          catch: (e) => new Error(`Save EDDN data failed: ${e}`),
-        }).pipe(Effect.catchAll((e) => Effect.logWarning(`EDDN save error: ${e}`)))
+          try: () => client.batch(allStmts as any),
+          catch: (e) => new Error(`Batch write failed: ${e}`),
+        }).pipe(Effect.catchAll((e) => Effect.logWarning(`EDDN batch error: ${e}`)))
       }
 
       // Periodic cleanup
@@ -156,7 +167,7 @@ export const runEddnClient: Effect.Effect<never, never, AppConfig | TursoClient>
       }
     })
 
-    return yield* Effect.forever(receiveOnce)
+    return yield* Effect.forever(receiveBatch)
   }
 ).pipe(
   Effect.retry(Schedule.spaced(Duration.seconds(5))),
