@@ -72,6 +72,7 @@ export const runEddnConflictScan: Effect.Effect<never, never, AppConfig | TursoC
     const config = yield* AppConfig
     const client = yield* TursoClient
     const webhookUrl = Option.getOrNull(config.discord.webhooks.conflict)
+    const debugWebhookUrl = Option.getOrNull(config.discord.webhooks.debug)
 
     yield* Effect.logInfo("EDDN conflict scan started (hourly)")
 
@@ -120,6 +121,7 @@ export const runEddnConflictScan: Effect.Effect<never, never, AppConfig | TursoC
       yield* runConflictDiff(
         client,
         webhookUrl,
+        debugWebhookUrl,
         currentConflicts,
         factionNames,
         new Date().toISOString(),
