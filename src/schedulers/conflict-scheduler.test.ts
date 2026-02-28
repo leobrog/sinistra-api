@@ -146,7 +146,7 @@ describe("runConflictCheck", () => {
     // Current tick has a conflict; no previous state
     await insertEvent(client, SYSTEM, 0, 0)
 
-    await Effect.runPromise(runConflictCheck(client, FACTION, WEBHOOK, TICK))
+    await Effect.runPromise(runConflictCheck(client, FACTION, WEBHOOK, TICK, null))
 
     expect(calls).toHaveLength(1)
     expect(calls[0]).toContain("⚔️")
