@@ -47,13 +47,20 @@ const extractConflicts = async (
   client: Client,
   tickId: string,
   factionName: string
-): Promise<Map<string, ConflictEntry>> => {
+): Promise<{ conflicts: Map<string, ConflictEntry>; visitedSystems: Set<string> }> => {
+  // Normalize Zoy ISO timestamp ("2026-02-27T18:23:36.000Z") to a prefix
+  // that matches BGSTally's ticktime format ("2026-02-27T18:23:36Z") via LIKE.
+  // Fix: events store tickid as BGSTally's zoy-* hash, NOT the ISO string,
+  // so we must match on ticktime instead.
+  const tickTimePrefix = tickId.replace(/(\.\d+)?Z$/, "")
+
   const result = await client.execute({
-    sql: "SELECT raw_json, timestamp FROM event WHERE tickid = ? AND raw_json IS NOT NULL",
-    args: [tickId],
+    sql: "SELECT raw_json, timestamp FROM event WHERE ticktime LIKE ? AND raw_json IS NOT NULL",
+    args: [tickTimePrefix + "%"],
   })
 
   const raw = new Map<string, ConflictEntry & { detectedAt: string }>()
+  const visitedSystems = new Set<string>()
 
   for (const row of result.rows) {
     let parsed: any
@@ -68,6 +75,8 @@ const extractConflicts = async (
 
     const system: string = parsed?.StarSystem ?? ""
     if (!system) continue
+
+    visitedSystems.add(system)
 
     const rawConflicts: any[] = parsed?.Conflicts ?? []
     const timestamp: string = String(row.timestamp ?? "")
@@ -97,7 +106,7 @@ const extractConflicts = async (
   for (const [system, { detectedAt: _unused, ...entry }] of raw.entries()) {
     out.set(system, entry)
   }
-  return out
+  return { conflicts: out, visitedSystems }
 }
 
 // ---------------------------------------------------------------------------
@@ -250,76 +259,33 @@ export const runConflictCheck = (
   client: Client,
   factionName: string,
   webhookUrl: string | null,
+  debugWebhookUrl: string | null,
   tickId: string
 ): Effect.Effect<void> =>
   Effect.gen(function* () {
     yield* Effect.logInfo(`Conflict scheduler: processing tick ${tickId}`)
 
-    const [currentConflicts, prevState] = yield* Effect.all([
-      Effect.tryPromise({
-        try: () => extractConflicts(client, tickId, factionName),
-        catch: (e) => new Error(`Conflict extraction failed: ${e}`),
-      }).pipe(
-        Effect.catchAll((e) =>
-          Effect.logWarning(`${e}`).pipe(Effect.as(new Map<string, ConflictEntry>()))
+    const { conflicts: currentConflicts, visitedSystems } = yield* Effect.tryPromise({
+      try: () => extractConflicts(client, tickId, factionName),
+      catch: (e) => new Error(`Conflict extraction failed: ${e}`),
+    }).pipe(
+      Effect.catchAll((e) =>
+        Effect.logWarning(`${e}`).pipe(
+          Effect.as({ conflicts: new Map<string, ConflictEntry>(), visitedSystems: new Set<string>() })
         )
-      ),
-      Effect.tryPromise({
-        try: () => loadConflictState(client),
-        catch: (e) => new Error(`Load conflict state failed: ${e}`),
-      }).pipe(
-        Effect.catchAll((e) =>
-          Effect.logWarning(`${e}`).pipe(Effect.as(new Map<string, ConflictEntry>()))
-        )
-      ),
-    ])
+      )
+    )
 
-    const stmts: Stmt[] = []
-    const discordMessages: string[] = []
-
-    // --- Process systems present in the current tick ---
-    for (const [system, current] of currentConflicts.entries()) {
-      const prev = prevState.get(system)
-
-      if (!prev) {
-        stmts.push(buildUpsertStmt(system, current, tickId))
-        discordMessages.push(formatNewConflict(system, current))
-        yield* Effect.logInfo(`Conflict scheduler: new conflict in ${system}`)
-        continue
-      }
-
-      if (current.wonDays1 >= 4 || current.wonDays2 >= 4) {
-        stmts.push(buildDeleteStmt(system))
-        discordMessages.push(formatConflictResolved(system, current, factionName))
-        yield* Effect.logInfo(`Conflict scheduler: conflict resolved in ${system}`)
-        continue
-      }
-
-      if (current.wonDays1 > prev.wonDays1 || current.wonDays2 > prev.wonDays2) {
-        stmts.push(buildUpsertStmt(system, current, tickId))
-        discordMessages.push(formatDayScored(system, current, prev))
-        yield* Effect.logInfo(`Conflict scheduler: day scored in ${system}`)
-        continue
-      }
-
-      // Unchanged — just refresh the tick reference
-      stmts.push(buildUpsertStmt(system, current, tickId))
-    }
-
-    // Send Discord notifications
-    if (webhookUrl) {
-      for (const msg of discordMessages) {
-        yield* postToDiscord(webhookUrl, msg)
-      }
-    }
-
-    // Batch all DB writes in one transaction
-    if (stmts.length > 0) {
-      yield* Effect.tryPromise({
-        try: () => client.batch(stmts as any),
-        catch: (e) => new Error(`Batch write failed: ${e}`),
-      }).pipe(Effect.catchAll((e) => Effect.logWarning(`Conflict scheduler batch error: ${e}`)))
-    }
+    yield* runConflictDiff(
+      client,
+      webhookUrl,
+      debugWebhookUrl,
+      currentConflicts,
+      new Set([factionName]),
+      tickId,
+      "Conflict scheduler",
+      { cleanupScope: visitedSystems }
+    )
 
     yield* Effect.logInfo(
       `Conflict scheduler: tick ${tickId} processed — ` +
@@ -334,6 +300,7 @@ export const runConflictCheck = (
 export const runConflictDiff = (
   client: Client,
   webhookUrl: string | null,
+  debugWebhookUrl: string | null,
   currentConflicts: Map<string, ConflictEntry>,
   factionNames: Set<string>,
   tickId: string,
@@ -353,14 +320,15 @@ export const runConflictDiff = (
     )
 
     const stmts: Stmt[] = []
-    const discordMessages: string[] = []
+    const notifications: string[] = []
+    const debugMessages: string[] = []
 
     for (const [system, current] of currentConflicts.entries()) {
       const prev = prevState.get(system)
 
       if (!prev) {
         stmts.push(buildUpsertStmt(system, current, tickId))
-        discordMessages.push(formatNewConflict(system, current))
+        notifications.push(formatNewConflict(system, current))
         yield* Effect.logInfo(`${label}: new conflict in ${system}`)
         continue
       }
@@ -370,14 +338,14 @@ export const runConflictDiff = (
         const ourFaction =
           [...factionNames].find((n) => n === current.faction1 || n === current.faction2) ??
           current.faction1
-        discordMessages.push(formatConflictResolved(system, current, ourFaction))
+        notifications.push(formatConflictResolved(system, current, ourFaction))
         yield* Effect.logInfo(`${label}: conflict resolved in ${system}`)
         continue
       }
 
       if (current.wonDays1 > prev.wonDays1 || current.wonDays2 > prev.wonDays2) {
         stmts.push(buildUpsertStmt(system, current, tickId))
-        discordMessages.push(formatDayScored(system, current, prev))
+        notifications.push(formatDayScored(system, current, prev))
         yield* Effect.logInfo(`${label}: day scored in ${system}`)
         continue
       }
@@ -400,25 +368,33 @@ export const runConflictDiff = (
           scopeKind === "all"
             ? `not found in ${label} scan`
             : `commander visited ${system} but no conflict detected in their journal`
-        const debugMsg = [
-          `🗑️ **[DEBUG] Deleting conflict in ${system}**`,
-          `Reason: ${reason}`,
-          `Was: ${entry.faction1} vs ${entry.faction2} (${typeLabel(entry.warType)})`,
-          `Score: ${entry.wonDays1} – ${entry.wonDays2}${entry.stake1 ? ` | Stake: ${entry.stake1}` : ""}`,
-          `Source: ${label}`,
-        ].join("\n")
+        debugMessages.push(
+          [
+            `🗑️ **[DEBUG] Deleting conflict in ${system}**`,
+            `Reason: ${reason}`,
+            `Was: ${entry.faction1} vs ${entry.faction2} (${typeLabel(entry.warType)})`,
+            `Score: ${entry.wonDays1} – ${entry.wonDays2}${entry.stake1 ? ` | Stake: ${entry.stake1}` : ""}`,
+            `Source: ${label}`,
+          ].join("\n")
+        )
         yield* Effect.logWarning(
           `${label}: DELETING ${system} — ${reason} | was: ${entry.faction1} vs ${entry.faction2} score ${entry.wonDays1}-${entry.wonDays2}`
         )
         stmts.push(buildDeleteStmt(system))
-        discordMessages.push(debugMsg)
       }
     }
 
-    // Send Discord notifications
+    // Conflict notifications → conflict webhook
     if (webhookUrl) {
-      for (const msg of discordMessages) {
+      for (const msg of notifications) {
         yield* postToDiscord(webhookUrl, msg)
+      }
+    }
+
+    // Deletion debug messages → debug webhook only (not spammed to conflict channel)
+    if (debugWebhookUrl) {
+      for (const msg of debugMessages) {
+        yield* postToDiscord(debugWebhookUrl, msg)
       }
     }
 
