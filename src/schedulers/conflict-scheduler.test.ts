@@ -23,8 +23,7 @@ import { runConflictCheck } from "./conflict-scheduler.js"
 const FACTION = "Communism Interstellar Union"
 const RIVAL = "Rival Corp"
 const WEBHOOK = "https://discord.com/api/webhooks/test/token"
-const TICK = "zoy-test000000000000000000"    // completed tick hash (events tagged with this)
-const CURRENT_TICK = "2026-02-26T12:00:00Z" // currentTick ISO timestamp (new tick just detected)
+const TICK = "2026-02-25T12:00:00Z"
 const SYSTEM = "Alpha Centauri"
 
 // ---------------------------------------------------------------------------
@@ -56,23 +55,11 @@ const SCHEMA = `
     last_tick_id  TEXT NOT NULL,
     updated_at    TEXT NOT NULL
   );
-
-  CREATE TABLE IF NOT EXISTS protected_faction (
-    id          TEXT PRIMARY KEY,
-    name        TEXT NOT NULL UNIQUE,
-    description TEXT,
-    protected   INTEGER NOT NULL DEFAULT 1
-  );
 `
 
 const makeClient = async () => {
   const client = createClient({ url: "file::memory:" })
   await client.executeMultiple(SCHEMA)
-  // Seed the tracked faction so runConflictCheck finds it in protected_faction
-  await client.execute({
-    sql: "INSERT INTO protected_faction (id, name, protected) VALUES (?, ?, 1)",
-    args: [crypto.randomUUID(), FACTION],
-  })
   return client
 }
 
@@ -159,7 +146,7 @@ describe("runConflictCheck", () => {
     // Current tick has a conflict; no previous state
     await insertEvent(client, SYSTEM, 0, 0)
 
-    await Effect.runPromise(runConflictCheck(client, WEBHOOK, TICK, CURRENT_TICK))
+    await Effect.runPromise(runConflictCheck(client, FACTION, [WEBHOOK], TICK))
 
     expect(calls).toHaveLength(1)
     expect(calls[0]).toContain("⚔️")
@@ -182,7 +169,7 @@ describe("runConflictCheck", () => {
     await insertPrevState(client, SYSTEM, 1, 0)
     await insertEvent(client, SYSTEM, 2, 0)
 
-    await Effect.runPromise(runConflictCheck(client, WEBHOOK, TICK, CURRENT_TICK))
+    await Effect.runPromise(runConflictCheck(client, FACTION, [WEBHOOK], TICK))
 
     expect(calls).toHaveLength(1)
     expect(calls[0]).toContain("📅")
@@ -203,7 +190,7 @@ describe("runConflictCheck", () => {
     await insertPrevState(client, SYSTEM, 3, 1)
     await insertEvent(client, SYSTEM, 4, 1)
 
-    await Effect.runPromise(runConflictCheck(client, WEBHOOK, TICK, CURRENT_TICK))
+    await Effect.runPromise(runConflictCheck(client, FACTION, [WEBHOOK], TICK))
 
     expect(calls).toHaveLength(1)
     expect(calls[0]).toContain("🏆")
@@ -223,7 +210,7 @@ describe("runConflictCheck", () => {
     await insertPrevState(client, SYSTEM, 1, 3)
     await insertEvent(client, SYSTEM, 1, 4)
 
-    await Effect.runPromise(runConflictCheck(client, WEBHOOK, TICK, CURRENT_TICK))
+    await Effect.runPromise(runConflictCheck(client, FACTION, [WEBHOOK], TICK))
 
     expect(calls).toHaveLength(1)
     expect(calls[0]).toContain("💀")
@@ -243,13 +230,13 @@ describe("runConflictCheck", () => {
     await insertPrevState(client, SYSTEM, 2, 1)
     await insertEvent(client, SYSTEM, 2, 1)
 
-    await Effect.runPromise(runConflictCheck(client, WEBHOOK, TICK, CURRENT_TICK))
+    await Effect.runPromise(runConflictCheck(client, FACTION, [WEBHOOK], TICK))
 
     expect(calls).toHaveLength(0)
 
     const state = await loadState(client, SYSTEM)
     expect(Number(state!.won_days1)).toBe(2)
-    expect(String(state!.last_tick_id)).toBe(CURRENT_TICK)
+    expect(String(state!.last_tick_id)).toBe(TICK)
   })
 
   // -------------------------------------------------------------------------
@@ -261,7 +248,7 @@ describe("runConflictCheck", () => {
     await insertPrevState(client, SYSTEM, 2, 1)
     // (no insertEvent — empty tick)
 
-    await Effect.runPromise(runConflictCheck(client, WEBHOOK, TICK, CURRENT_TICK))
+    await Effect.runPromise(runConflictCheck(client, FACTION, [WEBHOOK], TICK))
 
     expect(calls).toHaveLength(0)
 
@@ -276,7 +263,7 @@ describe("runConflictCheck", () => {
 
     await insertEvent(client, SYSTEM, 0, 0)
 
-    await Effect.runPromise(runConflictCheck(client, null, TICK, CURRENT_TICK))
+    await Effect.runPromise(runConflictCheck(client, FACTION, [], TICK))
 
     expect(calls).toHaveLength(0)
 
@@ -295,10 +282,29 @@ describe("runConflictCheck", () => {
     await insertPrevState(client, "Deciat", 1, 0)
     await insertEvent(client, "Deciat", 2, 0)
 
-    await Effect.runPromise(runConflictCheck(client, WEBHOOK, TICK, CURRENT_TICK))
+    await Effect.runPromise(runConflictCheck(client, FACTION, [WEBHOOK], TICK))
 
     expect(calls).toHaveLength(2)
     expect(calls.some((m) => m.includes("⚔️") && m.includes("Sol"))).toBe(true)
     expect(calls.some((m) => m.includes("📅") && m.includes("Deciat"))).toBe(true)
+  })
+
+  // -------------------------------------------------------------------------
+  it("9. multiple webhooks — posts to all configured URLs", async () => {
+    const client = await makeClient()
+    const WEBHOOK2 = "https://discord.com/api/webhooks/test/token2"
+    const postedUrls: string[] = []
+    ;(globalThis as any).fetch = mock(async (url: string, init?: RequestInit) => {
+      if (init?.body) postedUrls.push(url)
+      return new Response(null, { status: 204 })
+    })
+
+    await insertEvent(client, SYSTEM, 0, 0)
+
+    await Effect.runPromise(runConflictCheck(client, FACTION, [WEBHOOK, WEBHOOK2], TICK))
+
+    expect(postedUrls).toHaveLength(2)
+    expect(postedUrls).toContain(WEBHOOK)
+    expect(postedUrls).toContain(WEBHOOK2)
   })
 })

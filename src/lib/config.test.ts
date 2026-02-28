@@ -138,9 +138,9 @@ describe("AppConfig", () => {
       Effect.runSync
     )
 
-    expect(result.discord.webhooks.bgs._tag).toBe("Some")
-    expect(result.discord.webhooks.shoutout._tag).toBe("Some")
-    expect(result.discord.webhooks.conflict._tag).toBe("None")
-    expect(result.discord.webhooks.debug._tag).toBe("None")
+    expect(result.discord.webhooks.bgs).toEqual(["https://discord.webhook.bgs"])
+    expect(result.discord.webhooks.shoutout).toEqual(["https://discord.webhook.shoutout"])
+    expect(result.discord.webhooks.conflict).toEqual([])
+    expect(result.discord.webhooks.debug).toEqual([])
   })
 })

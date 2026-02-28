@@ -61,13 +61,19 @@ export const DiscordBotToken = Config.secret("DISCORD_BOT_TOKEN")
 export const DiscordServerId = Config.string("DISCORD_SERVER_ID")
 
 // Discord Webhook URLs
-export const DiscordBgsWebhook = Config.option(Config.string("DISCORD_BGS_WEBHOOK"))
+const webhookList = (varName: string): Config.Config<string[]> =>
+  Config.all([
+    Config.option(Config.string(varName)),
+    Config.option(Config.string(`${varName}_2`)),
+    Config.option(Config.string(`${varName}_3`)),
+    Config.option(Config.string(`${varName}_4`)),
+    Config.option(Config.string(`${varName}_5`)),
+  ]).pipe(Config.map((opts) => opts.flatMap((o) => (Option.isSome(o) ? [o.value] : []))))
 
-export const DiscordShoutoutWebhook = Config.option(Config.string("DISCORD_SHOUTOUT_WEBHOOK"))
-
-export const DiscordConflictWebhook = Config.option(Config.string("DISCORD_CONFLICT_WEBHOOK"))
-
-export const DiscordDebugWebhook = Config.option(Config.string("DISCORD_DEBUG_WEBHOOK"))
+export const DiscordBgsWebhook = webhookList("DISCORD_BGS_WEBHOOK")
+export const DiscordShoutoutWebhook = webhookList("DISCORD_SHOUTOUT_WEBHOOK")
+export const DiscordConflictWebhook = webhookList("DISCORD_CONFLICT_WEBHOOK")
+export const DiscordDebugWebhook = webhookList("DISCORD_DEBUG_WEBHOOK")
 
 // Inara API Config
 export const InaraApiKey = Config.secret("INARA_API_KEY")
@@ -143,10 +149,10 @@ export class AppConfig extends Context.Tag("AppConfig")<
         readonly serverId: string
       }
       readonly webhooks: {
-        readonly bgs: Option.Option<string>
-        readonly shoutout: Option.Option<string>
-        readonly conflict: Option.Option<string>
-        readonly debug: Option.Option<string>
+        readonly bgs: string[]
+        readonly shoutout: string[]
+        readonly conflict: string[]
+        readonly debug: string[]
       }
     }
     readonly inara: {

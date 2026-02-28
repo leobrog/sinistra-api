@@ -44,10 +44,10 @@ describe("Activities API Integration", () => {
         serverId: "test-server-id",
       },
       webhooks: {
-        bgs: Option.none(),
-        shoutout: Option.none(),
-        conflict: Option.none(),
-        debug: Option.none(),
+        bgs: [],
+        shoutout: [],
+        conflict: [],
+        debug: [],
       },
     },
     inara: {

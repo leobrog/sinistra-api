@@ -52,7 +52,7 @@ const SandRInput = Schema.Struct({
 
 const SettlementInput = Schema.Struct({
   name: Schema.String,
-  type: Schema.String,
+  type: Schema.optional(Schema.String),
   count: Schema.Int,
 })
 
