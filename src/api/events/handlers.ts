@@ -327,6 +327,7 @@ export const EventsApiLive = HttpApiBuilder.group(Api, "events", (handlers) =>
         const client = yield* TursoClient
         const config = yield* AppConfig
         const webhookUrl = Option.getOrNull(config.discord.webhooks.conflict)
+        const debugWebhookUrl = Option.getOrNull(config.discord.webhooks.debug)
 
         const visitedSystems = new Set(
           jumpEvents.map((e) => e.StarSystem ?? "").filter(Boolean)
@@ -341,11 +342,12 @@ export const EventsApiLive = HttpApiBuilder.group(Api, "events", (handlers) =>
               },
               catch: (e) => new Error(`${e}`),
             })
-            const conflictMap = parseConflictsFromEntries(jumpEvents, factionNames)
+            const conflictMap = parseConflictsFromEntries(jumpEvents as any, factionNames)
             if (conflictMap.size > 0) {
               yield* runConflictDiff(
                 client,
                 webhookUrl,
+                debugWebhookUrl,
                 conflictMap,
                 factionNames,
                 new Date().toISOString(),
