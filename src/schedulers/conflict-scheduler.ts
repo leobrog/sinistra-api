@@ -125,6 +125,7 @@ const loadConflictState = async (client: Client): Promise<Map<string, ConflictEn
       stake2: String(row.stake2 ?? ""),
       wonDays1: Number(row.won_days1),
       wonDays2: Number(row.won_days2),
+      updatedAt: row.updated_at != null ? String(row.updated_at) : undefined,
     })
   }
   return map
