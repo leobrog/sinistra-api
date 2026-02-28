@@ -16,7 +16,7 @@ const ZMQ_URL = process.env.EDDN_ZMQ_URL ?? "tcp://eddn.edcd.io:9500"
 const CLEANUP_INTERVAL_MS = parseInt(process.env.EDDN_CLEANUP_INTERVAL_MS ?? "3600000")
 const RETENTION_MS = parseInt(process.env.EDDN_MESSAGE_RETENTION_MS ?? "86400000")
 const RETRY_DELAY_MS = 5000
-const BATCH_SIZE = 100
+const BATCH_SIZE = 20
 
 const client = createClient({ url: DB_URL, authToken: AUTH_TOKEN })
 await client.execute("PRAGMA busy_timeout = 30000")
