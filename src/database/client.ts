@@ -21,6 +21,18 @@ export const TursoClientLive = Layer.effect(
             catch: (e) => new Error(`Failed to set busy_timeout: ${e}`),
         })
 
+        //HACK not needed in postgres
+        yield* Effect.tryPromise({
+            try: () => client.execute("PRAGMA wal_autocheckpoint = 1000"),
+            catch: (e) => new Error(`Failed to set wal_autocheckpoint: ${e}`),
+        })
+
+        // Truncate any bloated WAL from a previous run before serving requests
+        yield* Effect.tryPromise({
+            try: () => client.execute("PRAGMA wal_checkpoint(TRUNCATE)"),
+            catch: (e) => new Error(`Startup WAL checkpoint failed: ${e}`),
+        })
+
         return TursoClient.of(client)
     })
 )
