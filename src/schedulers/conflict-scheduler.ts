@@ -384,10 +384,30 @@ export const runConflictDiff = (
       }
     }
 
+    // Batch all DB writes first, then notify Discord
+    // Track write success so notifications can warn if state wasn't saved
+    let writeSucceeded = stmts.length === 0
+    if (stmts.length > 0) {
+      const result = yield* Effect.tryPromise({
+        try: () => client.batch(stmts as any),
+        catch: (e) => new Error(`Batch write failed: ${e}`),
+      }).pipe(
+        Effect.map(() => true),
+        Effect.catchAll((e) =>
+          Effect.logWarning(`${label} batch error: ${e}`).pipe(Effect.as(false))
+        )
+      )
+      writeSucceeded = result
+    }
+
     // Conflict notifications → conflict webhook
+    // If DB write failed, append a warning so the squadron knows it may be re-reported
     if (webhookUrl) {
       for (const msg of notifications) {
-        yield* postToDiscord(webhookUrl, msg)
+        const content = writeSucceeded
+          ? msg
+          : `${msg}\n⚠️ *(DB write failed — this may be re-reported next tick)*`
+        yield* postToDiscord(webhookUrl, content)
       }
     }
 
@@ -396,14 +416,6 @@ export const runConflictDiff = (
       for (const msg of debugMessages) {
         yield* postToDiscord(debugWebhookUrl, msg)
       }
-    }
-
-    // Batch all DB writes in one transaction
-    if (stmts.length > 0) {
-      yield* Effect.tryPromise({
-        try: () => client.batch(stmts as any),
-        catch: (e) => new Error(`Batch write failed: ${e}`),
-      }).pipe(Effect.catchAll((e) => Effect.logWarning(`${label} batch error: ${e}`)))
     }
 
     yield* Effect.logInfo(`${label}: done — ${currentConflicts.size} active conflict(s)`)

@@ -26,8 +26,19 @@ await client.execute("PRAGMA busy_timeout = 30000")
 
 async function cleanupOldMessages() {
   const cutoff = new Date(Date.now() - RETENTION_MS).toISOString()
-  const result = await client.execute({ sql: "DELETE FROM eddn_message WHERE timestamp < ?", args: [cutoff] })
-  if (result.rowsAffected > 0) console.log(`[EDDN] Cleaned up ${result.rowsAffected} old messages`)
+  let total = 0
+  // Delete in small chunks to avoid holding the write lock for 30+ seconds.
+  // ON DELETE SET NULL cascades to 4 child tables, so each chunk is ~2500 row updates.
+  while (true) {
+    const result = await client.execute({
+      sql: "DELETE FROM eddn_message WHERE id IN (SELECT id FROM eddn_message WHERE timestamp < ? LIMIT 500)",
+      args: [cutoff],
+    })
+    total += result.rowsAffected
+    if (result.rowsAffected === 0) break
+    await new Promise((r) => setTimeout(r, 50))
+  }
+  if (total > 0) console.log(`[EDDN] Cleaned up ${total} old messages`)
 }
 
 // ---------------------------------------------------------------------------
