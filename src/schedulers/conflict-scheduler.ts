@@ -13,7 +13,7 @@
  * Replaces the previous 6-hourly bulk-notification approach.
  */
 
-import { Effect, Option, PubSub, Queue } from "effect"
+import { Effect, PubSub, Queue } from "effect"
 import type { Client } from "@libsql/client"
 import { AppConfig } from "../lib/config.js"
 import { TursoClient } from "../database/client.js"
@@ -252,6 +252,9 @@ const postToDiscord = (webhookUrl: string, content: string): Effect.Effect<void>
     Effect.catchAll((e) => Effect.logWarning(`Conflict Discord error: ${e}`))
   )
 
+const postToAll = (urls: string[], content: string): Effect.Effect<void> =>
+  Effect.forEach(urls, (url) => postToDiscord(url, content), { discard: true, concurrency: "unbounded" })
+
 // ---------------------------------------------------------------------------
 // Per-tick diff + notification logic
 // ---------------------------------------------------------------------------
@@ -259,14 +262,14 @@ const postToDiscord = (webhookUrl: string, content: string): Effect.Effect<void>
 export const runConflictCheck = (
   client: Client,
   factionName: string,
-  webhookUrl: string | null,
-  debugWebhookUrl: string | null,
-  tickId: string
+  webhookUrls: string[],
+  tickId: string,
+  debugWebhookUrls: string[] = []
 ): Effect.Effect<void> =>
   Effect.gen(function* () {
     yield* Effect.logInfo(`Conflict scheduler: processing tick ${tickId}`)
 
-    const { conflicts: currentConflicts, visitedSystems } = yield* Effect.tryPromise({
+    const { conflicts: currentConflicts } = yield* Effect.tryPromise({
       try: () => extractConflicts(client, tickId, factionName),
       catch: (e) => new Error(`Conflict extraction failed: ${e}`),
     }).pipe(
@@ -279,13 +282,13 @@ export const runConflictCheck = (
 
     yield* runConflictDiff(
       client,
-      webhookUrl,
-      debugWebhookUrl,
+      webhookUrls,
+      debugWebhookUrls,
       currentConflicts,
       new Set([factionName]),
       tickId,
       "Conflict scheduler",
-      { cleanupScope: visitedSystems }
+      { cleanupScope: "all" }
     )
 
     yield* Effect.logInfo(
@@ -300,8 +303,8 @@ export const runConflictCheck = (
 
 export const runConflictDiff = (
   client: Client,
-  webhookUrl: string | null,
-  debugWebhookUrl: string | null,
+  webhookUrls: string[],
+  debugWebhookUrls: string[],
   currentConflicts: Map<string, ConflictEntry>,
   factionNames: Set<string>,
   tickId: string,
@@ -403,19 +406,19 @@ export const runConflictDiff = (
 
     // Conflict notifications → conflict webhook
     // If DB write failed, append a warning so the squadron knows it may be re-reported
-    if (webhookUrl) {
+    if (webhookUrls.length > 0) {
       for (const msg of notifications) {
         const content = writeSucceeded
           ? msg
           : `${msg}\n⚠️ *(DB write failed — this may be re-reported next tick)*`
-        yield* postToDiscord(webhookUrl, content)
+        yield* postToAll(webhookUrls, content)
       }
     }
 
     // Deletion debug messages → debug webhook only (not spammed to conflict channel)
-    if (debugWebhookUrl) {
+    if (debugWebhookUrls.length > 0) {
       for (const msg of debugMessages) {
-        yield* postToDiscord(debugWebhookUrl, msg)
+        yield* postToAll(debugWebhookUrls, msg)
       }
     }
 
@@ -470,7 +473,7 @@ export const runConflictScheduler: Effect.Effect<
   const client = yield* TursoClient
   const bus = yield* TickBus
   const factionName = config.faction.name
-  const webhookUrl = Option.getOrNull(config.discord.webhooks.bgs)
+  const conflictWebhooks = config.discord.webhooks.conflict
 
   yield* Effect.logInfo("Conflict scheduler started (event-driven, subscribed to TickBus)")
 
@@ -480,7 +483,7 @@ export const runConflictScheduler: Effect.Effect<
       return yield* Effect.forever(
         Effect.gen(function* () {
           const tickId = yield* Queue.take(sub)
-          yield* runConflictCheck(client, factionName, webhookUrl, tickId)
+          yield* runConflictCheck(client, factionName, conflictWebhooks, tickId)
         })
       )
     })

@@ -326,8 +326,8 @@ export const EventsApiLive = HttpApiBuilder.group(Api, "events", (handlers) =>
       if (jumpEvents.length > 0) {
         const client = yield* TursoClient
         const config = yield* AppConfig
-        const webhookUrl = Option.getOrNull(config.discord.webhooks.conflict)
-        const debugWebhookUrl = Option.getOrNull(config.discord.webhooks.debug)
+        const webhookUrl = config.discord.webhooks.conflict
+        const debugWebhookUrl = config.discord.webhooks.debug
 
         const visitedSystems = new Set(
           jumpEvents.map((e) => e.StarSystem ?? "").filter(Boolean)

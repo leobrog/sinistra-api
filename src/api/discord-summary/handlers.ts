@@ -18,8 +18,8 @@ export const handleSendTop5AllToDiscord = () =>
   Effect.gen(function* () {
     const config = yield* AppConfig
 
-    const webhookUrlOption = config.discord.webhooks.shoutout
-    if (Option.isNone(webhookUrlOption)) {
+    const shoutoutWebhooks = config.discord.webhooks.shoutout
+    if (shoutoutWebhooks.length === 0) {
       return yield* Effect.fail(
         new DiscordApiError({
           message: "Shoutout webhook URL not configured",
@@ -28,13 +28,12 @@ export const handleSendTop5AllToDiscord = () =>
         })
       )
     }
-    const webhookUrl = webhookUrlOption.value
 
     // TODO: Implement top5 queries (Market Events, Missions, Combat Bonds, etc.)
     // For now, send a test message
-    yield* sendWebhook(webhookUrl, {
+    yield* Effect.forEach(shoutoutWebhooks, (url) => sendWebhook(url, {
       content: "**Top 5 Summary**\n\nTODO: Implement top 5 query aggregation",
-    })
+    }), { discard: true })
 
     return new Top5SummaryResponse({
       status: "sent",
@@ -71,8 +70,8 @@ export const handleTriggerDailyTickSummary = (request: TriggerTickSummaryRequest
     const config = yield* AppConfig
     const { period } = request
 
-    const webhookUrlOption = config.discord.webhooks.shoutout
-    if (Option.isNone(webhookUrlOption)) {
+    const shoutoutWebhooks = config.discord.webhooks.shoutout
+    if (shoutoutWebhooks.length === 0) {
       return yield* Effect.fail(
         new DiscordApiError({
           message: "Shoutout webhook URL not configured",
@@ -81,12 +80,11 @@ export const handleTriggerDailyTickSummary = (request: TriggerTickSummaryRequest
         })
       )
     }
-    const webhookUrl = webhookUrlOption.value
 
     // TODO: Implement tick summary formatting (from fac_shoutout_scheduler.py logic)
-    yield* sendWebhook(webhookUrl, {
+    yield* Effect.forEach(shoutoutWebhooks, (url) => sendWebhook(url, {
       content: `**Daily Tick Summary (Period: ${period})**\n\nTODO: Implement tick summary query aggregation`,
-    })
+    }), { discard: true })
 
     return new DiscordSummaryResponse({
       status: `Daily summary triggered for period: ${period}`,
@@ -112,8 +110,8 @@ export const handleSendSyntheticCZSummary = (request: SyntheticCZSummaryRequest)
     const config = yield* AppConfig
     const { period } = request
 
-    const webhookUrlOption = config.discord.webhooks.conflict
-    if (Option.isNone(webhookUrlOption)) {
+    const conflictWebhooks = config.discord.webhooks.conflict
+    if (conflictWebhooks.length === 0) {
       return yield* Effect.fail(
         new DiscordApiError({
           message: "Conflict webhook URL not configured",
@@ -122,12 +120,11 @@ export const handleSendSyntheticCZSummary = (request: SyntheticCZSummaryRequest)
         })
       )
     }
-    const webhookUrl = webhookUrlOption.value
 
     // TODO: Implement synthetic CZ query logic (from send_syntheticcz_summary_to_discord)
-    yield* sendWebhook(webhookUrl, {
+    yield* Effect.forEach(conflictWebhooks, (url) => sendWebhook(url, {
       content: `**Synthetic Space CZ Summary (Period: ${period || "default"})**\n\nTODO: Implement synthetic CZ query`,
-    })
+    }), { discard: true })
 
     return new DiscordSummaryResponse({
       status: `SyntheticCZ summary sent for tenant: ${config.faction.name} (${period || "default"})`,
@@ -153,8 +150,8 @@ export const handleSendSyntheticGroundCZSummary = (request: SyntheticGroundCZSum
     const config = yield* AppConfig
     const { period } = request
 
-    const webhookUrlOption = config.discord.webhooks.conflict
-    if (Option.isNone(webhookUrlOption)) {
+    const conflictWebhooks = config.discord.webhooks.conflict
+    if (conflictWebhooks.length === 0) {
       return yield* Effect.fail(
         new DiscordApiError({
           message: "Conflict webhook URL not configured",
@@ -163,12 +160,11 @@ export const handleSendSyntheticGroundCZSummary = (request: SyntheticGroundCZSum
         })
       )
     }
-    const webhookUrl = webhookUrlOption.value
 
     // TODO: Implement synthetic ground CZ query logic (from send_syntheticgroundcz_summary_to_discord)
-    yield* sendWebhook(webhookUrl, {
+    yield* Effect.forEach(conflictWebhooks, (url) => sendWebhook(url, {
       content: `**Synthetic Ground CZ Summary (Period: ${period || "default"})**\n\nTODO: Implement synthetic ground CZ query`,
-    })
+    }), { discard: true })
 
     return new DiscordSummaryResponse({
       status: `SyntheticGroundCZ summary sent for tenant: ${config.faction.name} (${period || "default"})`,
@@ -194,80 +190,34 @@ export const handleSendCustomDiscordMessage = (request: CustomDiscordMessageRequ
     const config = yield* AppConfig
     const { content, webhook, username } = request
 
-    // Determine webhook URL based on choice
-    let webhookUrl: string
+    // Determine webhook URLs based on choice
+    let webhookUrls: string[]
     switch (webhook.toLowerCase()) {
-      case "bgs": {
-        const webhookUrlOption = config.discord.webhooks.bgs
-        if (Option.isNone(webhookUrlOption)) {
-          return yield* Effect.fail(
-            new DiscordApiError({
-          message: "BGS webhook URL not configured",
-          statusCode: Option.none(),
-          response: Option.none()
-        })
-          )
-        }
-        webhookUrl = webhookUrlOption.value
+      case "bgs":
+        webhookUrls = config.discord.webhooks.bgs
+        if (webhookUrls.length === 0) return yield* Effect.fail(new DiscordApiError({ message: "BGS webhook URL not configured", statusCode: Option.none(), response: Option.none() }))
         break
-      }
-      case "shoutout": {
-        const webhookUrlOption = config.discord.webhooks.shoutout
-        if (Option.isNone(webhookUrlOption)) {
-          return yield* Effect.fail(
-            new DiscordApiError({
-          message: "Shoutout webhook URL not configured",
-          statusCode: Option.none(),
-          response: Option.none()
-        })
-          )
-        }
-        webhookUrl = webhookUrlOption.value
+      case "shoutout":
+        webhookUrls = config.discord.webhooks.shoutout
+        if (webhookUrls.length === 0) return yield* Effect.fail(new DiscordApiError({ message: "Shoutout webhook URL not configured", statusCode: Option.none(), response: Option.none() }))
         break
-      }
-      case "conflict": {
-        const webhookUrlOption = config.discord.webhooks.conflict
-        if (Option.isNone(webhookUrlOption)) {
-          return yield* Effect.fail(
-            new DiscordApiError({
-          message: "Conflict webhook URL not configured",
-          statusCode: Option.none(),
-          response: Option.none()
-        })
-          )
-        }
-        webhookUrl = webhookUrlOption.value
+      case "conflict":
+        webhookUrls = config.discord.webhooks.conflict
+        if (webhookUrls.length === 0) return yield* Effect.fail(new DiscordApiError({ message: "Conflict webhook URL not configured", statusCode: Option.none(), response: Option.none() }))
         break
-      }
-      case "debug": {
-        const webhookUrlOption = config.discord.webhooks.debug
-        if (Option.isNone(webhookUrlOption)) {
-          return yield* Effect.fail(
-            new DiscordApiError({
-          message: "Debug webhook URL not configured",
-          statusCode: Option.none(),
-          response: Option.none()
-        })
-          )
-        }
-        webhookUrl = webhookUrlOption.value
+      case "debug":
+        webhookUrls = config.discord.webhooks.debug
+        if (webhookUrls.length === 0) return yield* Effect.fail(new DiscordApiError({ message: "Debug webhook URL not configured", statusCode: Option.none(), response: Option.none() }))
         break
-      }
       default:
-        return yield* Effect.fail(
-          new DiscordApiError({
-            message: `Invalid webhook choice: ${webhook}. Must be one of: BGS, shoutout, conflict, debug`,
-            statusCode: Option.none(),
-            response: Option.none()
-          })
-        )
+        return yield* Effect.fail(new DiscordApiError({ message: `Invalid webhook choice: ${webhook}. Must be one of: BGS, shoutout, conflict, debug`, statusCode: Option.none(), response: Option.none() }))
     }
 
-    // Send to Discord
-    yield* sendWebhook(webhookUrl, {
+    // Send to Discord (fan out to all configured URLs for the chosen type)
+    yield* Effect.forEach(webhookUrls, (url) => sendWebhook(url, {
       content: `**${username}:** ${content}`,
       username: "Sinistra Dashboard",
-    })
+    }), { discard: true })
 
     return new DiscordSummaryResponse({
       status: `Custom message sent to ${webhook} channel`,

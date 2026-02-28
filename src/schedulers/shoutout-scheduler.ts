@@ -12,7 +12,7 @@
  * Based on VALKFlaskServer/fac_shoutout_scheduler.py
  */
 
-import { Effect, Duration, Option, PubSub, Queue } from "effect"
+import { Effect, Duration, PubSub, Queue } from "effect"
 import type { Client } from "@libsql/client"
 import { AppConfig } from "../lib/config.js"
 import { TursoClient } from "../database/client.js"
@@ -59,6 +59,17 @@ export const postEmbedsToDiscord = async (webhookUrl: string, embeds: DiscordEmb
       body: JSON.stringify({ embeds: chunk }),
       signal: AbortSignal.timeout(10_000),
     })
+  }
+}
+
+/** Fan out embeds to every URL in the list. Errors on one URL don't abort others. */
+export const postEmbedsToAll = async (urls: string[], embeds: DiscordEmbed[]): Promise<void> => {
+  for (const url of urls) {
+    try {
+      await postEmbedsToDiscord(url, embeds)
+    } catch {
+      // individual URL errors are swallowed; postEmbedsToDiscord already logs
+    }
   }
 }
 
@@ -358,19 +369,19 @@ export const runShoutoutScheduler: Effect.Effect<
             `Shoutout scheduler: running jobs for completed tick ${completedTickHash}`
           )
 
-          const bgsWebhook = Option.getOrNull(config.discord.webhooks.bgs)
-          const conflictWebhook = Option.getOrNull(config.discord.webhooks.conflict)
-          const shoutoutWebhook = Option.getOrNull(config.discord.webhooks.shoutout)
+          const bgsWebhooks = config.discord.webhooks.bgs
+          const conflictWebhooks = config.discord.webhooks.conflict
+          const shoutoutWebhooks = config.discord.webhooks.shoutout
 
           let totalSent = 0
 
           // Job 1: BGS tick summary → bgs webhook
-          if (bgsWebhook) {
+          if (bgsWebhooks.length > 0) {
             yield* Effect.tryPromise({
               try: async () => {
                 const embeds = await buildTickSummary(client, completedTickHash, factionName)
                 if (embeds.length > 0) {
-                  await postEmbedsToDiscord(bgsWebhook, embeds)
+                  await postEmbedsToAll(bgsWebhooks, embeds)
                   return embeds.length
                 }
                 return 0
@@ -388,12 +399,12 @@ export const runShoutoutScheduler: Effect.Effect<
           }
 
           // Job 2: Space CZ → conflict webhook
-          if (conflictWebhook) {
+          if (conflictWebhooks.length > 0) {
             yield* Effect.tryPromise({
               try: async () => {
                 const embeds = await buildSpaceCzSummary(client, completedTickHash)
                 if (embeds.length > 0) {
-                  await postEmbedsToDiscord(conflictWebhook, embeds)
+                  await postEmbedsToAll(conflictWebhooks, embeds)
                   return embeds.length
                 }
                 return 0
@@ -411,12 +422,12 @@ export const runShoutoutScheduler: Effect.Effect<
           }
 
           // Job 3: Ground CZ → shoutout webhook
-          if (shoutoutWebhook) {
+          if (shoutoutWebhooks.length > 0) {
             yield* Effect.tryPromise({
               try: async () => {
                 const embeds = await buildGroundCzSummary(client, completedTickHash)
                 if (embeds.length > 0) {
-                  await postEmbedsToDiscord(shoutoutWebhook, embeds)
+                  await postEmbedsToAll(shoutoutWebhooks, embeds)
                   return embeds.length
                 }
                 return 0
@@ -435,11 +446,11 @@ export const runShoutoutScheduler: Effect.Effect<
 
           // If no data was sent on any job, post a fallback "nothing happened" notice
           if (totalSent === 0) {
-            const fallbackWebhook = bgsWebhook ?? conflictWebhook ?? shoutoutWebhook
-            if (fallbackWebhook) {
+            const fallbackWebhooks = [...new Set([...bgsWebhooks, ...conflictWebhooks, ...shoutoutWebhooks])]
+            if (fallbackWebhooks.length > 0) {
               yield* Effect.tryPromise({
                 try: () =>
-                  postEmbedsToDiscord(fallbackWebhook, [
+                  postEmbedsToAll(fallbackWebhooks, [
                     {
                       description: `📭 **No BGS activity recorded for tick ${completedTickHash}**\n_No missions, market trades, or CZ data found in the database for this tick._`,
                       color: 9807270, // grey

@@ -13,7 +13,7 @@
  * Discord notifications are only sent when something actually changes.
  */
 
-import { Effect, Option, Duration } from "effect"
+import { Effect, Duration } from "effect"
 import type { Client } from "@libsql/client"
 import { AppConfig } from "../lib/config.js"
 import { TursoClient } from "../database/client.js"
@@ -71,8 +71,8 @@ export const runEddnConflictScan: Effect.Effect<never, never, AppConfig | TursoC
   Effect.gen(function* () {
     const config = yield* AppConfig
     const client = yield* TursoClient
-    const webhookUrl = Option.getOrNull(config.discord.webhooks.conflict)
-    const debugWebhookUrl = Option.getOrNull(config.discord.webhooks.debug)
+    const webhookUrls = config.discord.webhooks.conflict
+    const debugWebhookUrls = config.discord.webhooks.debug
 
     yield* Effect.logInfo("EDDN conflict scan started (hourly)")
 
@@ -120,8 +120,8 @@ export const runEddnConflictScan: Effect.Effect<never, never, AppConfig | TursoC
 
       yield* runConflictDiff(
         client,
-        webhookUrl,
-        debugWebhookUrl,
+        webhookUrls,
+        debugWebhookUrls,
         currentConflicts,
         factionNames,
         new Date().toISOString(),

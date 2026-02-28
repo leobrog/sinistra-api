@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test"
-import { Effect, Layer, Option } from "effect"
+import { Effect, Layer } from "effect"
 import { AppConfig } from "../../lib/config.js"
 import {
   handleSendTop5AllToDiscord,
@@ -46,10 +46,10 @@ describe("Discord Summary API Integration", () => {
         serverId: "test-server-id",
       },
       webhooks: {
-        bgs: Option.none(),
-        shoutout: Option.none(),
-        conflict: Option.none(),
-        debug: Option.none(),
+        bgs: [],
+        shoutout: [],
+        conflict: [],
+        debug: [],
       },
     },
     inara: {
