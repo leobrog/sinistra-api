@@ -182,7 +182,7 @@ describe("runConflictCheck", () => {
   })
 
   // -------------------------------------------------------------------------
-  it("3. war won — deletes state and posts 🏆 message", async () => {
+  it("3. war won — keeps tombstone state and posts 🏆 message", async () => {
     const client = await makeClient()
     const calls = mockFetch()
 
@@ -197,12 +197,15 @@ describe("runConflictCheck", () => {
     expect(calls[0]).toContain(SYSTEM)
     expect(calls[0]).toContain("4")
 
+    // State is kept as a tombstone (won_days1 = 4) to suppress stale re-reports
     const state = await loadState(client, SYSTEM)
-    expect(state).toBeNull()
+    expect(state).not.toBeNull()
+    expect(Number(state!.won_days1)).toBe(4)
+    expect(Number(state!.won_days2)).toBe(1)
   })
 
   // -------------------------------------------------------------------------
-  it("4. war lost — deletes state and posts 💀 message", async () => {
+  it("4. war lost — keeps tombstone state and posts 💀 message", async () => {
     const client = await makeClient()
     const calls = mockFetch()
 
@@ -217,8 +220,11 @@ describe("runConflictCheck", () => {
     expect(calls[0]).toContain(SYSTEM)
     expect(calls[0]).toContain(RIVAL)
 
+    // State is kept as a tombstone (won_days2 = 4) to suppress stale re-reports
     const state = await loadState(client, SYSTEM)
-    expect(state).toBeNull()
+    expect(state).not.toBeNull()
+    expect(Number(state!.won_days1)).toBe(1)
+    expect(Number(state!.won_days2)).toBe(4)
   })
 
   // -------------------------------------------------------------------------
@@ -306,5 +312,50 @@ describe("runConflictCheck", () => {
     expect(postedUrls).toHaveLength(2)
     expect(postedUrls).toContain(WEBHOOK)
     expect(postedUrls).toContain(WEBHOOK2)
+  })
+
+  // -------------------------------------------------------------------------
+  it("10. stale re-report — tombstone present, same 4-x score, no Discord post", async () => {
+    const client = await makeClient()
+    const calls = mockFetch()
+
+    // Tombstone: prev state already at 4-1 (resolved last tick)
+    await insertPrevState(client, SYSTEM, 4, 1)
+    // EDDN still reports the same 4-1 score this tick
+    await insertEvent(client, SYSTEM, 4, 1)
+
+    await Effect.runPromise(runConflictCheck(client, FACTION, [WEBHOOK], TICK))
+
+    // No Discord notification — stale data suppressed
+    expect(calls).toHaveLength(0)
+
+    // Tombstone still present (untouched, will expire after 24h via cleanup DELETE)
+    const state = await loadState(client, SYSTEM)
+    expect(state).not.toBeNull()
+    expect(Number(state!.won_days1)).toBe(4)
+  })
+
+  // -------------------------------------------------------------------------
+  it("11. new conflict in resolved system — tombstone present, lower score, posts ⚔️", async () => {
+    const client = await makeClient()
+    const calls = mockFetch()
+
+    // Tombstone: system was resolved at 4-1
+    await insertPrevState(client, SYSTEM, 4, 1)
+    // New conflict in the same system (fresh 0-0 score)
+    await insertEvent(client, SYSTEM, 0, 0)
+
+    await Effect.runPromise(runConflictCheck(client, FACTION, [WEBHOOK], TICK))
+
+    // New conflict announced
+    expect(calls).toHaveLength(1)
+    expect(calls[0]).toContain("⚔️")
+    expect(calls[0]).toContain(SYSTEM)
+
+    // State overwritten with new 0-0 entry
+    const state = await loadState(client, SYSTEM)
+    expect(state).not.toBeNull()
+    expect(Number(state!.won_days1)).toBe(0)
+    expect(Number(state!.won_days2)).toBe(0)
   })
 })

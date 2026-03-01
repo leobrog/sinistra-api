@@ -125,7 +125,7 @@ const loadConflictState = async (client: Client): Promise<Map<string, ConflictEn
       stake2: String(row.stake2 ?? ""),
       wonDays1: Number(row.won_days1),
       wonDays2: Number(row.won_days2),
-      updatedAt: row.updated_at != null ? String(row.updated_at) : undefined,
+      ...(row.updated_at != null ? { updatedAt: String(row.updated_at) } : {}),
     })
   }
   return map
@@ -314,6 +314,15 @@ export const runConflictDiff = (
   Effect.gen(function* () {
     yield* Effect.logInfo(`${label}: processing ${currentConflicts.size} conflict(s)`)
 
+    // Cleanup resolved-conflict tombstones older than 24 hours
+    yield* Effect.tryPromise({
+      try: () =>
+        client.execute(
+          "DELETE FROM conflict_state WHERE (won_days1 >= 4 OR won_days2 >= 4) AND updated_at < datetime('now', '-24 hours')"
+        ),
+      catch: (e) => new Error(`Conflict state cleanup failed: ${e}`),
+    }).pipe(Effect.catchAll((e) => Effect.logWarning(`${label} cleanup error: ${e}`)))
+
     const prevState = yield* Effect.tryPromise({
       try: () => loadConflictState(client),
       catch: (e) => new Error(`Load conflict state failed: ${e}`),
@@ -329,8 +338,15 @@ export const runConflictDiff = (
 
     for (const [system, current] of currentConflicts.entries()) {
       const prev = prevState.get(system)
+      const prevResolved = !!prev && (prev.wonDays1 >= 4 || prev.wonDays2 >= 4)
 
-      if (!prev) {
+      if (!prev || prevResolved) {
+        // No prior state, or prior state is a resolved tombstone
+        if (current.wonDays1 >= 4 || current.wonDays2 >= 4) {
+          // Stale re-report of an already-resolved conflict — ignore until tombstone expires
+          yield* Effect.logDebug(`${label}: skipping stale resolved conflict in ${system} (tombstone present)`)
+          continue
+        }
         stmts.push(buildUpsertStmt(system, current, tickId))
         notifications.push(formatNewConflict(system, current))
         yield* Effect.logInfo(`${label}: new conflict in ${system}`)
@@ -338,7 +354,8 @@ export const runConflictDiff = (
       }
 
       if (current.wonDays1 >= 4 || current.wonDays2 >= 4) {
-        stmts.push(buildDeleteStmt(system))
+        // First resolution — store tombstone (upsert, not delete) to suppress stale re-reports
+        stmts.push(buildUpsertStmt(system, current, tickId))
         const ourFaction =
           [...factionNames].find((n) => n === current.faction1 || n === current.faction2) ??
           current.faction1
@@ -359,6 +376,11 @@ export const runConflictDiff = (
 
     for (const system of prevState.keys()) {
       if (currentConflicts.has(system)) continue
+      const entry = prevState.get(system)!
+
+      // Tombstones expire via the 24h cleanup DELETE — don't treat them as "missing"
+      if (entry.wonDays1 >= 4 || entry.wonDays2 >= 4) continue
+
       const { cleanupScope } = options
       const scopeKind =
         cleanupScope === "all"
@@ -367,7 +389,6 @@ export const runConflictDiff = (
             ? "visited"
             : null
       if (scopeKind !== null) {
-        const entry = prevState.get(system)!
         const reason =
           scopeKind === "all"
             ? `not found in ${label} scan`
