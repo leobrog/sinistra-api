@@ -13,7 +13,7 @@
  * Discord notifications are only sent when something actually changes.
  */
 
-import { Effect, Duration } from "effect"
+import { Effect, Duration, Schedule } from "effect"
 import type { Client } from "@libsql/client"
 import { AppConfig } from "../lib/config.js"
 import { TursoClient } from "../database/client.js"
@@ -114,7 +114,6 @@ export const runEddnConflictScan: Effect.Effect<never, never, AppConfig | TursoC
       // cleanup that would delete all conflict_state entries.
       if (currentConflicts.size === 0) {
         yield* Effect.logWarning("EDDN conflict scan: no conflicts found, skipping diff")
-        yield* Effect.sleep(Duration.hours(1))
         return
       }
 
@@ -128,11 +127,9 @@ export const runEddnConflictScan: Effect.Effect<never, never, AppConfig | TursoC
         "EDDN conflict scan",
         { cleanupScope: new Set<string>() }
       )
-
-      yield* Effect.sleep(Duration.hours(1))
     })
 
-    return yield* Effect.forever(scanOnce)
+    return yield* Effect.repeat(scanOnce, Schedule.spaced(Duration.hours(1)))
   }).pipe(
     Effect.catchAll((e) => Effect.logError(`EDDN conflict scan fatal: ${e}`))
   ) as Effect.Effect<never, never, AppConfig | TursoClient>

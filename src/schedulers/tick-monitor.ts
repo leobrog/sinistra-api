@@ -5,7 +5,7 @@
  * On a new tick: saves to tick_state, notifies via BGS Discord webhook.
  */
 
-import { Effect, Ref, Duration, PubSub } from "effect"
+import { Effect, Ref, Duration, PubSub, Schedule } from "effect"
 import type { Client } from "@libsql/client"
 import { AppConfig } from "../lib/config.js"
 import { TursoClient } from "../database/client.js"
@@ -105,8 +105,6 @@ export const runTickMonitor: Effect.Effect<never, never, AppConfig | TursoClient
 
     // Poll once per interval
     const pollOnce = Effect.gen(function* () {
-      yield* Effect.sleep(Duration.millis(config.tick.pollIntervalMs))
-
       const newTick = yield* fetchCurrentTick(config.tick.apiUrl)
       const lastTick = yield* Ref.get(lastTickRef)
 
@@ -126,7 +124,7 @@ export const runTickMonitor: Effect.Effect<never, never, AppConfig | TursoClient
       }
     })
 
-    return yield* Effect.forever(pollOnce)
+    return yield* Effect.repeat(pollOnce, Schedule.spaced(Duration.millis(config.tick.pollIntervalMs)))
   }
 ).pipe(
   Effect.catchAll((e) => Effect.logError(`Tick monitor fatal error: ${e}`))

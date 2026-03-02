@@ -145,7 +145,9 @@ export const runInaraSync: Effect.Effect<never, never, AppConfig | TursoClient> 
 
       // Commit all collected updates in a single write transaction
       yield* Effect.logInfo(`Inara sync: flushing ${pendingUpdates.length} updates in one batch`)
-      yield* flushUpdates(client, pendingUpdates)
+      yield* flushUpdates(client, pendingUpdates).pipe(
+        Effect.catchAll((e) => Effect.logWarning(`Inara sync: batch write failed: ${e}`))
+      )
 
       yield* Effect.logInfo(
         `Inara sync complete: ${syncedNames.length} updated, ${skipped} skipped${rateLimited ? ", rate limited" : ""}`

@@ -170,6 +170,6 @@ export const runEddnClient: Effect.Effect<never, never, AppConfig | TursoClient>
     return yield* Effect.forever(receiveBatch)
   }
 ).pipe(
-  Effect.retry(Schedule.spaced(Duration.seconds(5))),
+  Effect.retry(Schedule.exponential(Duration.seconds(1)).pipe(Schedule.union(Schedule.spaced(Duration.minutes(1))))),
   Effect.catchAll((e) => Effect.logError(`EDDN client fatal: ${e}`))
 ) as Effect.Effect<never, never, AppConfig | TursoClient>
