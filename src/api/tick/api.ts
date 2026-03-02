@@ -6,11 +6,10 @@ export const TickResponse = Schema.Struct({
   lastGalaxyTick: Schema.String,
 })
 
-export const TickNotFoundError = Schema.TaggedError<TickNotFoundError>()(
+export class TickNotFoundError extends Schema.TaggedError<TickNotFoundError>()(
   "TickNotFoundError",
   { message: Schema.String }
-)
-export type TickNotFoundError = typeof TickNotFoundError.Type
+) {}
 
 export const ForceTickRequest = Schema.Struct({
   ticktime: Schema.String,

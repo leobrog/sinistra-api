@@ -9,11 +9,10 @@ export const CmdrLocationResponse = Schema.Struct({
   timestamp: Schema.NullOr(Schema.String),
 })
 
-export const CmdrNotFoundByDiscordError = Schema.TaggedError<CmdrNotFoundByDiscordError>()(
+export class CmdrNotFoundByDiscordError extends Schema.TaggedError<CmdrNotFoundByDiscordError>()(
   "CmdrNotFoundByDiscordError",
   { message: Schema.String }
-)
-export type CmdrNotFoundByDiscordError = typeof CmdrNotFoundByDiscordError.Type
+) {}
 
 export const CmdrLocationApi = HttpApiGroup.make("cmdrLocation")
   .add(
