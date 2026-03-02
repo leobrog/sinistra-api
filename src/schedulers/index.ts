@@ -5,7 +5,7 @@
  * Import SchedulersLive and provide it with InfrastructureLayer in main.ts.
  */
 
-import { Effect, Layer, PubSub } from "effect"
+import { Effect, Layer } from "effect"
 import { AppConfig } from "../lib/config.js"
 import { TursoClient } from "../database/client.js"
 import { TickBus } from "../services/TickBus.js"
@@ -15,7 +15,7 @@ import { runConflictScheduler } from "./conflict-scheduler.js"
 import { runInaraSync } from "./inara-sync.js"
 import { runEddnConflictScan } from "./eddn-conflict-scan.js"
 
-export const SchedulersLive: Layer.Layer<never, never, AppConfig | TursoClient> =
+export const SchedulersLive: Layer.Layer<never, never, AppConfig | TursoClient | TickBus> =
   Layer.effectDiscard(
     Effect.gen(function* () {
       const config = yield* AppConfig
@@ -25,18 +25,10 @@ export const SchedulersLive: Layer.Layer<never, never, AppConfig | TursoClient> 
         return
       }
 
-      // Create TickBus — shared PubSub connecting tick-monitor → schedulers
-      const bus = yield* PubSub.unbounded<string>()
-
-      yield* Effect.forkDaemon(
-        Effect.provideService(runTickMonitor, TickBus, bus)
-      )
-      yield* Effect.forkDaemon(
-        Effect.provideService(runShoutoutScheduler, TickBus, bus)
-      )
-      yield* Effect.forkDaemon(
-        Effect.provideService(runConflictScheduler, TickBus, bus)
-      )
+      // TickBus is now a singleton layer — all consumers share the same PubSub
+      yield* Effect.forkDaemon(runTickMonitor)
+      yield* Effect.forkDaemon(runShoutoutScheduler)
+      yield* Effect.forkDaemon(runConflictScheduler)
       yield* Effect.forkDaemon(runInaraSync)
       yield* Effect.forkDaemon(runEddnConflictScan)
 

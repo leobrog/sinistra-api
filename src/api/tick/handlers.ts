@@ -1,8 +1,9 @@
-import { Effect } from "effect"
+import { Effect, PubSub } from "effect"
 import { HttpApiBuilder } from "@effect/platform"
 import { Api } from "../index.js"
 import { AppConfig } from "../../lib/config.js"
 import { TursoClient } from "../../database/client.js"
+import { TickBus } from "../../services/TickBus.js"
 import { TickNotFoundError } from "./api.js"
 
 export const TickApiLive = HttpApiBuilder.group(Api, "tick", (handlers) =>
@@ -33,6 +34,7 @@ export const TickApiLive = HttpApiBuilder.group(Api, "tick", (handlers) =>
     .handle("forceTick", ({ payload }) =>
       Effect.gen(function* () {
         const client = yield* TursoClient
+        const bus = yield* TickBus
         const ticktime = payload.ticktime
 
         yield* Effect.tryPromise({
@@ -47,6 +49,8 @@ export const TickApiLive = HttpApiBuilder.group(Api, "tick", (handlers) =>
             }),
           catch: (e) => new Error(`Failed to insert tick: ${e}`),
         }).pipe(Effect.orDie)
+
+        yield* PubSub.publish(bus, ticktime)
 
         return { status: "ok", ticktime }
       })
