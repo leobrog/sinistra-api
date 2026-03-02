@@ -36,7 +36,6 @@ import { ApiKeyAuthLive } from "./api/middleware/apikey.ts"
 import { TursoClientLive } from "./database/client.ts"
 import { AppConfigLive } from "./lib/config.ts"
 import { JwtServiceLive } from "./services/jwt.ts"
-import { TickBusLive } from "./services/TickBus.ts"
 
 // Schedulers
 import { SchedulersLive } from "./schedulers/index.ts"
@@ -79,7 +78,7 @@ const RepositoriesLayer = Layer.mergeAll(
 
 const ServicesLayer = Layer.mergeAll(JwtServiceLive, ApiKeyAuthLive)
 
-const InfrastructureLayer = Layer.mergeAll(TursoClientLive, AppConfigLive, TickBusLive)
+const InfrastructureLayer = Layer.mergeAll(TursoClientLive, AppConfigLive)
 
 const SchedulerLayer = SchedulersLive.pipe(Layer.provide(InfrastructureLayer))
 
