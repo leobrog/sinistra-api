@@ -57,18 +57,18 @@ export const FactionVisitedSystemsApiLive = HttpApiBuilder.group(
 
         const systems: {
           StarSystem: string
-          SystemAddress: number | null
-          Timestamp: string | null
+          SystemAddress: number | undefined
+          Timestamp: string | undefined
           Factions: {
             Name: string
-            FactionState: string | null
-            Government: string | null
-            Influence: number | null
-            Allegiance: string | null
-            Happiness: string | null
-            MyReputation: number | null
-            PendingStates: { State?: string | null; Trend?: number | null }[] | null
-            RecoveringStates: { State?: string | null; Trend?: number | null }[] | null
+            FactionState: string | undefined
+            Government: string | undefined
+            Influence: number | undefined
+            Allegiance: string | undefined
+            Happiness: string | undefined
+            MyReputation: number | undefined
+            PendingStates: { State?: string; Trend?: number }[] | undefined
+            RecoveringStates: { State?: string; Trend?: number }[] | undefined
           }[]
         }[] = []
 

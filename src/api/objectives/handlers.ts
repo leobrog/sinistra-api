@@ -479,12 +479,12 @@ export const ObjectivesApiLive = HttpApiBuilder.group(Api, "objectives", (handle
         // Build updated objective
         const updated = new Objective({
           id: existing.id,
-          title: updates.title !== undefined ? Option.some(updates.title) : existing.title,
-          priority: updates.priority !== undefined ? Option.some(updates.priority) : existing.priority,
-          type: updates.type !== undefined ? Option.some(updates.type) : existing.type,
-          system: updates.system !== undefined ? Option.some(updates.system) : existing.system,
-          faction: updates.faction !== undefined ? Option.some(updates.faction) : existing.faction,
-          description: updates.description !== undefined ? Option.some(updates.description) : existing.description,
+          title: updates.title !== undefined ? Option.fromNullable(updates.title) : existing.title,
+          priority: updates.priority !== undefined ? Option.fromNullable(updates.priority) : existing.priority,
+          type: updates.type !== undefined ? Option.fromNullable(updates.type) : existing.type,
+          system: updates.system !== undefined ? Option.fromNullable(updates.system) : existing.system,
+          faction: updates.faction !== undefined ? Option.fromNullable(updates.faction) : existing.faction,
+          description: updates.description !== undefined ? Option.fromNullable(updates.description) : existing.description,
           startdate: updates.startdate !== undefined ? Option.fromNullable(updates.startdate) : existing.startdate,
           enddate: updates.enddate !== undefined ? Option.fromNullable(updates.enddate) : existing.enddate,
           targets:
@@ -542,12 +542,12 @@ export const ObjectivesApiLive = HttpApiBuilder.group(Api, "objectives", (handle
 
         const updated = new Objective({
           id: existing.id,
-          title: updates.title !== undefined ? Option.some(updates.title) : existing.title,
-          priority: updates.priority !== undefined ? Option.some(updates.priority) : existing.priority,
-          type: updates.type !== undefined ? Option.some(updates.type) : existing.type,
-          system: updates.system !== undefined ? Option.some(updates.system) : existing.system,
-          faction: updates.faction !== undefined ? Option.some(updates.faction) : existing.faction,
-          description: updates.description !== undefined ? Option.some(updates.description) : existing.description,
+          title: updates.title !== undefined ? Option.fromNullable(updates.title) : existing.title,
+          priority: updates.priority !== undefined ? Option.fromNullable(updates.priority) : existing.priority,
+          type: updates.type !== undefined ? Option.fromNullable(updates.type) : existing.type,
+          system: updates.system !== undefined ? Option.fromNullable(updates.system) : existing.system,
+          faction: updates.faction !== undefined ? Option.fromNullable(updates.faction) : existing.faction,
+          description: updates.description !== undefined ? Option.fromNullable(updates.description) : existing.description,
           startdate: updates.startdate !== undefined ? Option.fromNullable(updates.startdate) : existing.startdate,
           enddate: updates.enddate !== undefined ? Option.fromNullable(updates.enddate) : existing.enddate,
           targets:

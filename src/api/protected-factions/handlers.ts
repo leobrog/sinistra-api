@@ -105,7 +105,7 @@ export const updateProtectedFaction = HttpApiBuilder.handler(
 
       const updated = new ProtectedFaction({
         id: existing.id,
-        name: payload.name !== undefined ? payload.name : existing.name,
+        name: payload.name ?? existing.name,
         webhookUrl:
           payload.webhook_url !== undefined
             ? Option.fromNullable(payload.webhook_url)
