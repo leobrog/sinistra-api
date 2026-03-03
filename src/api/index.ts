@@ -15,7 +15,7 @@ import { CmdrLocationApi } from "./cmdr-location/api.js";
 import { CZApi } from "./cz/api.js";
 import { BountyVouchersApi } from "./bounty-vouchers/api.js";
 import { FactionVisitedSystemsApi } from "./faction-visited-systems/api.js";
-import { BinsApi } from "./bins/api.js";
+import { BucketsApi } from "./buckets/api.js";
 
 // API composition - all endpoint groups
 export const Api = HttpApi.make("sinistra-api")
@@ -35,4 +35,4 @@ export const Api = HttpApi.make("sinistra-api")
   .add(CZApi)
   .add(BountyVouchersApi)
   .add(FactionVisitedSystemsApi)
-  .add(BinsApi);
+  .add(BucketsApi);

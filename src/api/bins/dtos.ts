@@ -2,9 +2,9 @@ import { Schema } from "effect"
 import { DateFilterPeriodSchema } from "../../services/date-filters.js"
 
 /**
- * Query parameters for GET /api/bins
+ * Query parameters for GET /api/buckets
  */
-export class BinsQueryParams extends Schema.Class<BinsQueryParams>("BinsQueryParams")({
+export class BucketsQueryParams extends Schema.Class<BucketsQueryParams>("BucketsQueryParams")({
   period: Schema.optionalWith(DateFilterPeriodSchema, { default: () => "ct" as const }),
   system: Schema.optional(Schema.String),
 }) {}
@@ -22,7 +22,7 @@ export class BucketDetail extends Schema.Class<BucketDetail>("BucketDetail")({
 /**
  * All tracked BGS buckets for a faction/system pair.
  */
-export class BinsBuckets extends Schema.Class<BinsBuckets>("BinsBuckets")({
+export class BucketsBuckets extends Schema.Class<BucketsBuckets>("BucketsBuckets")({
   missions: BucketDetail,
   exploration: BucketDetail,
   bounty: BucketDetail,
@@ -31,9 +31,9 @@ export class BinsBuckets extends Schema.Class<BinsBuckets>("BinsBuckets")({
 }) {}
 
 /**
- * BGS bins result for one faction in one system.
+ * BGS buckets result for one faction in one system.
  */
-export class BinsEntry extends Schema.Class<BinsEntry>("BinsEntry")({
+export class BucketsEntry extends Schema.Class<BucketsEntry>("BucketsEntry")({
   system: Schema.String,
   faction: Schema.String,
   period: Schema.String,
@@ -41,7 +41,7 @@ export class BinsEntry extends Schema.Class<BinsEntry>("BinsEntry")({
   factionCount: Schema.optionalWith(Schema.Number, { nullable: true }),
   currentInfluence: Schema.optionalWith(Schema.Number, { nullable: true }),
   maxSwing: Schema.optionalWith(Schema.Number, { nullable: true }),
-  buckets: BinsBuckets,
+  buckets: BucketsBuckets,
   totalPositivePts: Schema.Number,
   totalNegativePts: Schema.Number,
   netPts: Schema.Number,
@@ -52,9 +52,9 @@ export class BinsEntry extends Schema.Class<BinsEntry>("BinsEntry")({
 }) {}
 
 /**
- * Top-level response for GET /api/bins
+ * Top-level response for GET /api/buckets
  */
-export class BinsResponse extends Schema.Class<BinsResponse>("BinsResponse")({
-  bins: Schema.Array(BinsEntry),
+export class BucketsResponse extends Schema.Class<BucketsResponse>("BucketsResponse")({
+  buckets: Schema.Array(BucketsEntry),
   count: Schema.Number,
 }) {}

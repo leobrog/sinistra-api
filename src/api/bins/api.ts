@@ -1,17 +1,17 @@
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "@effect/platform"
-import { BinsQueryParams, BinsResponse } from "./dtos.js"
+import { BucketsQueryParams, BucketsResponse } from "./dtos.js"
 import { ApiKeyAuth, ApiKeyError } from "../middleware/apikey.js"
 import { DatabaseError } from "../../domain/errors.js"
 
-export const BinsApi = HttpApiGroup.make("bins")
+export const BucketsApi = HttpApiGroup.make("buckets")
   .add(
-    HttpApiEndpoint.get("getBins", "/")
-      .addSuccess(BinsResponse)
+    HttpApiEndpoint.get("getBuckets", "/")
+      .addSuccess(BucketsResponse)
       .addError(ApiKeyError, { status: 401 })
       .addError(DatabaseError, { status: 500 })
-      .setUrlParams(BinsQueryParams)
+      .setUrlParams(BucketsQueryParams)
       .middleware(ApiKeyAuth)
-      .annotate(OpenApi.Title, "Get BGS Bins")
+      .annotate(OpenApi.Title, "Get BGS Buckets")
       .annotate(
         OpenApi.Description,
         `Compute BGS bucket details for all active objective factions.
@@ -26,4 +26,4 @@ Query parameters:
 - system: Restrict results to one system name`
       )
   )
-  .prefix("/api/bins")
+  .prefix("/api/buckets")

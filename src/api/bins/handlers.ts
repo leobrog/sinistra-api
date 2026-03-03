@@ -1,8 +1,8 @@
 import { Effect } from "effect"
 import { HttpApiBuilder } from "@effect/platform"
 import { Api } from "../index.js"
-import type { BinsQueryParams } from "./dtos.js"
-import { BinsEntry, BinsBuckets, BucketDetail, BinsResponse } from "./dtos.js"
+import type { BucketsQueryParams } from "./dtos.js"
+import { BucketsEntry, BucketsBuckets, BucketDetail, BucketsResponse } from "./dtos.js"
 import { TursoClient } from "../../database/client.js"
 import { DatabaseError } from "../../domain/errors.js"
 import { buildDateFilter, type DateFilter } from "../../services/date-filters.js"
@@ -20,7 +20,7 @@ import {
   BOUNTY_FIRST_THRESHOLD,
   MISSION_FAIL_FIRST_THRESHOLD,
   MURDER_FIRST_THRESHOLD,
-} from "../../services/bins.js"
+} from "../../services/buckets.js"
 import type { Client } from "@libsql/client"
 
 /**
@@ -61,14 +61,14 @@ const makeBucket = (
 }
 
 /**
- * Compute BGS bins for a single (system, faction) pair.
+ * Compute BGS buckets for a single (system, faction) pair.
  */
-const computeBinsForPair = (
+const computeBucketsForPair = (
   system: string,
   faction: string,
   dateFilter: DateFilter,
   client: Client
-): Effect.Effect<BinsEntry, DatabaseError> =>
+): Effect.Effect<BucketsEntry, DatabaseError> =>
   Effect.gen(function* () {
     const { sql: dateSql, args: dateArgs } = buildDateFilterParam(dateFilter)
 
@@ -83,7 +83,7 @@ const computeBinsForPair = (
     const missionsResult = yield* Effect.tryPromise({
       try: () =>
         client.execute({ sql: missionsSql, args: [faction, system, ...dateArgs] }),
-      catch: (error) => new DatabaseError({ operation: "getBins.missions", error }),
+      catch: (error) => new DatabaseError({ operation: "getBuckets.missions", error }),
     })
     const missionsRaw = Number((missionsResult.rows[0] as any)?.pluses ?? 0)
 
@@ -108,7 +108,7 @@ const computeBinsForPair = (
           sql: explorationSql,
           args: [system, ...dateArgs, system, ...dateArgs],
         }),
-      catch: (error) => new DatabaseError({ operation: "getBins.exploration", error }),
+      catch: (error) => new DatabaseError({ operation: "getBuckets.exploration", error }),
     })
     const explorationRaw = Number((explorationResult.rows[0] as any)?.credits ?? 0)
 
@@ -122,7 +122,7 @@ const computeBinsForPair = (
     const bountyResult = yield* Effect.tryPromise({
       try: () =>
         client.execute({ sql: bountySql, args: [faction, system, ...dateArgs] }),
-      catch: (error) => new DatabaseError({ operation: "getBins.bounty", error }),
+      catch: (error) => new DatabaseError({ operation: "getBuckets.bounty", error }),
     })
     const bountyRaw = Number((bountyResult.rows[0] as any)?.credits ?? 0)
 
@@ -136,7 +136,7 @@ const computeBinsForPair = (
     const missionFailResult = yield* Effect.tryPromise({
       try: () =>
         client.execute({ sql: missionFailSql, args: [faction, system, ...dateArgs] }),
-      catch: (error) => new DatabaseError({ operation: "getBins.missionFail", error }),
+      catch: (error) => new DatabaseError({ operation: "getBuckets.missionFail", error }),
     })
     const missionFailRaw = Number((missionFailResult.rows[0] as any)?.cnt ?? 0)
 
@@ -150,7 +150,7 @@ const computeBinsForPair = (
     const murderResult = yield* Effect.tryPromise({
       try: () =>
         client.execute({ sql: murderSql, args: [faction, system, ...dateArgs] }),
-      catch: (error) => new DatabaseError({ operation: "getBins.murder", error }),
+      catch: (error) => new DatabaseError({ operation: "getBuckets.murder", error }),
     })
     const murderRaw = Number((murderResult.rows[0] as any)?.cnt ?? 0)
 
@@ -169,7 +169,7 @@ const computeBinsForPair = (
     `
     const eddnResult = yield* Effect.tryPromise({
       try: () => client.execute({ sql: eddnSql, args: [system, faction] }),
-      catch: (error) => new DatabaseError({ operation: "getBins.eddn", error }),
+      catch: (error) => new DatabaseError({ operation: "getBuckets.eddn", error }),
     })
     const eddnRow = eddnResult.rows[0] as Record<string, unknown> | undefined
     const currentInfluence =
@@ -185,7 +185,7 @@ const computeBinsForPair = (
     `
     const factionCountResult = yield* Effect.tryPromise({
       try: () => client.execute({ sql: factionCountSql, args: [system] }),
-      catch: (error) => new DatabaseError({ operation: "getBins.factionCount", error }),
+      catch: (error) => new DatabaseError({ operation: "getBuckets.factionCount", error }),
     })
     const factionCountRaw = (factionCountResult.rows[0] as any)?.cnt
     const factionCount =
@@ -218,7 +218,7 @@ const computeBinsForPair = (
       predictedInfluence = currentInfluence + pred.predictedInfluenceChange
     }
 
-    return new BinsEntry({
+    return new BucketsEntry({
       system,
       faction,
       period: dateFilter.label,
@@ -226,7 +226,7 @@ const computeBinsForPair = (
       factionCount: factionCount ?? undefined,
       currentInfluence: currentInfluence ?? undefined,
       maxSwing: maxSwing ?? undefined,
-      buckets: new BinsBuckets({
+      buckets: new BucketsBuckets({
         missions: makeBucket(missionsRaw, missionsPts, MISSIONS_FIRST_THRESHOLD, 4),
         exploration: makeBucket(
           explorationRaw,
@@ -253,7 +253,7 @@ const computeBinsForPair = (
     })
   })
 
-export const handleGetBins = (params: BinsQueryParams) =>
+export const handleGetBuckets = (params: BucketsQueryParams) =>
   Effect.gen(function* () {
     const client = yield* TursoClient
 
@@ -272,7 +272,7 @@ export const handleGetBins = (params: BinsQueryParams) =>
 
     const objectivesResult = yield* Effect.tryPromise({
       try: () => client.execute({ sql: objectivesSql, args: objectivesArgs }),
-      catch: (error) => new DatabaseError({ operation: "getBins.objectives", error }),
+      catch: (error) => new DatabaseError({ operation: "getBuckets.objectives", error }),
     })
 
     const pairs = objectivesResult.rows.map((row: any) => ({
@@ -280,15 +280,15 @@ export const handleGetBins = (params: BinsQueryParams) =>
       faction: String(row.faction ?? row[1]),
     }))
 
-    // Compute bins for each pair (up to 4 concurrent)
+    // Compute buckets for each pair (up to 4 concurrent)
     const entries = yield* Effect.forEach(
       pairs,
-      (pair) => computeBinsForPair(pair.system, pair.faction, dateFilter, client),
+      (pair) => computeBucketsForPair(pair.system, pair.faction, dateFilter, client),
       { concurrency: 4 }
     )
 
-    return new BinsResponse({
-      bins: entries as readonly BinsEntry[],
+    return new BucketsResponse({
+      buckets: entries as readonly BucketsEntry[],
       count: entries.length,
     })
   }).pipe(
@@ -302,13 +302,13 @@ export const handleGetBins = (params: BinsQueryParams) =>
     })
   )
 
-export const getBinsHandler = HttpApiBuilder.handler(
+export const getBucketsHandler = HttpApiBuilder.handler(
   Api,
-  "bins",
-  "getBins",
-  ({ urlParams }) => handleGetBins(urlParams)
+  "buckets",
+  "getBuckets",
+  ({ urlParams }) => handleGetBuckets(urlParams)
 )
 
-export const BinsApiLive = HttpApiBuilder.group(Api, "bins", (handlers) =>
-  handlers.handle("getBins", getBinsHandler)
+export const BucketsApiLive = HttpApiBuilder.group(Api, "buckets", (handlers) =>
+  handlers.handle("getBuckets", getBucketsHandler)
 )

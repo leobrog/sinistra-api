@@ -1,5 +1,5 @@
 /**
- * BGS Bins Calculation Service
+ * BGS Buckets Calculation Service
  *
  * Pure math functions for BGS (Background Simulation) bucket calculations.
  * Converts raw activity values (pluses, credits, counts) into BGS points
