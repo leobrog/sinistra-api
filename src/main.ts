@@ -1,6 +1,6 @@
 import { BunHttpServer, BunRuntime } from "@effect/platform-bun"
-import { HttpApiBuilder, HttpMiddleware } from "@effect/platform"
-import { Layer, Effect } from "effect"
+import { HttpApiBuilder, HttpMiddleware, HttpServerRequest } from "@effect/platform"
+import { Layer, Effect, Logger, LogLevel } from "effect"
 import { Api } from "./api/index.ts"
 
 // API Handlers
@@ -91,8 +91,18 @@ const ApiLive = HttpApiBuilder.api(Api).pipe(
   Layer.provide(InfrastructureLayer)
 )
 
+// Suppress INFO-level HTTP span logs for high-frequency polling endpoints.
+// They remain visible at DEBUG level but don't flood logs in production.
+const suppressPollingLogs = HttpMiddleware.make((app) =>
+  Effect.flatMap(HttpServerRequest.HttpServerRequest, (req) =>
+    req.method === "GET" && req.url.startsWith("/objectives")
+      ? app.pipe(Logger.withMinimumLogLevel(LogLevel.Warning))
+      : app
+  )
+)
+
 const ServerLayer = HttpApiBuilder.serve((app) =>
-  HttpMiddleware.logger(tableMiddleware(oauthCallbackMiddleware(app)))
+  suppressPollingLogs(HttpMiddleware.logger(tableMiddleware(oauthCallbackMiddleware(app))))
 ).pipe(
   Layer.provide(ApiLive),
   Layer.provide(RepositoriesLayer),
