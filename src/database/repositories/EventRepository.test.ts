@@ -259,6 +259,7 @@ describe("EventRepository", () => {
       profit: Option.some(2000),
       value: Option.some(10000),
       count: Option.some(5),
+      stationFaction: Option.none(),
     });
 
     const mission = new MissionCompletedEvent({
