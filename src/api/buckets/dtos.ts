@@ -25,6 +25,7 @@ export class BucketDetail extends Schema.Class<BucketDetail>("BucketDetail")({
 export class BucketsBuckets extends Schema.Class<BucketsBuckets>("BucketsBuckets")({
   missions: BucketDetail,
   exploration: BucketDetail,
+  trade: BucketDetail,
   bounty: BucketDetail,
   missionFail: BucketDetail,
   murder: BucketDetail,

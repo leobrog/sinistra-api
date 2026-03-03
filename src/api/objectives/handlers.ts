@@ -117,35 +117,38 @@ const computeTargetProgress = (
                GROUP BY e.cmdr, mci.faction_name`
       } else if (targetType === "expl") {
         progressField = "total_exploration_sales"
-        // Date filter appears twice in UNION, so double the args; system filter once on outer query
-        args = [...dateFilter.args, ...dateFilter.args]
-        if (targetSystem) { args.push(targetSystem) }
-        const systemCond = targetSystem ? "WHERE starsystem = ?" : ""
+        const systemCond = targetSystem ? " AND e.starsystem = ?" : ""
+        const factionCondSe = targetFaction ? " AND se.station_faction = ?" : ""
+        const factionCondMs = targetFaction ? " AND ms.station_faction = ?" : ""
+        const branchArgs: (string | number | null)[] = [
+          ...dateFilter.args,
+          ...(targetSystem ? [targetSystem] : []),
+          ...(targetFaction ? [targetFaction] : []),
+        ]
+        args = [...branchArgs, ...branchArgs]
         sql = `SELECT cmdr, SUM(total_sales) AS total_exploration_sales
                FROM (
-                 SELECT e.cmdr, e.starsystem, se.earnings AS total_sales
+                 SELECT e.cmdr, se.earnings AS total_sales
                  FROM sell_exploration_data_event se
                  JOIN event e ON e.id = se.event_id
-                 WHERE e.cmdr IS NOT NULL AND ${dateFilter.condition}
+                 WHERE e.cmdr IS NOT NULL AND ${dateFilter.condition}${systemCond}${factionCondSe}
                  UNION ALL
-                 SELECT e.cmdr, e.starsystem, ms.total_earnings AS total_sales
+                 SELECT e.cmdr, ms.total_earnings AS total_sales
                  FROM multi_sell_exploration_data_event ms
                  JOIN event e ON e.id = ms.event_id
-                 WHERE e.cmdr IS NOT NULL AND ${dateFilter.condition}
-               ) ${systemCond}
+                 WHERE e.cmdr IS NOT NULL AND ${dateFilter.condition}${systemCond}${factionCondMs}
+               )
                GROUP BY cmdr`
       } else if (targetType === "trade_prof") {
-        progressField = "total_transaction_volume"
-        let cond = `e.cmdr IS NOT NULL AND ${dateFilter.condition}`
+        progressField = "trade_profit"
+        let cond = `e.cmdr IS NOT NULL AND ms.profit IS NOT NULL AND ${dateFilter.condition}`
         if (targetSystem) { cond += " AND e.starsystem = ?"; args.push(targetSystem) }
-        sql = `SELECT e.cmdr,
-               SUM(COALESCE(mb.value, 0)) + SUM(COALESCE(ms.value, 0)) AS total_transaction_volume
-               FROM event e
-               LEFT JOIN market_buy_event mb ON mb.event_id = e.id
-               LEFT JOIN market_sell_event ms ON ms.event_id = e.id
+        if (targetFaction) { cond += " AND ms.station_faction = ?"; args.push(targetFaction) }
+        sql = `SELECT e.cmdr, SUM(ms.profit) AS trade_profit
+               FROM market_sell_event ms
+               JOIN event e ON e.id = ms.event_id
                WHERE ${cond}
-               GROUP BY e.cmdr
-               HAVING total_transaction_volume > 0`
+               GROUP BY e.cmdr`
       } else if (targetType === "mission_fail") {
         progressField = "missions_failed"
         let cond = `e.cmdr IS NOT NULL AND ${dateFilter.condition}`

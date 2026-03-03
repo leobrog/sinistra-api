@@ -19,6 +19,7 @@
 
 export const MISSIONS_FIRST_THRESHOLD = 4
 export const EXPLORATION_FIRST_THRESHOLD = 2_000_000
+export const TRADE_FIRST_THRESHOLD = 2_000_000
 export const BOUNTY_FIRST_THRESHOLD = 400_000
 export const SCENARIOS_FIRST_THRESHOLD = 4
 export const MISSION_FAIL_FIRST_THRESHOLD = 4
@@ -44,6 +45,12 @@ export const bgsPointsExploration = (credits: number): number => {
   // Equivalent to floor(log4(credits / 500_000)) which crosses 1 at 2M
   return Math.floor(Math.log(credits / 500_000) / Math.log(4))
 }
+
+/**
+ * BGS points for trade profit (4× progression, firstThreshold = 2 000 000 cr).
+ * Same thresholds and formula as exploration.
+ */
+export const bgsPointsTrade = bgsPointsExploration
 
 /**
  * BGS points for bounty vouchers (2× progression, firstThreshold = 400 000 cr).

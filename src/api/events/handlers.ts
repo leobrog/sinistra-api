@@ -112,6 +112,7 @@ const createSubEvents = (
             profit: Option.fromNullable(data.Profit),
             value: Option.fromNullable(data.TotalSale),
             count: Option.fromNullable(data.Count),
+            stationFaction: Option.fromNullable(data.StationFaction),
           }),
         ],
       }
@@ -194,6 +195,7 @@ const createSubEvents = (
             id: uuid() as MultiSellExplorationDataEventId,
             eventId,
             totalEarnings: Option.fromNullable(data.TotalEarnings),
+            stationFaction: Option.fromNullable(data.StationFaction),
           }),
         ],
       }
@@ -239,6 +241,7 @@ const createSubEvents = (
             id: uuid() as SellExplorationDataEventId,
             eventId,
             earnings: Option.fromNullable(data.TotalEarnings),
+            stationFaction: Option.fromNullable(data.StationFaction),
           }),
         ],
       }

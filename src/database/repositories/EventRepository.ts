@@ -58,9 +58,9 @@ export const EventRepositoryLive = Layer.effect(
           if (subEvents?.marketSell) {
             for (const marketSell of subEvents.marketSell) {
               stmts.push({
-                sql: `INSERT INTO market_sell_event (id, event_id, demand, demand_bracket, profit, value, count)
-                      VALUES (?, ?, ?, ?, ?, ?, ?)`,
-                args: [marketSell.id, marketSell.eventId, Option.getOrNull(marketSell.demand), Option.getOrNull(marketSell.demandBracket), Option.getOrNull(marketSell.profit), Option.getOrNull(marketSell.value), Option.getOrNull(marketSell.count)],
+                sql: `INSERT INTO market_sell_event (id, event_id, demand, demand_bracket, profit, value, count, station_faction)
+                      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                args: [marketSell.id, marketSell.eventId, Option.getOrNull(marketSell.demand), Option.getOrNull(marketSell.demandBracket), Option.getOrNull(marketSell.profit), Option.getOrNull(marketSell.value), Option.getOrNull(marketSell.count), Option.getOrNull(marketSell.stationFaction)],
               })
             }
           }
@@ -105,9 +105,9 @@ export const EventRepositoryLive = Layer.effect(
           if (subEvents?.multiSellExplorationData) {
             for (const explData of subEvents.multiSellExplorationData) {
               stmts.push({
-                sql: `INSERT INTO multi_sell_exploration_data_event (id, event_id, total_earnings)
-                      VALUES (?, ?, ?)`,
-                args: [explData.id, explData.eventId, Option.getOrNull(explData.totalEarnings)],
+                sql: `INSERT INTO multi_sell_exploration_data_event (id, event_id, total_earnings, station_faction)
+                      VALUES (?, ?, ?, ?)`,
+                args: [explData.id, explData.eventId, Option.getOrNull(explData.totalEarnings), Option.getOrNull(explData.stationFaction)],
               })
             }
           }
@@ -125,9 +125,9 @@ export const EventRepositoryLive = Layer.effect(
           if (subEvents?.sellExplorationData) {
             for (const sellExpl of subEvents.sellExplorationData) {
               stmts.push({
-                sql: `INSERT INTO sell_exploration_data_event (id, event_id, earnings)
-                      VALUES (?, ?, ?)`,
-                args: [sellExpl.id, sellExpl.eventId, Option.getOrNull(sellExpl.earnings)],
+                sql: `INSERT INTO sell_exploration_data_event (id, event_id, earnings, station_faction)
+                      VALUES (?, ?, ?, ?)`,
+                args: [sellExpl.id, sellExpl.eventId, Option.getOrNull(sellExpl.earnings), Option.getOrNull(sellExpl.stationFaction)],
               })
             }
           }

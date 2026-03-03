@@ -9,6 +9,7 @@ import { buildDateFilter, type DateFilter } from "../../services/date-filters.js
 import {
   bgsPointsMissions,
   bgsPointsExploration,
+  bgsPointsTrade,
   bgsPointsBounty,
   bgsPointsCount,
   nextThreshold,
@@ -17,6 +18,7 @@ import {
   predictInfluenceGain,
   MISSIONS_FIRST_THRESHOLD,
   EXPLORATION_FIRST_THRESHOLD,
+  TRADE_FIRST_THRESHOLD,
   BOUNTY_FIRST_THRESHOLD,
   MISSION_FAIL_FIRST_THRESHOLD,
   MURDER_FIRST_THRESHOLD,
@@ -87,30 +89,44 @@ const computeBucketsForPair = (
     })
     const missionsRaw = Number((missionsResult.rows[0] as any)?.pluses ?? 0)
 
-    // ── Exploration: total credits sold in this system (no per-faction split) ─
+    // ── Exploration: credits sold at faction-controlled stations in this system ─
     const explorationSql = `
       SELECT COALESCE(SUM(total_sales), 0) AS credits
       FROM (
         SELECT se.earnings AS total_sales
         FROM sell_exploration_data_event se
         JOIN event e ON e.id = se.event_id
-        WHERE e.starsystem = ? AND ${dateSql}
+        WHERE se.station_faction = ? AND e.starsystem = ? AND ${dateSql}
         UNION ALL
         SELECT ms.total_earnings AS total_sales
         FROM multi_sell_exploration_data_event ms
         JOIN event e ON e.id = ms.event_id
-        WHERE e.starsystem = ? AND ${dateSql}
+        WHERE ms.station_faction = ? AND e.starsystem = ? AND ${dateSql}
       )
     `
     const explorationResult = yield* Effect.tryPromise({
       try: () =>
         client.execute({
           sql: explorationSql,
-          args: [system, ...dateArgs, system, ...dateArgs],
+          args: [faction, system, ...dateArgs, faction, system, ...dateArgs],
         }),
       catch: (error) => new DatabaseError({ operation: "getBuckets.exploration", error }),
     })
     const explorationRaw = Number((explorationResult.rows[0] as any)?.credits ?? 0)
+
+    // ── Trade: profit from selling at faction-controlled stations ─────────────
+    const tradeSql = `
+      SELECT COALESCE(SUM(ms.profit), 0) AS profit
+      FROM market_sell_event ms
+      JOIN event e ON e.id = ms.event_id
+      WHERE ms.station_faction = ? AND e.starsystem = ? AND ms.profit IS NOT NULL AND ${dateSql}
+    `
+    const tradeResult = yield* Effect.tryPromise({
+      try: () =>
+        client.execute({ sql: tradeSql, args: [faction, system, ...dateArgs] }),
+      catch: (error) => new DatabaseError({ operation: "getBuckets.trade", error }),
+    })
+    const tradeRaw = Number((tradeResult.rows[0] as any)?.profit ?? 0)
 
     // ── Bounty vouchers redeemed for this faction/system ─────────────────────
     const bountySql = `
@@ -196,11 +212,12 @@ const computeBucketsForPair = (
     // ── Compute BGS points per bucket ─────────────────────────────────────────
     const missionsPts = bgsPointsMissions(missionsRaw)
     const explorationPts = bgsPointsExploration(explorationRaw)
+    const tradePts = bgsPointsTrade(tradeRaw)
     const bountyPts = bgsPointsBounty(bountyRaw)
     const missionFailPts = bgsPointsCount(missionFailRaw, MISSION_FAIL_FIRST_THRESHOLD)
     const murderPts = bgsPointsCount(murderRaw, MURDER_FIRST_THRESHOLD)
 
-    const totalPositivePts = missionsPts + explorationPts + bountyPts
+    const totalPositivePts = missionsPts + explorationPts + tradePts + bountyPts
     const totalNegativePts = missionFailPts + murderPts
     const netPts = totalPositivePts - totalNegativePts
     const cappedPts = Math.min(Math.max(netPts, 0), 10)
@@ -228,19 +245,10 @@ const computeBucketsForPair = (
       maxSwing: maxSwing ?? undefined,
       buckets: new BucketsBuckets({
         missions: makeBucket(missionsRaw, missionsPts, MISSIONS_FIRST_THRESHOLD, 4),
-        exploration: makeBucket(
-          explorationRaw,
-          explorationPts,
-          EXPLORATION_FIRST_THRESHOLD,
-          4
-        ),
+        exploration: makeBucket(explorationRaw, explorationPts, EXPLORATION_FIRST_THRESHOLD, 4),
+        trade: makeBucket(tradeRaw, tradePts, TRADE_FIRST_THRESHOLD, 4),
         bounty: makeBucket(bountyRaw, bountyPts, BOUNTY_FIRST_THRESHOLD, 2),
-        missionFail: makeBucket(
-          missionFailRaw,
-          missionFailPts,
-          MISSION_FAIL_FIRST_THRESHOLD,
-          4
-        ),
+        missionFail: makeBucket(missionFailRaw, missionFailPts, MISSION_FAIL_FIRST_THRESHOLD, 4),
         murder: makeBucket(murderRaw, murderPts, MURDER_FIRST_THRESHOLD, 4),
       }),
       totalPositivePts,

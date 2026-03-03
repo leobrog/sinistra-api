@@ -29,11 +29,12 @@ export const EventDataSchema = Schema.Struct({
   TotalCost: Schema.optional(Schema.Int),
   Count: Schema.optional(Schema.Int),
 
-  // MarketSell
+  // MarketSell / SellExplorationData / MultiSellExplorationData
   Demand: Schema.optional(Schema.Int),
   DemandBracket: Schema.optional(Schema.Int),
   Profit: Schema.optional(Schema.Int),
   TotalSale: Schema.optional(Schema.Int),
+  StationFaction: Schema.optional(Schema.String),
 
   // MissionCompleted
   Faction: Schema.optional(Schema.String),

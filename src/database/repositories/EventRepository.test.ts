@@ -61,6 +61,7 @@ const ClientLayer = Layer.effect(
           profit INTEGER,
           value INTEGER,
           count INTEGER,
+          station_faction TEXT,
           FOREIGN KEY (event_id) REFERENCES event(id) ON DELETE CASCADE
         );
 
@@ -96,6 +97,7 @@ const ClientLayer = Layer.effect(
           id TEXT PRIMARY KEY,
           event_id TEXT NOT NULL,
           total_earnings INTEGER,
+          station_faction TEXT,
           FOREIGN KEY (event_id) REFERENCES event(id) ON DELETE CASCADE
         );
 
@@ -112,6 +114,7 @@ const ClientLayer = Layer.effect(
           id TEXT PRIMARY KEY,
           event_id TEXT NOT NULL,
           earnings INTEGER,
+          station_faction TEXT,
           FOREIGN KEY (event_id) REFERENCES event(id) ON DELETE CASCADE
         );
 
