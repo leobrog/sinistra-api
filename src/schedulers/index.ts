@@ -13,7 +13,9 @@ import { runTickMonitor } from "./tick-monitor.js"
 import { runShoutoutScheduler } from "./shoutout-scheduler.js"
 import { runConflictScheduler } from "./conflict-scheduler.js"
 import { runInaraSync } from "./inara-sync.js"
-import { runEddnConflictScan } from "./eddn-conflict-scan.js"
+// DISABLED: runEddnConflictScan causes SQLITE_BUSY — hourly batch write to conflict_state
+// locks the DB for 30+ seconds, blocking /events and /activities writes
+// import { runEddnConflictScan } from "./eddn-conflict-scan.js"
 
 export const SchedulersLive: Layer.Layer<never, never, AppConfig | TursoClient> =
   Layer.effectDiscard(
@@ -38,7 +40,7 @@ export const SchedulersLive: Layer.Layer<never, never, AppConfig | TursoClient> 
         Effect.provideService(runConflictScheduler, TickBus, bus)
       )
       yield* Effect.forkDaemon(runInaraSync)
-      yield* Effect.forkDaemon(runEddnConflictScan)
+      // yield* Effect.forkDaemon(runEddnConflictScan) // DISABLED: causes SQLITE_BUSY
 
       yield* Effect.logInfo("All schedulers forked")
     })
