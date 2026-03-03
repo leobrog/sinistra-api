@@ -15,19 +15,17 @@ REST API for the **Sinistra BGS Tracking Platform**, built with [Bun](https://bu
 
 ---
 
-## Getting Started
+## Configuration
 
 ### 1. Install dependencies
 
 ```bash
-bun install
+cp .env.example .env
 ```
 
 ### 2. Configure environment
 
-```bash
-cp .env.example .env
-```
+See `.env.example` for a full list of options including webhook URLs and scheduler settings.
 
 Key variables:
 
@@ -62,9 +60,14 @@ The server listens on port `3000` by default.
 
 ### 5. Run tests
 
-```bash
-bun test
-```
+*   **Auth**: Discord OAuth and API Key management.
+*   **System**: Detailed system information (factions, conflicts, traffic).
+*   **Factions**: Faction details, history, and expansion candidates.
+*   **Commanders**: Commander profiles, location history, and stats.
+*   **Events**: In-game event tracking.
+*   **Activities**: Player activity logging.
+*   **Objectives**: Mission and goal tracking.
+*   **Discord Summary**: aggregated data for Discord bot commands.
 
 ---
 
