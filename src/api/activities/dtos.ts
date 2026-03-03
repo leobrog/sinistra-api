@@ -11,9 +11,9 @@ import { Activity } from "../../domain/models.ts"
 // --- Shared sub-schemas ---
 
 const CZLevelsInput = Schema.Struct({
-  low: Schema.optional(Schema.Int),
-  medium: Schema.optional(Schema.Int),
-  high: Schema.optional(Schema.Int),
+  low: Schema.optional(Schema.NullOr(Schema.Int)),
+  medium: Schema.optional(Schema.NullOr(Schema.Int)),
+  high: Schema.optional(Schema.NullOr(Schema.Int)),
 })
 
 const SumCountInput = Schema.Struct({
@@ -28,9 +28,9 @@ const LMHInput = Schema.Struct({
 })
 
 const TradeBracketInput = Schema.Struct({
-  items: Schema.optional(Schema.Int),
-  value: Schema.optional(Schema.Int),
-  profit: Schema.optional(Schema.Int),
+  items: Schema.optional(Schema.NullOr(Schema.Int)),
+  value: Schema.optional(Schema.NullOr(Schema.Int)),
+  profit: Schema.optional(Schema.NullOr(Schema.Int)),
 })
 
 const TradeInput = Schema.Struct({
@@ -40,14 +40,14 @@ const TradeInput = Schema.Struct({
 })
 
 const SandRInput = Schema.Struct({
-  blackboxes: Schema.optional(Schema.Int),
-  damagedpods: Schema.optional(Schema.Int),
-  occupiedpods: Schema.optional(Schema.Int),
-  thargoidpods: Schema.optional(Schema.Int),
-  wreckagecomponents: Schema.optional(Schema.Int),
-  personaleffects: Schema.optional(Schema.Int),
-  politicalprisoners: Schema.optional(Schema.Int),
-  hostages: Schema.optional(Schema.Int),
+  blackboxes: Schema.optional(Schema.NullOr(Schema.Int)),
+  damagedpods: Schema.optional(Schema.NullOr(Schema.Int)),
+  occupiedpods: Schema.optional(Schema.NullOr(Schema.Int)),
+  thargoidpods: Schema.optional(Schema.NullOr(Schema.Int)),
+  wreckagecomponents: Schema.optional(Schema.NullOr(Schema.Int)),
+  personaleffects: Schema.optional(Schema.NullOr(Schema.Int)),
+  politicalprisoners: Schema.optional(Schema.NullOr(Schema.Int)),
+  hostages: Schema.optional(Schema.NullOr(Schema.Int)),
 })
 
 const SettlementInput = Schema.Struct({
@@ -67,7 +67,7 @@ const TWMassacreInput = Schema.Struct({
 
 const StationInput = Schema.Struct({
   name: Schema.String,
-  twreactivate: Schema.optional(Schema.Int),
+  twreactivate: Schema.optional(Schema.NullOr(Schema.Int)),
   twcargo: Schema.optional(SumCountInput),
   twescapepods: Schema.optional(LMHInput),
   twpassengers: Schema.optional(LMHInput),
@@ -75,23 +75,23 @@ const StationInput = Schema.Struct({
 })
 
 const TWKillsInput = Schema.Struct({
-  cyclops: Schema.optional(Schema.Int),
-  basilisk: Schema.optional(Schema.Int),
-  medusa: Schema.optional(Schema.Int),
-  hydra: Schema.optional(Schema.Int),
-  orthrus: Schema.optional(Schema.Int),
-  scout: Schema.optional(Schema.Int),
-  revenant: Schema.optional(Schema.Int),
-  banshee: Schema.optional(Schema.Int),
-  "scythe-glaive": Schema.optional(Schema.Int),
+  cyclops: Schema.optional(Schema.NullOr(Schema.Int)),
+  basilisk: Schema.optional(Schema.NullOr(Schema.Int)),
+  medusa: Schema.optional(Schema.NullOr(Schema.Int)),
+  hydra: Schema.optional(Schema.NullOr(Schema.Int)),
+  orthrus: Schema.optional(Schema.NullOr(Schema.Int)),
+  scout: Schema.optional(Schema.NullOr(Schema.Int)),
+  revenant: Schema.optional(Schema.NullOr(Schema.Int)),
+  banshee: Schema.optional(Schema.NullOr(Schema.Int)),
+  "scythe-glaive": Schema.optional(Schema.NullOr(Schema.Int)),
 })
 
 const TWSandRInput = Schema.Struct({
-  blackboxes: Schema.optional(Schema.Int),
-  damagedpods: Schema.optional(Schema.Int),
-  occupiedpods: Schema.optional(Schema.Int),
-  tissuesamples: Schema.optional(Schema.Int),
-  thargoidpods: Schema.optional(Schema.Int),
+  blackboxes: Schema.optional(Schema.NullOr(Schema.Int)),
+  damagedpods: Schema.optional(Schema.NullOr(Schema.Int)),
+  occupiedpods: Schema.optional(Schema.NullOr(Schema.Int)),
+  tissuesamples: Schema.optional(Schema.NullOr(Schema.Int)),
+  thargoidpods: Schema.optional(Schema.NullOr(Schema.Int)),
 })
 
 // --- Faction DTO for PUT request ---
@@ -99,22 +99,22 @@ const TWSandRInput = Schema.Struct({
 export const FactionInputSchema = Schema.Struct({
   name: Schema.String,
   state: Schema.String,
-  bvs: Schema.optional(Schema.Int),
-  cbs: Schema.optional(Schema.Int),
-  exobiology: Schema.optional(Schema.Int),
-  exploration: Schema.optional(Schema.Int),
-  scenarios: Schema.optional(Schema.Int),
-  infprimary: Schema.optional(Schema.Int),
-  infsecondary: Schema.optional(Schema.Int),
-  missionfails: Schema.optional(Schema.Int),
-  murdersground: Schema.optional(Schema.Int),
-  murdersspace: Schema.optional(Schema.Int),
-  tradebm: Schema.optional(Schema.Int),
+  bvs: Schema.optional(Schema.NullOr(Schema.Int)),
+  cbs: Schema.optional(Schema.NullOr(Schema.Int)),
+  exobiology: Schema.optional(Schema.NullOr(Schema.Int)),
+  exploration: Schema.optional(Schema.NullOr(Schema.Int)),
+  scenarios: Schema.optional(Schema.NullOr(Schema.Int)),
+  infprimary: Schema.optional(Schema.NullOr(Schema.Int)),
+  infsecondary: Schema.optional(Schema.NullOr(Schema.Int)),
+  missionfails: Schema.optional(Schema.NullOr(Schema.Int)),
+  murdersground: Schema.optional(Schema.NullOr(Schema.Int)),
+  murdersspace: Schema.optional(Schema.NullOr(Schema.Int)),
+  tradebm: Schema.optional(Schema.NullOr(Schema.Int)),
   czspace: Schema.optional(CZLevelsInput),
   czground: Schema.optional(Schema.Struct({
-    low: Schema.optional(Schema.Int),
-    medium: Schema.optional(Schema.Int),
-    high: Schema.optional(Schema.Int),
+    low: Schema.optional(Schema.NullOr(Schema.Int)),
+    medium: Schema.optional(Schema.NullOr(Schema.Int)),
+    high: Schema.optional(Schema.NullOr(Schema.Int)),
     settlements: Schema.optional(Schema.Array(SettlementInput)),
   })),
   sandr: Schema.optional(SandRInput),
@@ -133,7 +133,7 @@ export const SystemInputSchema = Schema.Struct({
   factions: Schema.Array(FactionInputSchema),
   twkills: Schema.optional(TWKillsInput),
   twsandr: Schema.optional(TWSandRInput),
-  twreactivate: Schema.optional(Schema.Int),
+  twreactivate: Schema.optional(Schema.NullOr(Schema.Int)),
 })
 
 export type SystemInput = typeof SystemInputSchema.Type

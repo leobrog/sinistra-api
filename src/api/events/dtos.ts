@@ -11,7 +11,7 @@ import { Schema } from "effect"
 export const EventDataSchema = Schema.Struct({
   // Required fields
   event: Schema.String,
-  timestamp: Schema.String,
+  timestamp: Schema.optional(Schema.String),
 
   // Tick tracking
   tickid: Schema.optional(Schema.String),

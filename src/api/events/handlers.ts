@@ -57,7 +57,7 @@ const eventDataToEvent = (data: EventData): Event => {
   return new Event({
     id: eventId,
     event: data.event,
-    timestamp: data.timestamp,
+    timestamp: data.timestamp ?? new Date().toISOString(),
     tickid: data.tickid || "",
     ticktime: data.ticktime || "",
     cmdr: Option.fromNullable(data.cmdr ?? data.Cmdr),
