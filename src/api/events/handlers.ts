@@ -41,6 +41,14 @@ import type {
 /**
  * Extract CZ type from event data (for Synthetic CZ events)
  */
+// StationFaction in the raw ED journal is sometimes an object { Name, FactionState }.
+// BGS-Tally augments MarketSell with a plain string, but passes the raw object for Docked etc.
+const toFactionString = (sf: unknown): string | null => {
+  if (typeof sf === "string") return sf || null
+  if (sf !== null && typeof sf === "object" && "Name" in sf) return String((sf as any).Name) || null
+  return null
+}
+
 const extractCzType = (data: EventData): Option.Option<string> => {
   if (data.low === 1) return Option.some("low")
   if (data.medium === 1) return Option.some("medium")
@@ -112,7 +120,7 @@ const createSubEvents = (
             profit: Option.fromNullable(data.Profit),
             value: Option.fromNullable(data.TotalSale),
             count: Option.fromNullable(data.Count),
-            stationFaction: Option.fromNullable(data.StationFaction),
+            stationFaction: Option.fromNullable(toFactionString(data.StationFaction)),
           }),
         ],
       }
@@ -195,7 +203,7 @@ const createSubEvents = (
             id: uuid() as MultiSellExplorationDataEventId,
             eventId,
             totalEarnings: Option.fromNullable(data.TotalEarnings),
-            stationFaction: Option.fromNullable(data.StationFaction),
+            stationFaction: Option.fromNullable(toFactionString(data.StationFaction)),
           }),
         ],
       }
@@ -241,7 +249,7 @@ const createSubEvents = (
             id: uuid() as SellExplorationDataEventId,
             eventId,
             earnings: Option.fromNullable(data.TotalEarnings),
-            stationFaction: Option.fromNullable(data.StationFaction),
+            stationFaction: Option.fromNullable(toFactionString(data.StationFaction)),
           }),
         ],
       }

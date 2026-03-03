@@ -22,9 +22,9 @@ const SumCountInput = Schema.Struct({
 })
 
 const LMHInput = Schema.Struct({
-  low: Schema.optional(SumCountInput),
-  medium: Schema.optional(SumCountInput),
-  high: Schema.optional(SumCountInput),
+  low: Schema.optional(Schema.NullOr(SumCountInput)),
+  medium: Schema.optional(Schema.NullOr(SumCountInput)),
+  high: Schema.optional(Schema.NullOr(SumCountInput)),
 })
 
 const TradeBracketInput = Schema.Struct({
@@ -34,9 +34,9 @@ const TradeBracketInput = Schema.Struct({
 })
 
 const TradeInput = Schema.Struct({
-  high: Schema.optional(TradeBracketInput),
-  low: Schema.optional(TradeBracketInput),
-  zero: Schema.optional(TradeBracketInput),
+  high: Schema.optional(Schema.NullOr(TradeBracketInput)),
+  low: Schema.optional(Schema.NullOr(TradeBracketInput)),
+  zero: Schema.optional(Schema.NullOr(TradeBracketInput)),
 })
 
 const SandRInput = Schema.Struct({
@@ -57,21 +57,21 @@ const SettlementInput = Schema.Struct({
 })
 
 const TWMassacreInput = Schema.Struct({
-  cyclops: Schema.optional(SumCountInput),
-  basilisk: Schema.optional(SumCountInput),
-  medusa: Schema.optional(SumCountInput),
-  hydra: Schema.optional(SumCountInput),
-  orthrus: Schema.optional(SumCountInput),
-  scout: Schema.optional(SumCountInput),
+  cyclops: Schema.optional(Schema.NullOr(SumCountInput)),
+  basilisk: Schema.optional(Schema.NullOr(SumCountInput)),
+  medusa: Schema.optional(Schema.NullOr(SumCountInput)),
+  hydra: Schema.optional(Schema.NullOr(SumCountInput)),
+  orthrus: Schema.optional(Schema.NullOr(SumCountInput)),
+  scout: Schema.optional(Schema.NullOr(SumCountInput)),
 })
 
 const StationInput = Schema.Struct({
   name: Schema.String,
   twreactivate: Schema.optional(Schema.NullOr(Schema.Int)),
-  twcargo: Schema.optional(SumCountInput),
-  twescapepods: Schema.optional(LMHInput),
-  twpassengers: Schema.optional(LMHInput),
-  twmassacre: Schema.optional(TWMassacreInput),
+  twcargo: Schema.optional(Schema.NullOr(SumCountInput)),
+  twescapepods: Schema.optional(Schema.NullOr(LMHInput)),
+  twpassengers: Schema.optional(Schema.NullOr(LMHInput)),
+  twmassacre: Schema.optional(Schema.NullOr(TWMassacreInput)),
 })
 
 const TWKillsInput = Schema.Struct({
@@ -110,17 +110,17 @@ export const FactionInputSchema = Schema.Struct({
   murdersground: Schema.optional(Schema.NullOr(Schema.Int)),
   murdersspace: Schema.optional(Schema.NullOr(Schema.Int)),
   tradebm: Schema.optional(Schema.NullOr(Schema.Int)),
-  czspace: Schema.optional(CZLevelsInput),
-  czground: Schema.optional(Schema.Struct({
+  czspace: Schema.optional(Schema.NullOr(CZLevelsInput)),
+  czground: Schema.optional(Schema.NullOr(Schema.Struct({
     low: Schema.optional(Schema.NullOr(Schema.Int)),
     medium: Schema.optional(Schema.NullOr(Schema.Int)),
     high: Schema.optional(Schema.NullOr(Schema.Int)),
-    settlements: Schema.optional(Schema.Array(SettlementInput)),
-  })),
-  sandr: Schema.optional(SandRInput),
-  tradebuy: Schema.optional(TradeInput),
-  tradesell: Schema.optional(TradeInput),
-  stations: Schema.optional(Schema.Array(StationInput)),
+    settlements: Schema.optional(Schema.NullOr(Schema.Array(SettlementInput))),
+  }))),
+  sandr: Schema.optional(Schema.NullOr(SandRInput)),
+  tradebuy: Schema.optional(Schema.NullOr(TradeInput)),
+  tradesell: Schema.optional(Schema.NullOr(TradeInput)),
+  stations: Schema.optional(Schema.NullOr(Schema.Array(StationInput))),
 })
 
 export type FactionInput = typeof FactionInputSchema.Type
@@ -131,8 +131,8 @@ export const SystemInputSchema = Schema.Struct({
   name: Schema.String,
   address: Schema.Number,
   factions: Schema.Array(FactionInputSchema),
-  twkills: Schema.optional(TWKillsInput),
-  twsandr: Schema.optional(TWSandRInput),
+  twkills: Schema.optional(Schema.NullOr(TWKillsInput)),
+  twsandr: Schema.optional(Schema.NullOr(TWSandRInput)),
   twreactivate: Schema.optional(Schema.NullOr(Schema.Int)),
 })
 

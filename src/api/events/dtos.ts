@@ -34,7 +34,7 @@ export const EventDataSchema = Schema.Struct({
   DemandBracket: Schema.optional(Schema.Int),
   Profit: Schema.optional(Schema.Int),
   TotalSale: Schema.optional(Schema.Int),
-  StationFaction: Schema.optional(Schema.NullOr(Schema.String)),
+  StationFaction: Schema.optional(Schema.Unknown),
 
   // MissionCompleted
   Faction: Schema.optional(Schema.String),
