@@ -12,7 +12,7 @@ import { Effect, Ref, Schedule, Duration } from "effect"
 import { inflateSync } from "node:zlib"
 import type { Client } from "@libsql/client"
 import { AppConfig } from "../lib/config.js"
-import { TursoClient } from "../database/client.js"
+import { EddnTursoClient } from "../database/client.js"
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -109,10 +109,10 @@ const cleanupOldMessages = (client: Client, retentionMs: number) =>
 /** Number of ZMQ messages to accumulate before a single DB write */
 const BATCH_SIZE = 20
 
-export const runEddnClient: Effect.Effect<never, never, AppConfig | TursoClient> = Effect.gen(
+export const runEddnClient: Effect.Effect<never, never, AppConfig | EddnTursoClient> = Effect.gen(
   function* () {
     const config = yield* AppConfig
-    const client = yield* TursoClient
+    const client = yield* EddnTursoClient
 
     // Dynamic import so missing native bindings don't crash startup
     const zmq = yield* Effect.tryPromise({
@@ -172,4 +172,4 @@ export const runEddnClient: Effect.Effect<never, never, AppConfig | TursoClient>
 ).pipe(
   Effect.retry(Schedule.exponential(Duration.seconds(1)).pipe(Schedule.union(Schedule.spaced(Duration.minutes(1))))),
   Effect.catchAll((e) => Effect.logError(`EDDN client fatal: ${e}`))
-) as Effect.Effect<never, never, AppConfig | TursoClient>
+) as Effect.Effect<never, never, AppConfig | EddnTursoClient>

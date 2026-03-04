@@ -1,7 +1,7 @@
 import { describe, it, expect } from "bun:test"
 import { Effect, Layer, Option } from "effect"
 import { createClient } from "@libsql/client"
-import { TursoClient } from "../../database/client.js"
+import { EddnTursoClient } from "../../database/client.js"
 import { EddnRepository } from "../../domain/repositories.js"
 import { EddnRepositoryLive } from "../../database/repositories/EddnRepository.js"
 import { AppConfig } from "../../lib/config.js"
@@ -82,8 +82,8 @@ describe("System API Integration", () => {
     },
   }
 
-  const ClientLayer = Layer.effect(
-    TursoClient,
+  const EddnClientLayer = Layer.effect(
+    EddnTursoClient,
     Effect.gen(function* () {
       const client = createClient({ url: "file::memory:" })
 
@@ -155,18 +155,18 @@ describe("System API Integration", () => {
         `)
       )
 
-      return client
+      return EddnTursoClient.of(client)
     })
   )
 
   const TestConfigLayer = Layer.succeed(AppConfig, testConfig)
 
   const TestLayer = EddnRepositoryLive.pipe(
-    Layer.provide(ClientLayer),
+    Layer.provide(EddnClientLayer),
     Layer.provide(TestConfigLayer)
   )
 
-  const FullLayer = Layer.merge(TestLayer, ClientLayer).pipe(
+  const FullLayer = Layer.merge(TestLayer, EddnClientLayer).pipe(
     Layer.provide(TestConfigLayer)
   )
 

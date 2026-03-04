@@ -34,7 +34,7 @@ import { FlaskUserRepositoryLive } from "./database/repositories/FlaskUserReposi
 
 // Middleware & Infrastructure
 import { ApiKeyAuthLive } from "./api/middleware/apikey.ts"
-import { TursoClientLive } from "./database/client.ts"
+import { TursoClientLive, EddnTursoClientLive } from "./database/client.ts"
 import { AppConfigLive } from "./lib/config.ts"
 import { JwtServiceLive } from "./services/jwt.ts"
 
@@ -80,7 +80,11 @@ const RepositoriesLayer = Layer.mergeAll(
 
 const ServicesLayer = Layer.mergeAll(JwtServiceLive, ApiKeyAuthLive)
 
-const InfrastructureLayer = Layer.mergeAll(TursoClientLive, AppConfigLive)
+const InfrastructureLayer = Layer.mergeAll(
+  TursoClientLive,
+  EddnTursoClientLive.pipe(Layer.provide(AppConfigLive)),
+  AppConfigLive
+)
 
 const SchedulerLayer = SchedulersLive.pipe(Layer.provide(InfrastructureLayer))
 
