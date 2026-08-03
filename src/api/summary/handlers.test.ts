@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test"
-import { Effect, Layer, Option } from "effect"
+import { Effect, Layer } from "effect"
 import { createClient } from "@libsql/client"
 import { TursoClient } from "../../database/client.js"
 import { AppConfig } from "../../lib/config.js"
@@ -41,10 +41,10 @@ describe("Summary API Integration", () => {
         serverId: "test-server-id",
       },
       webhooks: {
-        bgs: Option.none(),
-        shoutout: Option.none(),
-        conflict: Option.none(),
-        debug: Option.none(),
+        bgs: [],
+        shoutout: [],
+        conflict: [],
+        debug: [],
       },
     },
     inara: {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test"
-import { Effect, Option } from "effect"
+import { Effect } from "effect"
 import { AppConfig } from "../../lib/config.js"
 import { DiscoveryResponse, EndpointConfig, HeaderRequirement } from "./dtos.js"
 
@@ -39,10 +39,10 @@ describe("DiscoveryApi", () => {
         serverId: "test-server-id",
       },
       webhooks: {
-        bgs: Option.none(),
-        shoutout: Option.none(),
-        conflict: Option.none(),
-        debug: Option.none(),
+        bgs: [],
+        shoutout: [],
+        conflict: [],
+        debug: [],
       },
     },
     inara: {

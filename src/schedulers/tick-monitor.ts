@@ -5,7 +5,7 @@
  * On a new tick: saves to tick_state, notifies via BGS Discord webhook.
  */
 
-import { Effect, Option, Ref, Duration, PubSub } from "effect"
+import { Effect, Ref, Duration, PubSub } from "effect"
 import type { Client } from "@libsql/client"
 import { AppConfig } from "../lib/config.js"
 import { TursoClient } from "../database/client.js"
@@ -54,21 +54,26 @@ const saveTick = (client: Client, tickid: string): Effect.Effect<void> =>
     Effect.catchAll((e) => Effect.logWarning(`Tick save error: ${e}`))
   )
 
-const notifyDiscord = (webhookUrl: string, tickid: string): Effect.Effect<void> =>
-  Effect.tryPromise({
-    try: () =>
-      fetch(webhookUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          content: `**✅ New FDEV (Zoy) BGS Tick detected!**\nTime: \`${tickid}\``,
-        }),
-        signal: AbortSignal.timeout(10_000),
-      }),
-    catch: (e) => new Error(`Discord notify failed: ${e}`),
-  }).pipe(
-    Effect.asVoid,
-    Effect.catchAll((e) => Effect.logWarning(`Tick Discord notification error: ${e}`))
+const notifyDiscord = (webhookUrls: string[], tickid: string): Effect.Effect<void> =>
+  Effect.forEach(
+    webhookUrls,
+    (webhookUrl) =>
+      Effect.tryPromise({
+        try: () =>
+          fetch(webhookUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              content: `**✅ New FDEV (Zoy) BGS Tick detected!**\nTime: \`${tickid}\``,
+            }),
+            signal: AbortSignal.timeout(10_000),
+          }),
+        catch: (e) => new Error(`Discord notify failed: ${e}`),
+      }).pipe(
+        Effect.asVoid,
+        Effect.catchAll((e) => Effect.logWarning(`Tick Discord notification error: ${e}`))
+      ),
+    { discard: true, concurrency: "unbounded" }
   )
 
 // ---------------------------------------------------------------------------
@@ -111,9 +116,9 @@ export const runTickMonitor: Effect.Effect<never, never, AppConfig | TursoClient
         yield* saveTick(client, newTick)
         yield* PubSub.publish(bus, newTick)
 
-        const webhookUrl = config.discord.webhooks.bgs
-        if (Option.isSome(webhookUrl)) {
-          yield* notifyDiscord(webhookUrl.value, newTick)
+        const bgsWebhooks = config.discord.webhooks.bgs
+        if (bgsWebhooks.length > 0) {
+          yield* notifyDiscord(bgsWebhooks, newTick)
           yield* Effect.logInfo(`Tick notification sent to Discord`)
         }
       } else {

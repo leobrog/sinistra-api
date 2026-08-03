@@ -1,5 +1,5 @@
 import { describe, it, expect, spyOn } from "bun:test"
-import { Effect, Layer, Option, Redacted } from "effect"
+import { Effect, Layer, Redacted } from "effect"
 import { AppConfig } from "../../lib/config.js"
 import { ApiKeyAuth, ApiKeyAuthLive } from "./apikey.js"
 
@@ -38,10 +38,10 @@ describe("ApiKeyAuth", () => {
         serverId: "test-server-id",
       },
       webhooks: {
-        bgs: Option.none(),
-        shoutout: Option.none(),
-        conflict: Option.none(),
-        debug: Option.none(),
+        bgs: [],
+        shoutout: [],
+        conflict: [],
+        debug: [],
       },
     },
     inara: {

@@ -318,9 +318,7 @@ export const EventsApiLive = HttpApiBuilder.group(Api, "events", (handlers) =>
         yield* eventRepo.createEvent(event, subEvents)
       }
 
-      // Immediate conflict detection: process all FSDJump/Location events.
-      // - Systems with Conflicts data → add/update in conflict_state
-      // - Systems visited with NO Conflicts → if tracked in conflict_state, mark as ended
+      // Real-time conflict detection from FSDJump/Location events.
       const jumpEvents = request.payload.filter(
         (e) => ["FSDJump", "Location"].includes(e.event)
       )
@@ -328,11 +326,11 @@ export const EventsApiLive = HttpApiBuilder.group(Api, "events", (handlers) =>
       if (jumpEvents.length > 0) {
         const client = yield* TursoClient
         const config = yield* AppConfig
-        const webhookUrl = Option.getOrNull(config.discord.webhooks.conflict)
+        const webhookUrl = config.discord.webhooks.conflict
+        const debugWebhookUrl = config.discord.webhooks.debug
 
-        // Collect every system the commander visited so we can scope cleanup
         const visitedSystems = new Set(
-          jumpEvents.map((e) => String((e as any).StarSystem ?? "")).filter(Boolean)
+          jumpEvents.map((e) => e.StarSystem ?? "").filter(Boolean)
         )
 
         yield* Effect.forkDaemon(
@@ -344,16 +342,19 @@ export const EventsApiLive = HttpApiBuilder.group(Api, "events", (handlers) =>
               },
               catch: (e) => new Error(`${e}`),
             })
-            const conflictMap = parseConflictsFromEntries(jumpEvents, factionNames)
-            yield* runConflictDiff(
-              client,
-              webhookUrl,
-              conflictMap,
-              factionNames,
-              new Date().toISOString(),
-              "Event conflict check",
-              { cleanupScope: visitedSystems }
-            )
+            const conflictMap = parseConflictsFromEntries(jumpEvents as any, factionNames)
+            if (conflictMap.size > 0) {
+              yield* runConflictDiff(
+                client,
+                webhookUrl,
+                debugWebhookUrl,
+                conflictMap,
+                factionNames,
+                new Date().toISOString(),
+                "Event conflict check",
+                { cleanupScope: visitedSystems }
+              )
+            }
           }).pipe(Effect.catchAll((e) => Effect.logWarning(`Event conflict check: ${e}`)))
         )
       }
