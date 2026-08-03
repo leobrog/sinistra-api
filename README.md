@@ -1,42 +1,67 @@
 # Sinistra API
 
-REST API for the **Sinistra BGS Tracking Platform**, built with [Bun](https://bun.sh), [Effect-TS](https://effect.website), and [Turso](https://turso.tech) (LibSQL). It receives BGS activity data from [BGS-Tally](https://github.com/aussig/BGS-Tally), stores it in a structured SQLite database, and exposes query endpoints consumed by the Sinistra dashboard and Discord bot.
+A robust REST API and background service for tracking Elite Dangerous BGS (Background Simulation) and Commander data. Built with [Bun](https://bun.sh), [Effect-TS](https://effect.website), and [Turso](https://turso.tech) (LibSQL).
 
----
+## Features
+
+*   **BGS Tracking**: Real-time tracking of systems, factions, conflicts, and states via EDDN and manual updates.
+*   **Commander Integration**: Track commander locations, visited systems, and bounties.
+*   **Discord Integration**:
+    *   OAuth login with Discord.
+    *   Bot integration for role management.
+    *   Webhooks for BGS updates, conflicts, and shoutouts.
+*   **Inara Synchronization**: Sync commander data with Inara.cz.
+*   **Tick Monitoring**: Detects and broadcasts the Elite Dangerous server tick.
+*   **Authentication**: Secure access via JWT and API Keys.
+*   **Type Safety**: End-to-end type safety using Effect Schema.
 
 ## Tech Stack
 
-| Component | Technology |
-|-----------|-----------|
-| Runtime | [Bun](https://bun.sh) |
-| Framework | [Effect-TS](https://effect.website) (`@effect/platform`, `@effect/schema`) |
-| Database | [Turso](https://turso.tech) / LibSQL (local SQLite in development) |
-| Auth | API key (`apikey` header) + JWT / Discord OAuth for human users |
+*   **Runtime**: [Bun](https://bun.sh)
+*   **Framework**: [Effect-TS](https://effect.website) (@effect/platform, @effect/schema)
+*   **Database**: [Turso](https://turso.tech) / LibSQL
+*   **Networking**: ZeroMQ (EDDN), HTTP
 
----
+## Prerequisites
+
+*   [Bun](https://bun.sh) (v1.0.0 or later)
+*   A Turso database or a local SQLite file.
 
 ## Configuration
 
-### 1. Install dependencies
+Copy the example environment file:
 
 ```bash
 cp .env.example .env
 ```
 
-### 2. Configure environment
+Or manually create `.env` with the following variables:
+
+| Variable | Description |
+| :--- | :--- |
+| `TURSO_DATABASE_URL` | **Required**. Database URL (e.g., `libsql://...` or `file:./db/sinistra.db`). |
+| `TURSO_AUTH_TOKEN` | **Required** for remote Turso DB. Leave empty for local file. |
+| `API_KEY` | **Required**. Shared secret for API clients. |
+| `JWT_SECRET` | **Required**. Secret for signing JWT tokens. |
+| `DISCORD_CLIENT_ID` | **Required**. Discord Application Client ID. |
+| `DISCORD_CLIENT_SECRET` | **Required**. Discord Application Client Secret. |
+| `DISCORD_REDIRECT_URI` | **Required**. OAuth callback URL (default: `http://localhost:3000/api/auth/discord/callback`). |
+| `DISCORD_BOT_TOKEN` | **Required**. Bot token for guild interactions. |
+| `INARA_API_KEY` | **Required**. API Key for Inara sync. |
+| `FACTION_NAME` | **Required**. The BGS faction to track (default: "Communism Interstellar Union"). |
+| `ENABLE_SCHEDULERS` | specific configuration: `true` to enable background tasks. |
 
 See `.env.example` for a full list of options including webhook URLs and scheduler settings.
 
-Key variables:
+## Getting Started
 
-| Variable | Description |
-|----------|-------------|
-| `TURSO_DATABASE_URL` | `file:./data/sinistra.db` locally, or a remote `libsql://…` URL |
-| `TURSO_AUTH_TOKEN` | Leave empty for local SQLite |
-| `API_KEY` | Shared secret used by BGS-Tally and the dashboard |
-| `JWT_SECRET` | Base64-encoded secret for signing JWTs |
+### 1. Install Dependencies
 
-See `src/lib/config.ts` for the full list of variables and their defaults.
+```bash
+bun install
+```
+
+### 2. Database Migrations
 
 ### 3. Run migrations
 
@@ -44,7 +69,7 @@ See `src/lib/config.ts` for the full list of variables and their defaults.
 bun run migrate
 ```
 
-This creates (or updates) `./data/sinistra.db` from the SQL files in `migrations/`.
+### 3. Running the Application
 
 ### 4. Start the server
 
@@ -56,9 +81,11 @@ bun run dev
 bun run start
 ```
 
-The server listens on port `3000` by default.
+The server will start on port `3000` by default.
 
-### 5. Run tests
+## API Endpoints
+
+The API is organized into several domains:
 
 *   **Auth**: Discord OAuth and API Key management.
 *   **System**: Detailed system information (factions, conflicts, traffic).
@@ -69,29 +96,17 @@ The server listens on port `3000` by default.
 *   **Objectives**: Mission and goal tracking.
 *   **Discord Summary**: aggregated data for Discord bot commands.
 
----
+For detailed endpoint definitions, refer to the `src/api/*/api.ts` files.
 
-## Project Structure
+## Schedulers
 
-```
-src/
-  api/           # Endpoint groups: definitions (api.ts), handlers (handlers.ts), DTOs (dtos.ts)
-  database/      # TursoClient service, repositories, migration runner
-  domain/        # Domain models, branded IDs, error types, repository interfaces
-  lib/           # Config, JWT utilities
-  schedulers/    # Background jobs (tick monitor, conflict watcher, EDDN client, Inara sync)
-migrations/      # SQL migration files (applied in order by bun run migrate)
-```
+The application runs background services (configurable via `ENABLE_SCHEDULERS`):
 
-### Adding a new endpoint group
-
-1. Create `src/api/<name>/dtos.ts`, `api.ts`, `handlers.ts`.
-2. Export the `HttpApiGroup` from `api.ts` and register it in `src/api/index.ts` → `.add(YourApi)`.
-3. Export `YourApiLive = HttpApiBuilder.group(…)` from `handlers.ts` and add it to `ApiHandlersLayer` in `main.ts`.
-
----
-
-## BGS-Tally Integration
+*   **Tick Monitor**: Polls for the Elite Dangerous server tick.
+*   **Conflict Scheduler**: Updates conflict states.
+*   **Shoutout Scheduler**: Posts shoutouts to Discord.
+*   **Inara Sync**: Synchronizes roster and commander data with Inara.
+*   **EDDN Client**: (Experimental) Listens to EDDN stream for real-time updates.
 
 Sinistra receives data from BGS-Tally via two endpoints. Their roles and the trade-offs between them are described below.
 
@@ -156,7 +171,12 @@ Two paths are under consideration:
 
 2. **Use `/activities` for the gaps.** For activity types with no clean event representation (Thargoid War, scenarios, exobiology, S&R, black market), query the `faction`/`system` tables directly. The two stores would then serve distinct purposes: `/events` for per-commander audit data, `/activities` for faction-level aggregates that BGS-Tally has already computed.
 
----
+*   `src/api`: HTTP API definitions, handlers, and DTOs.
+*   `src/database`: Database client, migrations, and repositories.
+*   `src/domain`: Domain models, errors, and interfaces.
+*   `src/schedulers`: Background tasks and cron jobs.
+*   `src/services`: Shared business logic and integrations.
+*   `migrations`: SQL migration files.
 
 ## License
 
