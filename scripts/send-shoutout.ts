@@ -45,8 +45,9 @@ async function resolveHashTickId(): Promise<string> {
     const ts = await client.execute(
       "SELECT tickid FROM tick_state ORDER BY last_updated DESC LIMIT 1"
     )
-    if (ts.rows.length === 0) throw new Error("No ticks in tick_state")
-    upperBound = String(ts.rows[0].tickid)
+    const firstRow = ts.rows[0]
+    if (!firstRow) throw new Error("No ticks in tick_state")
+    upperBound = String(firstRow.tickid)
   }
 
   console.log(`Using upper bound ISO timestamp: ${upperBound}`)

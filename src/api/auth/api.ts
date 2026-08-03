@@ -1,7 +1,7 @@
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "@effect/platform"
 import { DiscordVerifyRequest, UserResponse, LinkCmdrRequest, LinkCmdrResponse } from "./dtos.js"
 import { ApiKeyAuth, ApiKeyError } from "../middleware/apikey.js"
-import { DatabaseError } from "../../domain/errors.js"
+import { DatabaseError, UserNotFoundError } from "../../domain/errors.js"
 import { JwtError } from "../../services/jwt.js"
 import { CmdrNotFoundByDiscordError } from "../cmdr-location/api.js"
 
@@ -30,6 +30,7 @@ This endpoint requires API key authentication.`
       .addSuccess(LinkCmdrResponse)
       .addError(ApiKeyError, { status: 401 })
       .addError(CmdrNotFoundByDiscordError, { status: 404 })
+      .addError(UserNotFoundError, { status: 404 })
       .addError(DatabaseError, { status: 500 })
       .setPayload(LinkCmdrRequest)
       .middleware(ApiKeyAuth)

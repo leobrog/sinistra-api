@@ -2,7 +2,7 @@ import { describe, it, expect } from "bun:test"
 import { Effect, Layer, Option } from "effect"
 import { EddnRepository } from "../../domain/repositories.ts"
 import { EddnRepositoryLive } from "./EddnRepository.ts"
-import { TursoClient } from "../client.ts"
+import { EddnTursoClient } from "../client.ts"
 import { createClient } from "@libsql/client"
 import {
     EddnMessageId,
@@ -14,7 +14,7 @@ import {
 
 // Helper to provide a fresh Test Layer for each test
 const ClientLayer = Layer.effect(
-  TursoClient,
+  EddnTursoClient,
   Effect.gen(function* () {
     const client = createClient({
       url: "file::memory:",
@@ -93,7 +93,7 @@ const ClientLayer = Layer.effect(
       `)
     )
 
-    return client
+    return EddnTursoClient.of(client)
   })
 )
 

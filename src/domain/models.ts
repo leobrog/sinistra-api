@@ -112,6 +112,7 @@ export class MarketSellEvent extends Schema.Class<MarketSellEvent>("MarketSellEv
   profit: Schema.optionalWith(Schema.Int, { as: "Option" }),
   value: Schema.optionalWith(Schema.Int, { as: "Option" }),
   count: Schema.optionalWith(Schema.Int, { as: "Option" }),
+  stationFaction: Schema.optionalWith(Schema.String, { as: "Option" }),
 }) {}
 
 export class MissionCompletedEvent extends Schema.Class<MissionCompletedEvent>("MissionCompletedEvent")({
@@ -156,6 +157,7 @@ export class MultiSellExplorationDataEvent extends Schema.Class<MultiSellExplora
   id: MultiSellExplorationDataEventId,
   eventId: EventId,
   totalEarnings: Schema.optionalWith(Schema.Int, { as: "Option" }),
+  stationFaction: Schema.optionalWith(Schema.String, { as: "Option" }),
 }) {}
 
 export class RedeemVoucherEvent extends Schema.Class<RedeemVoucherEvent>("RedeemVoucherEvent")({
@@ -170,6 +172,7 @@ export class SellExplorationDataEvent extends Schema.Class<SellExplorationDataEv
   id: SellExplorationDataEventId,
   eventId: EventId,
   earnings: Schema.optionalWith(Schema.Int, { as: "Option" }),
+  stationFaction: Schema.optionalWith(Schema.String, { as: "Option" }),
 }) {}
 
 export class CommitCrimeEvent extends Schema.Class<CommitCrimeEvent>("CommitCrimeEvent")({

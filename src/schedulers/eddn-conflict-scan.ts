@@ -13,10 +13,10 @@
  * Discord notifications are only sent when something actually changes.
  */
 
-import { Effect, Duration } from "effect"
+import { Effect, Duration, Schedule } from "effect"
 import type { Client } from "@libsql/client"
 import { AppConfig } from "../lib/config.js"
-import { TursoClient } from "../database/client.js"
+import { TursoClient, EddnTursoClient } from "../database/client.js"
 import type { ConflictEntry } from "./conflict-scheduler.js"
 import { runConflictDiff } from "./conflict-scheduler.js"
 
@@ -24,20 +24,19 @@ import { runConflictDiff } from "./conflict-scheduler.js"
 // Extract conflicts from eddn_conflict for tracked factions
 // ---------------------------------------------------------------------------
 
+/**
+ * Reads eddn_conflict from the EDDN DB using eddnClient.
+ * Filters in-memory to conflicts involving tracked factions, since
+ * protected_faction lives in the main DB and a cross-DB SQL JOIN is not possible.
+ */
 const extractEddnConflicts = async (
-  client: Client,
+  eddnClient: Client,
   factionNames: Set<string>
 ): Promise<Map<string, ConflictEntry>> => {
-  // JOIN with protected_faction to get only conflicts involving our factions.
-  // eddn_conflict has one row per conflict per system; a system may have
-  // multiple rows if multiple conflicts exist, but we only keep the one
-  // involving a tracked faction.
-  const result = await client.execute(`
-    SELECT ec.system_name, ec.faction1, ec.faction2,
-           ec.stake1, ec.stake2, ec.won_days1, ec.won_days2, ec.war_type
-    FROM eddn_conflict ec
-    WHERE ec.faction1 IN (SELECT name FROM protected_faction)
-       OR ec.faction2 IN (SELECT name FROM protected_faction)
+  const result = await eddnClient.execute(`
+    SELECT system_name, faction1, faction2,
+           stake1, stake2, won_days1, won_days2, war_type
+    FROM eddn_conflict
   `)
 
   const map = new Map<string, ConflictEntry>()
@@ -67,10 +66,11 @@ const extractEddnConflicts = async (
 // Main fiber — runs every hour
 // ---------------------------------------------------------------------------
 
-export const runEddnConflictScan: Effect.Effect<never, never, AppConfig | TursoClient> =
+export const runEddnConflictScan: Effect.Effect<never, never, AppConfig | TursoClient | EddnTursoClient> =
   Effect.gen(function* () {
     const config = yield* AppConfig
-    const client = yield* TursoClient
+    const client = yield* TursoClient          // main DB — has protected_faction, conflict_state
+    const eddnClient = yield* EddnTursoClient  // EDDN DB — has eddn_conflict
     const webhookUrls = config.discord.webhooks.conflict
     const debugWebhookUrls = config.discord.webhooks.debug
 
@@ -96,7 +96,7 @@ export const runEddnConflictScan: Effect.Effect<never, never, AppConfig | TursoC
       }
 
       const currentConflicts = yield* Effect.tryPromise({
-        try: () => extractEddnConflicts(client, factionNames),
+        try: () => extractEddnConflicts(eddnClient, factionNames),
         catch: (e) => new Error(`EDDN conflict extraction failed: ${e}`),
       }).pipe(
         Effect.catchAll((e) =>
@@ -114,7 +114,6 @@ export const runEddnConflictScan: Effect.Effect<never, never, AppConfig | TursoC
       // cleanup that would delete all conflict_state entries.
       if (currentConflicts.size === 0) {
         yield* Effect.logWarning("EDDN conflict scan: no conflicts found, skipping diff")
-        yield* Effect.sleep(Duration.hours(1))
         return
       }
 
@@ -128,11 +127,9 @@ export const runEddnConflictScan: Effect.Effect<never, never, AppConfig | TursoC
         "EDDN conflict scan",
         { cleanupScope: new Set<string>() }
       )
-
-      yield* Effect.sleep(Duration.hours(1))
     })
 
-    return yield* Effect.forever(scanOnce)
+    return yield* Effect.repeat(scanOnce, Schedule.spaced(Duration.hours(1)))
   }).pipe(
     Effect.catchAll((e) => Effect.logError(`EDDN conflict scan fatal: ${e}`))
-  ) as Effect.Effect<never, never, AppConfig | TursoClient>
+  ) as Effect.Effect<never, never, AppConfig | TursoClient | EddnTursoClient>

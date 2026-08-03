@@ -1,5 +1,5 @@
 import { Effect, Layer, Option, Schema } from "effect";
-import { TursoClient } from "../client.ts";
+import { EddnTursoClient } from "../client.ts";
 import { EddnRepository } from "../../domain/repositories.ts";
 import { EddnSystemInfo, EddnFaction, EddnConflict, EddnPowerplay } from "../../domain/models.ts";
 import { DatabaseError } from "../../domain/errors.ts";
@@ -13,7 +13,7 @@ import {
 export const EddnRepositoryLive = Layer.effect(
     EddnRepository,
     Effect.gen(function* () {
-        const client = yield* TursoClient
+        const client = yield* EddnTursoClient
         const decodeEddnSystemInfo = Schema.decodeUnknown(EddnSystemInfo)
         const decodeEddnFaction = Schema.decodeUnknown(EddnFaction)
         const decodeEddnConflict = Schema.decodeUnknown(EddnConflict)

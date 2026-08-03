@@ -314,7 +314,7 @@ describe("cmdr_system - uses cmdrId to find location", () => {
             sql: "SELECT starsystem, timestamp FROM event WHERE cmdr = ? AND starsystem IS NOT NULL ORDER BY timestamp DESC LIMIT 1",
             args: [cmdrName],
           }),
-          catch: (e) => e,
+          catch: (e) => new Error(String(e)),
         })
 
         expect(result.rows.length).toBe(1)

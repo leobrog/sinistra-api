@@ -1,6 +1,6 @@
 import { BunHttpServer, BunRuntime } from "@effect/platform-bun"
-import { HttpApiBuilder, HttpMiddleware } from "@effect/platform"
-import { Layer, Effect } from "effect"
+import { HttpApiBuilder, HttpMiddleware, HttpServerRequest } from "@effect/platform"
+import { Layer, Effect, Logger, LogLevel } from "effect"
 import { Api } from "./api/index.ts"
 
 // API Handlers
@@ -20,6 +20,7 @@ import { CmdrLocationApiLive } from "./api/cmdr-location/handlers.ts"
 import { CZApiLive } from "./api/cz/handlers.ts"
 import { BountyVouchersApiLive } from "./api/bounty-vouchers/handlers.ts"
 import { FactionVisitedSystemsApiLive } from "./api/faction-visited-systems/handlers.ts"
+import { BucketsApiLive } from "./api/buckets/handlers.ts"
 
 // Repositories
 import { EventRepositoryLive } from "./database/repositories/EventRepository.ts"
@@ -33,7 +34,7 @@ import { FlaskUserRepositoryLive } from "./database/repositories/FlaskUserReposi
 
 // Middleware & Infrastructure
 import { ApiKeyAuthLive } from "./api/middleware/apikey.ts"
-import { TursoClientLive } from "./database/client.ts"
+import { TursoClientLive, EddnTursoClientLive } from "./database/client.ts"
 import { AppConfigLive } from "./lib/config.ts"
 import { JwtServiceLive } from "./services/jwt.ts"
 
@@ -62,7 +63,8 @@ const ApiHandlersLayer = Layer.mergeAll(
   CmdrLocationApiLive,
   CZApiLive,
   BountyVouchersApiLive,
-  FactionVisitedSystemsApiLive
+  FactionVisitedSystemsApiLive,
+  BucketsApiLive
 )
 
 const RepositoriesLayer = Layer.mergeAll(
@@ -78,7 +80,11 @@ const RepositoriesLayer = Layer.mergeAll(
 
 const ServicesLayer = Layer.mergeAll(JwtServiceLive, ApiKeyAuthLive)
 
-const InfrastructureLayer = Layer.mergeAll(TursoClientLive, AppConfigLive)
+const InfrastructureLayer = Layer.mergeAll(
+  TursoClientLive,
+  EddnTursoClientLive.pipe(Layer.provide(AppConfigLive)),
+  AppConfigLive
+)
 
 const SchedulerLayer = SchedulersLive.pipe(Layer.provide(InfrastructureLayer))
 
@@ -89,8 +95,18 @@ const ApiLive = HttpApiBuilder.api(Api).pipe(
   Layer.provide(InfrastructureLayer)
 )
 
+// Suppress INFO-level HTTP span logs for high-frequency polling endpoints.
+// They remain visible at DEBUG level but don't flood logs in production.
+const suppressPollingLogs = HttpMiddleware.make((app) =>
+  Effect.flatMap(HttpServerRequest.HttpServerRequest, (req) =>
+    req.method === "GET" && req.url.startsWith("/objectives")
+      ? app.pipe(Logger.withMinimumLogLevel(LogLevel.Warning))
+      : app
+  )
+)
+
 const ServerLayer = HttpApiBuilder.serve((app) =>
-  HttpMiddleware.logger(tableMiddleware(oauthCallbackMiddleware(app)))
+  suppressPollingLogs(HttpMiddleware.logger(tableMiddleware(oauthCallbackMiddleware(app))))
 ).pipe(
   Layer.provide(ApiLive),
   Layer.provide(RepositoriesLayer),

@@ -11,7 +11,7 @@ import { Schema } from "effect"
 export const EventDataSchema = Schema.Struct({
   // Required fields
   event: Schema.String,
-  timestamp: Schema.String,
+  timestamp: Schema.optional(Schema.String),
 
   // Tick tracking
   tickid: Schema.optional(Schema.String),
@@ -24,22 +24,23 @@ export const EventDataSchema = Schema.Struct({
 
   // Event-specific fields (all optional, validated later)
   // MarketBuy
-  Stock: Schema.optional(Schema.Int),
-  StockBracket: Schema.optional(Schema.Int),
-  TotalCost: Schema.optional(Schema.Int),
-  Count: Schema.optional(Schema.Int),
+  Stock: Schema.optional(Schema.NullOr(Schema.Int)),
+  StockBracket: Schema.optional(Schema.NullOr(Schema.Int)),
+  TotalCost: Schema.optional(Schema.NullOr(Schema.Int)),
+  Count: Schema.optional(Schema.NullOr(Schema.Int)),
 
-  // MarketSell
-  Demand: Schema.optional(Schema.Int),
-  DemandBracket: Schema.optional(Schema.Int),
-  Profit: Schema.optional(Schema.Int),
-  TotalSale: Schema.optional(Schema.Int),
+  // MarketSell / SellExplorationData / MultiSellExplorationData
+  Demand: Schema.optional(Schema.NullOr(Schema.Int)),
+  DemandBracket: Schema.optional(Schema.NullOr(Schema.Int)),
+  Profit: Schema.optional(Schema.NullOr(Schema.Int)),
+  TotalSale: Schema.optional(Schema.NullOr(Schema.Int)),
+  StationFaction: Schema.optional(Schema.Unknown),
 
   // MissionCompleted
   Faction: Schema.optional(Schema.String),
   Name: Schema.optional(Schema.String),
-  Reward: Schema.optional(Schema.Int),
-  FactionEffects: Schema.optional(Schema.Array(Schema.Unknown)),
+  Reward: Schema.optional(Schema.NullOr(Schema.Int)),
+  FactionEffects: Schema.optional(Schema.NullOr(Schema.Array(Schema.Unknown))),
 
   // FactionKillBond
   KillerShip: Schema.optional(Schema.String),
@@ -47,28 +48,28 @@ export const EventDataSchema = Schema.Struct({
   VictimFaction: Schema.optional(Schema.String),
 
   // MissionFailed
-  Fine: Schema.optional(Schema.Int),
+  Fine: Schema.optional(Schema.NullOr(Schema.Int)),
 
   // MultiSellExplorationData
-  TotalEarnings: Schema.optional(Schema.Int),
+  TotalEarnings: Schema.optional(Schema.NullOr(Schema.Int)),
 
   // RedeemVoucher
-  Amount: Schema.optional(Schema.Int),
+  Amount: Schema.optional(Schema.NullOr(Schema.Int)),
   Type: Schema.optional(Schema.String),
-  Factions: Schema.optional(Schema.Array(Schema.Unknown)),
+  Factions: Schema.optional(Schema.NullOr(Schema.Array(Schema.Unknown))),
 
   // FSDJump / Location conflict data
-  Conflicts: Schema.optional(Schema.Array(Schema.Unknown)),
+  Conflicts: Schema.optional(Schema.NullOr(Schema.Array(Schema.Unknown))),
 
   // CommitCrime
   CrimeType: Schema.optional(Schema.String),
   Victim: Schema.optional(Schema.String),
-  Bounty: Schema.optional(Schema.Int),
+  Bounty: Schema.optional(Schema.NullOr(Schema.Int)),
 
   // SyntheticCZ / SyntheticGroundCZ
-  low: Schema.optional(Schema.Int),
-  medium: Schema.optional(Schema.Int),
-  high: Schema.optional(Schema.Int),
+  low: Schema.optional(Schema.NullOr(Schema.Int)),
+  medium: Schema.optional(Schema.NullOr(Schema.Int)),
+  high: Schema.optional(Schema.NullOr(Schema.Int)),
   faction: Schema.optional(Schema.String),
   cmdr: Schema.optional(Schema.String),
   station_faction_name: Schema.optional(Schema.String),

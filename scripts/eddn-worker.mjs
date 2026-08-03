@@ -10,9 +10,9 @@ import { createClient } from "@libsql/client"
 import { inflateSync } from "node:zlib"
 import zmq from "zeromq"
 
-const DB_URL = process.env.TURSO_DATABASE_URL ?? "file:./data/sinistra.db"
-const AUTH_TOKEN = process.env.TURSO_AUTH_TOKEN ?? ""
-const ZMQ_URL = process.env.EDDN_ZMQ_URL ?? "tcp://eddn.edcd.io:9500"
+const DB_URL = process.env.EDDN_DATABASE_URL
+const AUTH_TOKEN = ""  // local file — no auth token needed
+const ZMQ_URL = process.env.EDDN_ZMQ_URL
 const CLEANUP_INTERVAL_MS = parseInt(process.env.EDDN_CLEANUP_INTERVAL_MS ?? "3600000")
 const RETENTION_MS = parseInt(process.env.EDDN_MESSAGE_RETENTION_MS ?? "86400000")
 const RETRY_DELAY_MS = 5000

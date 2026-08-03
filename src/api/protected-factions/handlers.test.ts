@@ -1,7 +1,7 @@
 import { describe, it, expect } from "bun:test"
 import { Effect, Layer, Option } from "effect"
 import { createClient } from "@libsql/client"
-import { TursoClient } from "../../database/client.js"
+import { TursoClient, EddnTursoClient } from "../../database/client.js"
 import { ProtectedFactionRepository, EddnRepository } from "../../domain/repositories.js"
 import { ProtectedFactionRepositoryLive } from "../../database/repositories/ProtectedFactionRepository.js"
 import { EddnRepositoryLive } from "../../database/repositories/EddnRepository.js"
@@ -71,15 +71,11 @@ describe("Protected Factions API Integration", () => {
     },
   }
 
-  // Helper to create a fresh test database for each test
+  // Main DB — only has protected_faction
   const ClientLayer = Layer.effect(
     TursoClient,
     Effect.gen(function* () {
-      const client = createClient({
-        url: "file::memory:",
-      })
-
-      // Initialize schema
+      const client = createClient({ url: "file::memory:" })
       yield* Effect.tryPromise(() =>
         client.executeMultiple(`
           CREATE TABLE IF NOT EXISTS protected_faction (
@@ -89,10 +85,21 @@ describe("Protected Factions API Integration", () => {
             description TEXT,
             protected INTEGER NOT NULL DEFAULT 1
           );
-
           CREATE INDEX IF NOT EXISTS idx_protected_faction_name ON protected_faction(name);
           CREATE INDEX IF NOT EXISTS idx_protected_faction_protected ON protected_faction(protected);
+        `)
+      )
+      return client
+    })
+  )
 
+  // EDDN DB — has all eddn_* tables
+  const EddnClientLayer = Layer.effect(
+    EddnTursoClient,
+    Effect.gen(function* () {
+      const client = createClient({ url: "file::memory:" })
+      yield* Effect.tryPromise(() =>
+        client.executeMultiple(`
           CREATE TABLE IF NOT EXISTS eddn_message (
             id TEXT PRIMARY KEY,
             schema_ref TEXT NOT NULL,
@@ -101,11 +108,9 @@ describe("Protected Factions API Integration", () => {
             message_json TEXT NOT NULL,
             timestamp TEXT NOT NULL
           );
-
           CREATE INDEX IF NOT EXISTS idx_eddn_message_timestamp ON eddn_message(timestamp);
           CREATE INDEX IF NOT EXISTS idx_eddn_message_type ON eddn_message(message_type);
           CREATE INDEX IF NOT EXISTS idx_eddn_message_schema_ref ON eddn_message(schema_ref);
-
           CREATE TABLE IF NOT EXISTS eddn_system_info (
             id TEXT PRIMARY KEY,
             eddn_message_id TEXT,
@@ -119,27 +124,22 @@ describe("Protected Factions API Integration", () => {
             updated_at TEXT NOT NULL,
             FOREIGN KEY (eddn_message_id) REFERENCES eddn_message(id) ON DELETE SET NULL
           );
-
           CREATE INDEX IF NOT EXISTS idx_eddn_system_info_system_name ON eddn_system_info(system_name);
           CREATE INDEX IF NOT EXISTS idx_eddn_system_info_updated_at ON eddn_system_info(updated_at);
         `)
       )
-
-      return client
+      return EddnTursoClient.of(client)
     })
   )
 
   const TestConfigLayer = Layer.succeed(AppConfig, testConfig)
 
-  const TestLayer = Layer.merge(
-    ProtectedFactionRepositoryLive,
-    EddnRepositoryLive
-  ).pipe(
-    Layer.provide(ClientLayer),
-    Layer.provide(TestConfigLayer)
-  )
+  const TestLayer = Layer.mergeAll(
+    ProtectedFactionRepositoryLive.pipe(Layer.provide(ClientLayer)),
+    EddnRepositoryLive.pipe(Layer.provide(EddnClientLayer)),
+  ).pipe(Layer.provide(TestConfigLayer))
 
-  const FullLayer = Layer.merge(TestLayer, ClientLayer).pipe(
+  const FullLayer = Layer.mergeAll(TestLayer, ClientLayer, EddnClientLayer).pipe(
     Layer.provide(TestConfigLayer)
   )
 
